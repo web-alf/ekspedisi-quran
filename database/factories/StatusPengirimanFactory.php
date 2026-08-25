@@ -21,9 +21,9 @@ class StatusPengirimanFactory extends Factory
             'urutan' => $this->faker->numberBetween(1, 10),
             'is_active' => true,
             'is_final' => false,
-            'icon' => 'fas fa-'.$this->faker->randomElement([
-                'clock', 'cog', 'shipping-fast', 'check-circle', 'trophy',
-            ]),
+            'icon' => substr('fa-'.$this->faker->randomElement([
+                'clock', 'cog', 'check', 'trophy',
+            ]), 0, 10),
         ];
     }
 

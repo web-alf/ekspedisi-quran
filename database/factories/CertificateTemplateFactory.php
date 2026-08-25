@@ -14,7 +14,7 @@ class CertificateTemplateFactory extends Factory
         return [
             'name' => $this->faker->words(3, true).' Template',
             'description' => $this->faker->sentence(),
-            'template_path' => 'templates/'.$this->faker->uuid().'.jpg',
+            'template_file_path' => 'templates/'.$this->faker->uuid().'.jpg',
             'field_positions' => [
                 'donatur_name' => ['x' => 100, 'y' => 200],
                 'batch_code' => ['x' => 100, 'y' => 250],

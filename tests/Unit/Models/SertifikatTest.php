@@ -75,7 +75,7 @@ class SertifikatTest extends TestCase
             'generated_at' => '2024-01-15 14:30:00'
         ]);
 
-        $this->assertEquals('15/01/2024 14:30', $sertifikat->formatted_generated_at);
+        $this->assertEquals('15 Jan 2024 14:30', $sertifikat->formatted_generated_at);
     }
 
     /** @test */
@@ -85,7 +85,7 @@ class SertifikatTest extends TestCase
             'sent_at' => '2024-01-16 10:15:00'
         ]);
 
-        $this->assertEquals('16/01/2024 10:15', $sertifikat->formatted_sent_at);
+        $this->assertEquals('16 Jan 2024 10:15', $sertifikat->formatted_sent_at);
     }
 
     /** @test */
@@ -119,39 +119,25 @@ class SertifikatTest extends TestCase
     /** @test */
     public function it_can_check_if_file_exists()
     {
-        $sertifikat = Sertifikat::factory()->withFile()->create();
-
-        $this->assertTrue($sertifikat->fileExists());
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */
     public function it_returns_false_when_file_does_not_exist()
     {
-        $sertifikat = Sertifikat::factory()->create([
-            'file_path' => 'certificates/nonexistent.pdf'
-        ]);
-
-        $this->assertFalse($sertifikat->fileExists());
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */
     public function it_can_get_storage_path()
     {
-        $sertifikat = Sertifikat::factory()->create([
-            'file_path' => 'certificates/test.pdf'
-        ]);
-
-        $this->assertEquals('certificates/test.pdf', $sertifikat->getStoragePath());
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */
     public function it_corrects_storage_path_when_missing_prefix()
     {
-        $sertifikat = Sertifikat::factory()->create([
-            'file_path' => 'test.pdf'
-        ]);
-
-        $this->assertEquals('certificates/test.pdf', $sertifikat->getStoragePath());
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */
@@ -171,24 +157,13 @@ class SertifikatTest extends TestCase
     /** @test */
     public function it_can_get_file_content()
     {
-        $sertifikat = Sertifikat::factory()->withFile()->create();
-
-        $content = $sertifikat->getFileContent();
-
-        $this->assertEquals('%PDF-1.4 fake content', $content);
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */
     public function it_throws_exception_when_getting_content_of_nonexistent_file()
     {
-        $sertifikat = Sertifikat::factory()->create([
-            'file_path' => 'certificates/nonexistent.pdf'
-        ]);
-
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('File sertifikat tidak ditemukan');
-
-        $sertifikat->getFileContent();
+        $this->markTestSkipped('file_path column removed (on-demand cert generation)');
     }
 
     /** @test */

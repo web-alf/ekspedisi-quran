@@ -282,11 +282,11 @@ class Pengiriman extends Model
     /**
      * Helper: Check if no_resi format is valid
      */
-    public function isValidNoResiFormat(?string $noResi = null)
+    public function isValidNoResiFormat(?string $noResi = null): bool
     {
         $resi = $noResi ?: $this->no_resi;
 
-        return preg_match('/^EQ-\d{4}-\d{5}$/', $resi);
+        return (bool) preg_match('/^EQ-\d{4}-\d{5}$/', $resi);
     }
 
     /**
@@ -326,7 +326,7 @@ class Pengiriman extends Model
             'status_from' => $oldStatus,
             'status_to' => $newStatusId,
             'catatan' => $catatan,
-            'created_by' => $userId ?: auth()->id(),
+            'created_by' => $userId ?: auth()->id() ?? 1,
         ]);
 
         return $this;

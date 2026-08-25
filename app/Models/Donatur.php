@@ -140,9 +140,9 @@ class Donatur extends Model
     /**
      * Get total Al-Quran donated by this donatur
      */
-    public function getTotalQuranAttribute()
+    public function getTotalQuranAttribute(): int
     {
-        return $this->actual_a5_count + $this->actual_a6_count + $this->actual_iqra_count;
+        return (int) $this->total_a5_count + (int) $this->total_a6_count + (int) $this->total_iqra_count;
     }
 
     /**

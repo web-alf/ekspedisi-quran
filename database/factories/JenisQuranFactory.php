@@ -12,8 +12,8 @@ class JenisQuranFactory extends Factory
     public function definition(): array
     {
         return [
-            'kode_jenis' => $this->faker->unique()->randomElement(['A5', 'A6', 'IQRA']),
-            'nama_jenis' => $this->faker->randomElement(['Al-Quran A5', 'Al-Quran A6', 'Iqra']),
+            'kode_jenis' => strtoupper($this->faker->unique()->bothify('JN-##??')),
+            'nama_jenis' => 'Jenis '.$this->faker->unique()->word(),
             'deskripsi' => $this->faker->sentence(),
             'harga' => $this->faker->numberBetween(25000, 75000),
             'is_active' => true,
