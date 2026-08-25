@@ -45,8 +45,8 @@
         <!-- Structured Data -->
         <script type="application/ld+json">
         {
-            "@context": "https://schema.org",
-            "@type": "Organization",
+            "@@context": "https://schema.org",
+            "@@type": "Organization",
             "name": "{{ \App\Models\Setting::where('key', 'seo_site_title')->where('is_active', true)->value('value') ?? config('app.name', 'Ekspedisi Quran') }}",
             "description": "{{ \App\Models\Setting::where('key', 'seo_site_description')->where('is_active', true)->value('value') ?? 'Platform wakaf dan distribusi mushaf Al-Quran untuk seluruh Indonesia' }}",
             "url": "{{ url('/') }}",

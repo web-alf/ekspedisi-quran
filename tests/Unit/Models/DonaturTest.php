@@ -49,12 +49,11 @@ class DonaturTest extends TestCase
     public function it_casts_boolean_fields_properly()
     {
         $donatur = Donatur::factory()->create([
-            'semua_atas_nama_donatur' => true,
-            'customize_individual' => false,
+            'prayer_mode' => 'customize_individual',
         ]);
 
-        $this->assertTrue($donatur->semua_atas_nama_donatur);
-        $this->assertFalse($donatur->customize_individual);
+        $this->assertEquals('customize_individual', $donatur->prayer_mode);
+        $this->assertNotEquals('semua_donatur', $donatur->prayer_mode);
     }
 
     /** @test */
@@ -203,7 +202,7 @@ class DonaturTest extends TestCase
             'total_a5_count' => 3,
             'total_a6_count' => 0,
             'total_iqra_count' => 0,
-            'semua_atas_nama_donatur' => true,
+            'prayer_mode' => 'semua_donatur',
             'nama_donatur' => 'John Doe',
             'doa_untuk_semua' => 'Test prayer',
         ]);
@@ -231,7 +230,7 @@ class DonaturTest extends TestCase
             'total_a5_count' => 2,
             'total_a6_count' => 1,
             'total_iqra_count' => 1,
-            'semua_atas_nama_donatur' => false,
+            'prayer_mode' => 'mixed',
         ]);
 
         $items = $donatur->generateWakafItems();
@@ -262,7 +261,7 @@ class DonaturTest extends TestCase
             'total_a5_count' => 1,
             'total_a6_count' => 0,
             'total_iqra_count' => 0,
-            'semua_atas_nama_donatur' => false,
+            'prayer_mode' => 'customize_individual',
             'nama_donatur' => 'John Doe',
         ]);
 

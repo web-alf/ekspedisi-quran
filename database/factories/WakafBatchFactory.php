@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Donatur;
+use App\Models\JenisQuran;
 use App\Models\User;
 use App\Models\WakafBatch;
 use Illuminate\Database\Eloquent\Factories\Factory;

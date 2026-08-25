@@ -17,12 +17,13 @@ class SertifikatFactory extends Factory
     {
         return [
             'wakaf_batch_id' => WakafBatch::factory(),
+            'donatur_id' => null,
             'pengiriman_id' => null, // Legacy field
             'template_used' => 'template1',
             'template_id' => function () {
                 return CertificateTemplate::first()?->id;
             },
-            'file_path' => 'certificates/'.$this->faker->uuid().'.pdf',
+            'is_consolidated' => false,
             'generated_by' => User::factory(),
             'generated_at' => $this->faker->dateTimeBetween('-1 month', 'now'),
             'is_sent' => false,
@@ -58,8 +59,7 @@ class SertifikatFactory extends Factory
     public function withFile(): static
     {
         return $this->afterCreating(function (Sertifikat $sertifikat) {
-            // Create fake PDF content
-            \Storage::put($sertifikat->file_path, '%PDF-1.4 fake content');
+            // Cert file stored externally; nothing to attach
         });
     }
 
