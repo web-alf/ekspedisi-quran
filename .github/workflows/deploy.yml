@@ -1,0 +1,54 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main  # Deploy hanya saat push ke main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Verify Build Assets Exist
+        run: |
+          # 🏗️ VERIFIKASI: Pastikan build assets sudah di-push (dibuat di lokal)
+          if [ ! -d "public/build" ] || [ ! -f "public/build/manifest.json" ]; then
+            echo "❌ ERROR: Build assets tidak ditemukan!"
+            echo ""
+            echo "⚠️  REMINDER: Jalankan perintah berikut SEBELUM commit & push:"
+            echo "    npm ci && npm run build"
+            echo ""
+            echo "📋 Pre-deployment Checklist:"
+            echo "    [ ] npm ci"
+            echo "    [ ] npm run build"
+            echo "    [ ] php artisan test"
+            echo "    [ ] git add public/build"
+            echo "    [ ] git commit"
+            exit 1
+          fi
+          echo "✅ Build assets verified"
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add Host Key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 45.77.42.220 >> ~/.ssh/known_hosts
+
+      - name: Run Envoy Deployment
+        run: |
+          composer global require laravel/envoy --quiet
+          ~/.composer/vendor/bin/envoy run deploy --commit="${{ github.sha }}"
+
+      - name: Rollback if Deployment Fails
+        if: failure()
+        run: |
+          echo "❌ Deployment failed. Rolling back..."
+          ~/.composer/vendor/bin/envoy run rollback

@@ -1,0 +1,131 @@
+/.phpunit.cache
+/node_modules
+# /public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+docker-compose.override.yml
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Development files
+*.md.bak
+*.tmp
+*.log
+*.sh
+!scripts/*.sh
+test_*.php
+
+# MacOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Desktop.ini
+
+# Temporary development and debug files
+*debug*.html
+*test*.html
+*temp*.html
+route-*.php
+clear-*.php
+qr-debug.*
+
+# Temporary documentation files (only in root)
+/ANALISIS_*.md
+/SOLUSI_*.md
+/TEST_*.md
+/FIX_*.md
+/INSTALL_*.md
+/DISTRIBUTION_*.md
+
+# Temporary scripts (only in root)
+/*.sh
+!/scripts/*.sh
+/test_*.php
+
+# Backup and temporary development files (anywhere)
+*_BACKUP.*
+*_OLD.*
+*_TEMP.*
+*.backup
+*.bak
+
+# Test files and samples (prevent root clutter)
+/test_*.php
+/simple_*.php
+*_test.php
+
+# Large log files (>1MB should be archived)
+storage/logs/*.log
+
+# QR Code duplicates (keep only latest per resi)
+storage/app/public/qr-codes/*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].png
+
+# Temporary folders
+/temp/
+/tmp/
+**/temp/
+**/tmp/
+
+# Development archives (git should track the organized structure)
+docs/development/archived_files/*.php
+docs/development/archived_files/*.log
+docs/development/archived_files/*.png
+
+# Backup files
+/backups
+/docs/development/archived_files
+
+# Laravel specific
+/public/qr-codes
+/storage/app/public/qr-codes
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/framework/cache/*
+!/storage/framework/cache/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+
+# Test marker files
+.tests-passed
+.phpunit.passed
+
+# Temporary scripts folder (contains debug and fix scripts)
+/scripts/debug/
+/scripts/fixes/
+/scripts/temp/
+psysh/
+
+# Test artifacts and coverage
+/coverage
+/tests/coverage
+/.vitest
+node_modules/.vitest
+.vitest.result.json
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+*.archived

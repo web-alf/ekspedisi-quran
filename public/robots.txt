@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+
+# Block admin area
+Disallow: /admin/
+Disallow: /login
+Disallow: /register
+
+# Block sensitive endpoints
+Disallow: /api/
+Disallow: /_debugbar/
+
+# Allow important pages
+Allow: /
+Allow: /tracking
+Allow: /mushaf-request
+Allow: /tentang
+Allow: /program
+Allow: /kontak
+Allow: /wakaf
+
+# Sitemap location
+Sitemap: /sitemap.xml
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1

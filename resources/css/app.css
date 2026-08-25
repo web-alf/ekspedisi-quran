@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* Ensure immediate cursor styles for better UX */
+@layer base {
+  button, 
+  [role="button"], 
+  a:not([href="#"]):not([href=""]),
+  .cursor-pointer,
+  [onclick],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    cursor: pointer !important;
+  }
+  
+  /* Ensure hover states work immediately */
+  button:hover,
+  [role="button"]:hover,
+  a:hover {
+    cursor: pointer !important;
+  }
+}
