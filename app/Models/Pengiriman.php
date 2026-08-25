@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class Pengiriman extends Model
 {
@@ -326,7 +327,7 @@ class Pengiriman extends Model
             'status_from' => $oldStatus,
             'status_to' => $newStatusId,
             'catatan' => $catatan,
-            'created_by' => $userId ?: auth()->id() ?? 1,
+            'created_by' => $userId ?: auth()->id() ?? User::query()->value('id'),
         ]);
 
         return $this;

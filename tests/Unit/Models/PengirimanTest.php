@@ -122,7 +122,7 @@ class PengirimanTest extends TestCase
         $pengiriman->updateStatus($newStatus->id, 'Status updated via test');
 
         $this->assertEquals($newStatus->id, $pengiriman->fresh()->status_id);
-        $this->assertDatabaseHas('status_history', [
+        $this->assertDatabaseHas('status_histories', [
             'pengiriman_id' => $pengiriman->id,
             'status_from' => $oldStatus->id,
             'status_to' => $newStatus->id,

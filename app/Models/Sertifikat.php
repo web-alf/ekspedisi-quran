@@ -138,7 +138,7 @@ class Sertifikat extends Model
 
     public function getFormattedSentAtAttribute()
     {
-        return $this->sent_at ? $this->sent_at->format('d/m/Y H:i') : null;
+        return $this->sent_at ? $this->sent_at->format('d M Y H:i') : null;
     }
 
 

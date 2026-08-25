@@ -14,14 +14,15 @@ uses(RefreshDatabase::class);
  * Test dashboard fallback functionality when caching fails
  */
 it('can generate charts data with correct structure when caching fails', function () {
-    // Create test user with super-admin role
+    $this->seed(\Database\Seeders\RolePermissionSeeder::class);
     $user = User::factory()->create();
+    $user->assignRole('super-admin');
     $this->actingAs($user);
 
     // Create test data
     $status = StatusPengiriman::factory()->create([
         'nama' => 'Test Status',
-        'slug' => 'diterima',
+        'slug' => 'test-status-'.uniqid(),
         'is_active' => true,
     ]);
 
@@ -138,8 +139,9 @@ it('returns empty arrays when no data exists', function () {
 });
 
 it('dashboard fallback loads successfully with correct data structure', function () {
-    // Create test user with super-admin role
+    $this->seed(\Database\Seeders\RolePermissionSeeder::class);
     $user = User::factory()->create();
+    $user->assignRole('super-admin');
     $this->actingAs($user);
 
     // Mock cache failure by directly testing fallback route
