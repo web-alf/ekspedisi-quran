@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { router } from '@inertiajs/svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { toast } from '../../../utils/notifications.js';
   
   export let pengiriman;
@@ -118,9 +119,7 @@
 <div class="bg-white rounded-lg border border-gray-200 p-4">
   <div class="flex items-center justify-between mb-4">
     <h3 class="text-lg font-semibold text-gray-900 flex items-center">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M12 12h-4.01M12 12v4M6 6l6-6l6 6M6 6v12M18 6v12"/>
-      </svg>
+      <HeroIcon name="qr-code" class="w-5 h-5 mr-2" />
       QR Code Management
     </h3>
     
@@ -134,9 +133,10 @@
         </button>
         <button
           on:click={downloadQR}
-          class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors inline-flex items-center gap-1"
         >
-          📥 Download
+          <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
+          Download
         </button>
       </div>
     {/if}
@@ -162,8 +162,9 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div>
           <span class="font-medium text-gray-700">Status:</span>
-          <span class="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
-            ✅ QR Code Tersedia
+          <span class="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded text-xs inline-flex items-center gap-1">
+            <HeroIcon name="check-circle" class="w-3.5 h-3.5" />
+            QR Code Tersedia
           </span>
         </div>
         <div>
@@ -178,17 +179,19 @@
       <div class="flex flex-wrap gap-2">
         <button
           on:click={copyTrackingURL}
-          class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm"
+          class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm inline-flex items-center gap-1.5"
         >
-          📋 Copy URL
+          <HeroIcon name="clipboard-document" class="w-4 h-4" />
+          Copy URL
         </button>
         
         <a
           href="/tracking/{pengiriman.no_resi}"
           target="_blank"
-          class="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors text-sm inline-block"
+          class="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors text-sm inline-flex items-center gap-1.5"
         >
-          🔗 Open Tracking
+          <HeroIcon name="arrow-top-right-on-square" class="w-4 h-4" />
+          Open Tracking
         </a>
       </div>
     </div>
@@ -197,9 +200,7 @@
     <!-- No QR Code yet -->
     <div class="text-center py-6">
       <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M12 12h-4.01M12 12v4M6 6l6-6l6 6M6 6v12M18 6v12"/>
-        </svg>
+        <HeroIcon name="qr-code" class="w-8 h-8 text-gray-400" />
       </div>
       <h4 class="text-lg font-medium text-gray-900 mb-2">QR Code Belum Dibuat</h4>
       <p class="text-gray-600 mb-4">Buat QR Code untuk memudahkan tracking pengiriman ini</p>

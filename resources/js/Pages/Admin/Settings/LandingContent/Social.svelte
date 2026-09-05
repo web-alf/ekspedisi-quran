@@ -2,6 +2,7 @@
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../../../Layouts/AdminLayout.svelte';
   import Pagination from '../../../../Components/Pagination.svelte';
+  import HeroIcon from '../../../../Components/UI/HeroIcon.svelte';
   import { slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { dialog } from '../../../../utils/notifications.js';
@@ -268,9 +269,7 @@
               placeholder="Cari berdasarkan nama, key, atau deskripsi..."
               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent"
             />
-            <svg class="absolute left-3 top-3 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
+            <HeroIcon name="magnifying-glass" class="absolute left-3 top-3 w-4 h-4 text-gray-400" />
           </div>
         </div>
         
@@ -487,9 +486,7 @@
                         class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Edit"
                       >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                        </svg>
+                        <HeroIcon name="pencil-square" class="w-5 h-5" />
                       </button>
                     </div>
                   {/if}
@@ -514,9 +511,7 @@
           {/if}
         {:else}
           <div class="text-center py-12">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2C7 1.45 7.45 1 8 1h8c.55 0 1 .45 1 1v2m3 4H5l-.3 12c-.05 2.1 1.65 4 3.75 4h9.1c2.1 0 3.8-1.9 3.75-4L21 8z"/>
-            </svg>
+            <HeroIcon name="share" class="mx-auto h-12 w-12 text-gray-400" />
             <h3 class="mt-2 text-sm font-medium text-gray-900">Belum ada pengaturan social media</h3>
             <p class="mt-1 text-sm text-gray-500">Mulai dengan menambahkan link media sosial seperti Facebook, Instagram, dan Twitter.</p>
             <div class="mt-6">

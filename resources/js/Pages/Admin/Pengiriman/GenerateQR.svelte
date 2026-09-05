@@ -3,8 +3,9 @@
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '@/Layouts/AdminLayout.svelte';
   import TabNavigation from '@/Components/TabNavigation.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { page } from '@inertiajs/svelte';
-  import { can } from '@/utils/permissions';
+  import { can, hasPermission, hasRole } from '@/utils/permissions';
   
   // Props
   export let pengiriman = [];
@@ -50,7 +51,21 @@
   // Thermal Print State
   let thermalPrintMode = false;
 
-  $: canBulkThermalPrint = can.qr.bulkOperations();
+  $: canBulkThermalPrint = can.qr.bulkOperations() || can.qr.generate() || hasPermission('qr.generate') || hasRole('super-admin') || hasRole('manager') || hasRole('warehouse');
+
+  // Modal State
+  let showQrModal = false;
+  let selectedQrItem = null;
+
+  function openQrModal(item) {
+    selectedQrItem = item;
+    showQrModal = true;
+  }
+
+  function closeQrModal() {
+    showQrModal = false;
+    selectedQrItem = null;
+  }
   
   // Get current mode from URL
   let currentMode = 'generate-qr';
@@ -118,10 +133,10 @@
   }
   
   // FIXED: Bulk generate QR codes using proper bulk endpoint
-  async function generateQRCodes() {
+  async function generateQRCodes(isThermal = false) {
     if (selectedPengiriman.length === 0) {
       error = 'Pilih minimal satu pengiriman';
-      return;
+      return false;
     }
     
     loading = true;
@@ -145,7 +160,6 @@
       
       // Extract pengiriman IDs
       const pengirimanIds = selectedPengiriman.map(p => p.id);
-      
       
       // Use the proper bulk endpoint
       const response = await fetch('/admin/qr/bulk-generate', {
@@ -176,8 +190,38 @@
       const { summary, results } = result;
       generationProgress.results = results;
       
-      // Filter successful results for QR codes
-      const successfulResults = results.filter(r => r.status === 'success');
+      // Filter successful / existing results for QR codes
+      const successfulResults = results.filter(r => r.status === 'success' || r.status === 'skipped');
+      const successfulIds = successfulResults.map(r => r.id);
+      
+      // Update local reactive memory state immediately
+      if (Array.isArray(pengiriman?.data)) {
+        pengiriman.data = pengiriman.data.map(p => {
+          if (successfulIds.includes(p.id)) {
+            const res = results.find(r => r.id === p.id);
+            return {
+              ...p,
+              has_qr: true,
+              qr_url: res?.qr_url || p.qr_url,
+              qr_data: res?.qr_data || p.qr_data
+            };
+          }
+          return p;
+        });
+      }
+      
+      selectedPengiriman = selectedPengiriman.map(p => {
+        if (successfulIds.includes(p.id)) {
+          const res = results.find(r => r.id === p.id);
+          return {
+            ...p,
+            has_qr: true,
+            qr_url: res?.qr_url || p.qr_url,
+            qr_data: res?.qr_data || p.qr_data
+          };
+        }
+        return p;
+      });
       
       // Create qrCodes array for print mode
       qrCodes = successfulResults.map(result => {
@@ -192,53 +236,46 @@
       // Show success message
       success = result.message;
       
-      // If all successful, switch to print mode
-      if (summary.success === summary.total) {
-        printMode = true;
-        success = `Semua ${summary.success} QR Code berhasil dibuat!`;
-      } else if (summary.success > 0) {
-        success = `${summary.success} dari ${summary.total} QR Code berhasil dibuat. ${summary.errors} gagal.`;
-        printMode = true; // Still allow printing successful ones
-      } else {
-        error = `Semua QR Code gagal dibuat. Periksa log error.`;
+      // If all successful and NOT thermal mode, switch to A4 print mode
+      if (!isThermal) {
+        if (summary.success === summary.total) {
+          printMode = true;
+          success = `Semua ${summary.success} QR Code berhasil dibuat!`;
+        } else if (summary.success > 0) {
+          success = `${summary.success} dari ${summary.total} QR Code berhasil dibuat. ${summary.errors} gagal.`;
+          printMode = true; // Still allow printing successful ones
+        } else {
+          error = `Semua QR Code gagal dibuat. Periksa log error.`;
+        }
       }
       
-      // Log detailed results for debugging
-      if (summary.errors > 0) {
-        const failedResults = results.filter(r => r.status === 'error');
-      }
-      
-      // Reload pengiriman data to update QR status
+      // Reload pengiriman data in background to sync state with backend
       if (summary.success > 0) {
-        // Store current selected IDs
         const currentSelectedIds = selectedPengiriman.map(p => p.id);
         
         setTimeout(() => {
           router.reload({
-            only: ['pengiriman'],
+            only: ['pengiriman', 'stats'],
             preserveState: true,  // Preserve pagination state
             preserveScroll: true,
             onSuccess: () => {
-              // Get the updated pengiriman data - handle both array and paginated object
               const updatedData = Array.isArray(pengiriman?.data) ? pengiriman.data : (Array.isArray(pengiriman) ? pengiriman : []);
-              // Re-select items after reload based on stored IDs
               selectedPengiriman = updatedData.filter(p => currentSelectedIds.includes(p.id));
-              // Keep print mode and QR codes to show preview - DON'T clear them
-              // printMode and qrCodes should remain active to show the generated QR preview
             }
           });
-        }, 500); // Small delay to ensure backend has updated the data
+        }, 500);
       }
+      
+      return successfulIds;
       
     } catch (err) {
       error = `Gagal generate QR codes: ${err.message}`;
-      
-      // Reset progress on error
       generationProgress = {
         current: 0,
         total: 0,
         results: []
       };
+      return false;
     } finally {
       loading = false;
     }
@@ -380,7 +417,7 @@
       '<html>',
       '  <head>',
       '    <title>Print QR Codes - Ekspedisi Qur\'an</title>',
-      '    <style>',
+      '    <' + 'style>',
       '      @page { size: A4; margin: 10mm; }',
       '      body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: white; }',
       '      .print-header { text-align: center; margin-bottom: 25px; border-bottom: 3px solid #2c5530; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; }',
@@ -411,7 +448,7 @@
       '        .qr-image img { max-width: 184px !important; max-height: 184px !important; }',
       '        .qr-content { gap: 20px !important; }',
       '      }',
-      '    </style>',
+      '    </' + 'style>',
       '  </head>',
       '  <body>',
       '    <div class="print-header">',
@@ -514,44 +551,73 @@
     window.open(url, '_blank', 'width=800,height=600,scrollbars=yes');
   }
 
-  function thermalPrintBulk() {
+  // Helper: Submit form for thermal printing
+  function submitThermalPrintForm(ids, targetWindow = null) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    
+    if (targetWindow && !targetWindow.closed) {
+      // Create and submit form inside the pre-opened window directly
+      const form = targetWindow.document.createElement('form');
+      form.method = 'POST';
+      form.action = '/admin/thermal-print/bulk';
+      
+      const csrfInput = targetWindow.document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = '_token';
+      csrfInput.value = csrfToken;
+      form.appendChild(csrfInput);
+      
+      ids.forEach(id => {
+        const input = targetWindow.document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'pengiriman_ids[]';
+        input.value = id;
+        form.appendChild(input);
+      });
+      
+      targetWindow.document.body.appendChild(form);
+      form.submit();
+    } else {
+      // Fallback standard submit
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/admin/thermal-print/bulk';
+      form.target = '_blank';
+      
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = '_token';
+      csrfInput.value = csrfToken;
+      form.appendChild(csrfInput);
+      
+      ids.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'pengiriman_ids[]';
+        input.value = id;
+        form.appendChild(input);
+      });
+      
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    }
+  }
+
+  function thermalPrintBulk(customIds = null) {
     if (!canBulkThermalPrint) {
       error = 'Anda tidak memiliki izin untuk thermal print.';
       return;
     }
 
-    if (selectedPengirimanWithQR.length === 0) {
+    const idsToPrint = customIds || selectedPengirimanWithQR.map(p => p.id);
+    if (idsToPrint.length === 0) {
       error = 'Pilih pengiriman yang sudah memiliki QR Code';
       return;
     }
     
-    const pengirimanIds = selectedPengirimanWithQR.map(p => p.id);
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/admin/thermal-print/bulk';
-    form.target = '_blank';
-    
-    // CSRF Token
-    const csrfInput = document.createElement('input');
-    csrfInput.type = 'hidden';
-    csrfInput.name = '_token';
-    csrfInput.value = document.querySelector('meta[name="csrf-token"]').content;
-    form.appendChild(csrfInput);
-    
-    // Pengiriman IDs
-    pengirimanIds.forEach(id => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'pengiriman_ids[]';
-      input.value = id;
-      form.appendChild(input);
-    });
-    
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
-    
-    success = `Membuka thermal print untuk ${pengirimanIds.length} label...`;
+    submitThermalPrintForm(idsToPrint);
+    success = `Membuka thermal print untuk ${idsToPrint.length} label...`;
   }
   
   async function generateAndThermalPrint() {
@@ -565,20 +631,50 @@
       return;
     }
 
+    // 1. Pre-open window synchronously to prevent browser popup blocker
+    let printWindow = null;
     try {
-      // Generate QR codes terlebih dahulu
-      await generateQRCodes();
+      printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Memproses Label Thermal...</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f9fafb; color: #111827;">
+              <div style="text-align: center; padding: 24px;">
+                <div style="width: 44px; height: 44px; border: 3px solid #e5e7eb; border-top-color: #dc2626; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px;"></div>
+                <h3 style="margin: 0 0 8px; font-size: 16px; font-weight: 600;">Membuat QR Code & Menyiapkan Label...</h3>
+                <p style="margin: 0; font-size: 13px; color: #6b7280;">Mohon tunggu, label thermal sedang disiapkan.</p>
+              </div>
+              <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+            </body>
+          </html>
+        `);
+      }
+    } catch (e) {
+      console.warn('Could not pre-open window:', e);
+    }
+
+    try {
+      // 2. Generate QR codes in thermal mode (does not trigger A4 printMode preview)
+      const successfulIds = await generateQRCodes(true);
       
-      // Jika berhasil, tunggu sebentar lalu thermal print
-      if (success && generationProgress.results) {
-        const successfulResults = generationProgress.results.filter(r => r.status === 'success');
-        if (successfulResults.length > 0) {
-          setTimeout(() => {
-            thermalPrintBulk();
-          }, 1500);
+      if (successfulIds && successfulIds.length > 0) {
+        // 3. Submit thermal print to the pre-opened window
+        submitThermalPrintForm(successfulIds, printWindow);
+        success = `Berhasil membuat ${successfulIds.length} QR Code dan membuka cetak label thermal!`;
+      } else {
+        if (printWindow && !printWindow.closed) {
+          printWindow.close();
+        }
+        if (!error) {
+          error = 'Tidak ada QR Code yang berhasil dibuat untuk dicetak.';
         }
       }
     } catch (err) {
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
       error = `Gagal generate dan print: ${err.message}`;
     }
   }
@@ -601,16 +697,12 @@
         <p class="text-sm md:text-base text-gray-600">Generate QR Code untuk pengiriman Al-Quran dari <span class="font-semibold text-blue-600">semua status aktif</span> dan print label thermal 100×150mm</p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           <div class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm bg-blue-100 text-blue-800">
-            <svg class="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
+            <HeroIcon name="information-circle" class="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
             <span class="hidden sm:inline">Menampilkan resi dari semua status aktif</span>
             <span class="sm:hidden">Semua status aktif</span>
           </div>
           <div class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm bg-green-100 text-green-800">
-            <svg class="w-3 h-3 sm:w-4 sm:h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-            </svg>
+            <HeroIcon name="printer" class="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
             <span class="hidden sm:inline">Thermal Print 100×150mm dengan data wakif</span>
             <span class="sm:hidden">Thermal Print</span>
           </div>
@@ -626,15 +718,11 @@
     {#if success}
       <div class="mb-4 p-3 sm:p-4 bg-green-50 text-green-600 rounded-lg flex items-start justify-between">
         <div class="flex items-start">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-          </svg>
+          <HeroIcon name="check-circle" class="w-4 h-4 sm:w-5 sm:h-5 mr-2 mt-0.5 flex-shrink-0" />
           <span class="text-sm sm:text-base">{success}</span>
         </div>
         <button on:click={clearMessages} class="text-green-400 hover:text-green-600 flex-shrink-0 ml-2">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-          </svg>
+          <HeroIcon name="x-mark" class="w-4 h-4" />
         </button>
       </div>
     {/if}
@@ -642,15 +730,11 @@
     {#if error}
       <div class="mb-4 p-3 sm:p-4 bg-red-50 text-red-600 rounded-lg flex items-start justify-between">
         <div class="flex items-start">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-          </svg>
+          <HeroIcon name="x-circle" class="w-4 h-4 sm:w-5 sm:h-5 mr-2 mt-0.5 flex-shrink-0" />
           <span class="text-sm sm:text-base break-words">{error}</span>
         </div>
         <button on:click={clearMessages} class="text-red-400 hover:text-red-600 flex-shrink-0 ml-2">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-          </svg>
+          <HeroIcon name="x-mark" class="w-4 h-4" />
         </button>
       </div>
     {/if}
@@ -866,10 +950,7 @@
               class="px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
               disabled={!canBulkThermalPrint}
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-              </svg>
+              <HeroIcon name="eye" class="w-4 h-4" />
               <span class="hidden sm:inline">Preview 100×150mm</span>
               <span class="sm:hidden">Preview</span>
             </button>
@@ -880,9 +961,7 @@
               disabled={loading || selectedPengirimanWithQR.length === 0 || !canBulkThermalPrint}
               class="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-medium"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-              </svg>
+              <HeroIcon name="printer" class="w-4 h-4" />
               <span class="hidden sm:inline">Print Thermal ({selectedPengirimanWithQR.length})</span>
               <span class="sm:hidden">Print ({selectedPengirimanWithQR.length})</span>
             </button>
@@ -898,9 +977,7 @@
                 <span class="hidden sm:inline">Generating...</span>
                 <span class="sm:hidden">...</span>
               {:else}
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h1M6 16H5m12-6h1M6 8H5M9 20h6a2 2 0 002-2V6a2 2 0 00-2-2H9a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
+                <HeroIcon name="qr-code" class="w-4 h-4" />
                 <span class="hidden sm:inline">Generate & Print ({selectedPengiriman.length})</span>
                 <span class="sm:hidden">Generate ({selectedPengiriman.length})</span>
               {/if}
@@ -973,9 +1050,13 @@
                     </td>
                     <td class="px-4 py-3">
                       {#if item.has_qr}
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        <button 
+                          on:click={() => openQrModal(item)}
+                          class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 hover:bg-green-200 transition-colors cursor-pointer border border-green-200"
+                          title="Klik untuk melihat QR Code"
+                        >
                           ✓ QR Ada
-                        </span>
+                        </button>
                       {:else}
                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
                           ⚪ Belum Ada
@@ -1049,9 +1130,7 @@
                     }}
                     class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center"
                   >
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                    </svg>
+                    <HeroIcon name="chevron-left" class="w-4 h-4 mr-1" />
                     <span class="hidden sm:inline">Sebelumnya</span>
                     <span class="sm:hidden">Prev</span>
                   </button>
@@ -1079,9 +1158,7 @@
                   >
                     <span class="hidden sm:inline">Selanjutnya</span>
                     <span class="sm:hidden">Next</span>
-                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                    </svg>
+                    <HeroIcon name="chevron-right" class="w-4 h-4 ml-1" />
                   </button>
                 {/if}
               </div>
@@ -1105,9 +1182,7 @@
               on:click={printQRCodes}
               class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-              </svg>
+              <HeroIcon name="printer" class="w-4 h-4" />
               <span class="hidden sm:inline">Print QR Codes</span>
               <span class="sm:hidden">Print</span>
             </button>
@@ -1146,4 +1221,56 @@
       </div>
     {/if}
   </div>
+
+  <!-- QR Code Modal -->
+  {#if showQrModal && selectedQrItem}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-gray-900 bg-opacity-50" on:click={closeQrModal}>
+      <div class="relative w-full max-w-md p-4 mx-auto" on:click|stopPropagation>
+        <div class="relative bg-white rounded-xl shadow-2xl">
+          <!-- Modal header -->
+          <div class="flex items-center justify-between p-4 border-b rounded-t">
+            <h3 class="text-lg font-semibold text-gray-900">
+              QR Code Resi: {selectedQrItem.no_resi}
+            </h3>
+            <button on:click={closeQrModal} type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center">
+              <HeroIcon name="x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+          <!-- Modal body -->
+          <div class="p-6 space-y-6 flex flex-col items-center">
+            <div class="w-48 h-48 border-2 border-gray-100 rounded-lg p-2 bg-white flex items-center justify-center shadow-inner">
+              <img 
+                src={selectedQrItem.qr_url || `/admin/qr/display/${selectedQrItem.id}`} 
+                alt="QR Code" 
+                class="max-w-full max-h-full object-contain"
+              />
+            </div>
+            
+            <div class="w-full text-sm text-gray-600 space-y-2 bg-gray-50 p-4 rounded-lg border border-gray-100">
+              <div class="flex justify-between border-b pb-1">
+                <span class="font-medium text-gray-500">Penerima:</span>
+                <span class="font-semibold text-gray-900 text-right max-w-[60%] truncate" title={selectedQrItem.nama_penerima || '-'}>{selectedQrItem.nama_penerima || '-'}</span>
+              </div>
+              <div class="flex justify-between border-b pb-1">
+                <span class="font-medium text-gray-500">Wakif:</span>
+                <span class="font-semibold text-gray-900 text-right max-w-[60%] truncate" title={selectedQrItem.wakaf_item?.wakif_name || selectedQrItem.donatur?.nama_donatur || '-'}>{selectedQrItem.wakaf_item?.wakif_name || selectedQrItem.donatur?.nama_donatur || '-'}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="font-medium text-gray-500">Tujuan:</span>
+                <span class="font-semibold text-gray-900 text-right max-w-[60%] truncate" title={selectedQrItem.alamat_tujuan || '-'}>{selectedQrItem.alamat_tujuan || '-'}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Modal footer -->
+          <div class="flex items-center p-4 border-t border-gray-200 rounded-b">
+            <button on:click={closeQrModal} type="button" class="w-full text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors">
+              Tutup
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 </AdminLayout>

@@ -2,6 +2,7 @@
   import { useForm } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import PhoneInput from '../../../Components/PhoneInput.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let donatur;
   export let errors = {};
@@ -409,9 +410,7 @@
             href="/admin/donatur/{donatur.id}/wakaf-items"
             class="px-4 py-2 text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-            </svg>
+            <HeroIcon name="cube" class="w-4 h-4" />
             Kelola Wakaf Items
           </a>
         </div>

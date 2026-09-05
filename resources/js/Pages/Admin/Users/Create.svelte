@@ -3,6 +3,7 @@
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let roles = {};
   export const auth = {};
@@ -46,9 +47,7 @@
             on:click={() => router.visit('/admin/users')}
             class="mr-4 p-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-            </svg>
+            <HeroIcon name="chevron-left" class="w-5 h-5" />
           </button>
           <div>
             <h1 class="text-2xl font-semibold text-gray-900">Tambah User Baru</h1>
@@ -81,9 +80,7 @@
           />
           {#if $form.errors.name}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.name}
             </p>
           {/if}
@@ -105,9 +102,7 @@
           />
           {#if $form.errors.email}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.email}
             </p>
           {/if}
@@ -132,9 +127,7 @@
           </select>
           {#if $form.errors.role}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.role}
             </p>
           {/if}
@@ -156,9 +149,7 @@
           />
           {#if $form.errors.password}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.password}
             </p>
           {/if}
@@ -213,9 +204,7 @@
               </svg>
               Menyimpan...
             {:else}
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-              </svg>
+              <HeroIcon name="check" class="w-4 h-4 mr-2" />
               Simpan User
             {/if}
           </button>

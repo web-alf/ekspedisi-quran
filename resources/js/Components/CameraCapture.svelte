@@ -1,6 +1,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { toast } from '../utils/notifications.js';
+    import HeroIcon from './UI/HeroIcon.svelte';
 
     export let onCapture = null; // Callback function when photo is captured
     export let maxPhotos = 5; // Maximum number of photos
@@ -281,9 +282,7 @@
         {#if error}
             <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
                 <div class="flex items-start">
-                    <svg class="w-5 h-5 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                    </svg>
+                    <HeroIcon name="x-circle" class="w-5 h-5 mr-2 mt-0.5 text-red-500" />
                     <span class="text-sm">{error}</span>
                 </div>
             </div>
@@ -316,9 +315,7 @@
                             class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition"
                             title="Ganti kamera"
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
+                            <HeroIcon name="arrow-path" class="w-5 h-5" />
                         </button>
                     </div>
                 </div>
@@ -358,19 +355,14 @@
                         disabled={isCapturing || capturedPhotos.length >= maxPhotos}
                         class="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
                     >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
+                        <HeroIcon name="camera" class="w-5 h-5" />
                         {isCapturing ? 'Membuka Kamera...' : 'Buka Kamera'}
                     </button>
                 {/if}
 
                 {#if allowFileUpload}
                     <label class="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition cursor-pointer flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                        </svg>
+                        <HeroIcon name="photo" class="w-5 h-5" />
                         Pilih dari Galeri
                         <input
                             type="file"
@@ -412,9 +404,7 @@
                                 class="absolute top-1 right-1 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition"
                                 title="Hapus foto"
                             >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                </svg>
+                                <HeroIcon name="x-mark" class="w-4 h-4" />
                             </button>
                             {#if photo.fileName}
                                 <div class="absolute bottom-1 left-1 right-1 bg-black/50 text-white text-xs px-2 py-1 rounded truncate">

@@ -2,6 +2,7 @@
     import AdminLayout from '../../../Layouts/AdminLayout.svelte';
     import FlashMessage from '../../../Components/FlashMessage.svelte';
     import DokumentasiUpload from '../../../Components/DokumentasiUpload.svelte';
+    import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
     import { router } from '@inertiajs/svelte';
     import { onMount } from 'svelte';
     import { toast } from '../../../utils/notifications.js';
@@ -152,9 +153,7 @@
                 
                 <div class="mt-4 sm:mt-0">
                     <a href={`/admin/pengiriman/${pengiriman.id}`} class="inline-flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                        </svg>
+                        <HeroIcon name="arrow-left" class="w-5 h-5 mr-2" />
                         Kembali
                     </a>
                 </div>
@@ -249,10 +248,7 @@
                                             on:click={getUserLocation}
                                             class="ml-2 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                            </svg>
+                                            <HeroIcon name="map-pin" class="w-5 h-5" />
                                         </button>
                                     </div>
                                     {#if latitude && longitude}
@@ -289,9 +285,7 @@
                                     <div class="rounded-md bg-red-50 p-4 border border-red-200">
                                         <div class="flex">
                                             <div class="flex-shrink-0">
-                                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                                </svg>
+                                                <HeroIcon name="x-circle" class="w-5 h-5 text-red-400" />
                                             </div>
                                             <div class="ml-3">
                                                 <h3 class="text-sm font-medium text-red-800">
@@ -374,10 +368,7 @@
                                                             
                                                             {#if history.lokasi}
                                                                 <div class="flex items-center text-xs text-gray-500">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                                    </svg>
+                                                                    <HeroIcon name="map-pin" class="w-4 h-4 mr-1" />
                                                                     Lokasi: {history.lokasi}
                                                                 </div>
                                                             {/if}

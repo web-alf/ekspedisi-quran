@@ -2,6 +2,7 @@
   import { router } from '@inertiajs/svelte';
   import { fade, scale } from 'svelte/transition';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   
   // Props from backend
@@ -123,9 +124,7 @@
             on:click={() => router.visit('/admin/dashboard')}
             class="mr-4 p-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
-            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-            </svg>
+            <HeroIcon name="arrow-left" class="w-4 h-4 text-white" />
           </button>
           <div>
             <h1 class="text-lg font-bold text-gray-900">Public Tracking</h1>
@@ -138,9 +137,7 @@
             on:click={openPublicPage}
             class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M7 7l10 10M17 7v4m0 0H13"/>
-            </svg>
+            <HeroIcon name="arrow-top-right-on-square" class="w-4 h-4 mr-2" />
             Buka Halaman Public
           </button>
         </div>
@@ -184,9 +181,7 @@
                     </svg>
                     Mencari...
                   {:else}
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
+                    <HeroIcon name="magnifying-glass" class="w-4 h-4 mr-2" />
                     Lacak
                   {/if}
                 </button>
@@ -329,9 +324,7 @@
                       <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
                           <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
-                            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                            </svg>
+                            <HeroIcon name="magnifying-glass" class="w-6 h-6 text-purple-600" />
                           </div>
                           <div>
                             <div class="text-sm font-medium text-gray-900">{track.tracking_code}</div>
@@ -361,9 +354,7 @@
                     <tr>
                       <td colspan="4" class="px-6 py-12 text-center">
                         <div class="text-gray-500">
-                          <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                          </svg>
+                          <HeroIcon name="magnifying-glass" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
                           <p class="text-lg font-medium">Belum ada aktivitas tracking</p>
                           <p class="text-sm">Aktivitas pencarian public akan muncul di sini</p>
                         </div>

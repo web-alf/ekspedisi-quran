@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { can } from '../../../utils/permissions.js';
   
   // Props from Inertia
@@ -14,8 +15,7 @@
   export const settings = {};
   
   // Add CSS for location markers
-  const markerStyle = `
-    <style>
+  const markerStyle = '<' + 'style>' + `
       .location-marker {
         transition: transform 0.2s, filter 0.2s;
       }
@@ -29,8 +29,7 @@
       .location-marker div {
         cursor: pointer;
       }
-    </style>
-  `;
+  ` + '</' + 'style>';
   
   // Inject styles
   if (typeof document !== 'undefined') {
@@ -182,14 +181,14 @@
   // Fungsi untuk mendapatkan ikon status
   function getStatusIcon(status) {
     const iconMap = {
-      'pending': '⏳',
-      'reviewed': '👀',
-      'approved': '✅',
-      'rejected': '❌',
-      'processed': '📦',
-      'completed': '🎉'
+      'pending': 'clock',
+      'reviewed': 'eye',
+      'approved': 'check-circle',
+      'rejected': 'x-circle',
+      'processed': 'cube',
+      'completed': 'sparkles'
     };
-    return iconMap[status] || '📋';
+    return iconMap[status] || 'document-text';
   }
   
   function initializeMap() {
@@ -635,25 +634,25 @@
         count: 0,
         totalMushaf: 0,
         totalIqra: 0,
-        icon: '🎓'
+        icon: 'academic-cap'
       },
       'Komunitas & Dakwah Kemasyarakatan': {
         count: 0,
         totalMushaf: 0,
         totalIqra: 0,
-        icon: '🕌'
+        icon: 'user-group'
       },
       'Lembaga Sosial & Pemerintahan': {
         count: 0,
         totalMushaf: 0,
         totalIqra: 0,
-        icon: '🏛️'
+        icon: 'building-office-2'
       },
       'Penerima Manfaat Khusus': {
         count: 0,
         totalMushaf: 0,
         totalIqra: 0,
-        icon: '🤲'
+        icon: 'heart'
       }
     };
     
@@ -678,7 +677,7 @@
               count: 0,
               totalMushaf: 0,
               totalIqra: 0,
-              icon: '❓'
+              icon: 'question-mark-circle'
             };
           }
           categoryStats['Tidak Dikategorikan'].count++;
@@ -805,31 +804,25 @@
       <div class="flex flex-wrap gap-2">
         <button
           on:click={downloadTemplate}
-          class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 gap-1.5"
           title="Download template Excel untuk import data"
         >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
-          Template
+          <HeroIcon name="document-text" class="w-4 h-4" />
+          <span>Template</span>
         </button>
         <button
           on:click={openImportModal}
-          class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 gap-1.5"
         >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Import Excel
+          <HeroIcon name="arrow-up-tray" class="w-4 h-4" />
+          <span>Import Excel</span>
         </button>
         <button
           on:click={exportData}
-          class="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 gap-1.5"
         >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export Excel
+          <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
+          <span>Export Excel</span>
         </button>
       </div>
     </div>
@@ -837,12 +830,9 @@
 
     <!-- Distribution Map -->
     <div class="bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-100 hover:shadow-lg transition-shadow duration-300">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-        <!-- Tambahkan ikon -->
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-[#eb3434]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-        </svg>
-        Peta Penyebaran Distribusi Al-Qur'an
+      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <HeroIcon name="map-pin" class="h-5 w-5 text-[#eb3434]" />
+        <span>Peta Penyebaran Distribusi Al-Qur'an</span>
       </h3>
       
       <!-- Tambahkan card untuk info peta -->
@@ -872,11 +862,9 @@
 
     <!-- Category Statistics -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6 border border-gray-100 hover:shadow-lg transition-shadow duration-300">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-[#eb3434]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-4m-5 0H3m2 0h3M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-        Statistik Distribusi berdasarkan Kategori Lembaga
+      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <HeroIcon name="building-office-2" class="h-5 w-5 text-[#eb3434]" />
+        <span>Statistik Distribusi berdasarkan Kategori Lembaga</span>
       </h3>
       
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -884,7 +872,9 @@
           <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200">
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center space-x-2">
-                <span class="text-2xl">{data.icon}</span>
+                <div class="w-8 h-8 rounded-lg bg-red-50 text-[#eb3434] flex items-center justify-center">
+                  <HeroIcon name={data.icon} class="w-5 h-5" />
+                </div>
                 <h4 class="font-medium text-gray-800 text-sm">{category}</h4>
               </div>
               <span class="text-xs bg-[#eb3434] text-white px-2 py-1 rounded-full">{data.count}</span>
@@ -1124,7 +1114,8 @@
                   </td>
                   <td class="px-6 py-4">
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border {getStatusBadge(request.status)}">
-                      {getStatusIcon(request.status)} {getStatusText(request.status)}
+                      <HeroIcon name={getStatusIcon(request.status)} class="w-3.5 h-3.5 mr-1" />
+                      <span>{getStatusText(request.status)}</span>
                     </span>
                   </td>
                   <td class="px-6 py-4">
@@ -1137,10 +1128,7 @@
                         class="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
                         title="Lihat Detail"
                       >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                        </svg>
+                        <HeroIcon name="eye" class="w-4 h-4" />
                       </button>
                       {#if request.status !== 'completed'}
                         <button
@@ -1148,9 +1136,7 @@
                           class="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
                           title="Hapus"
                         >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                          </svg>
+                          <HeroIcon name="trash" class="w-4 h-4" />
                         </button>
                       {/if}
                     </div>
@@ -1161,9 +1147,7 @@
               <tr>
                 <td colspan="5" class="px-6 py-12 text-center">
                   <div class="text-gray-500">
-                    <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
+                    <HeroIcon name="document-text" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p class="text-lg font-medium">Tidak ada permintaan mushaf</p>
                     <p class="text-sm">Belum ada permintaan mushaf yang masuk</p>
                   </div>
@@ -1220,9 +1204,7 @@
       >
         <div class="sm:flex sm:items-start">
           <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
+            <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-red-600" />
           </div>
           <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
             <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
@@ -1278,9 +1260,7 @@
       >
         <div class="sm:flex sm:items-start">
           <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
-            <svg class="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-            </svg>
+            <HeroIcon name="arrow-up-tray" class="h-6 w-6 text-indigo-600" />
           </div>
           <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
             <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
@@ -1301,9 +1281,7 @@
                   id="import-file-input"
                 />
                 <label for="import-file-input" class="cursor-pointer">
-                  <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                  </svg>
+                  <HeroIcon name="arrow-up-tray" class="mx-auto h-12 w-12 text-gray-400" />
                   <p class="mt-2 text-sm text-gray-600">
                     {importFile ? importFile.name : 'Klik untuk memilih file atau drag & drop'}
                   </p>

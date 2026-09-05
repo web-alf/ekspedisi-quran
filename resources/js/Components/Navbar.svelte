@@ -1,6 +1,7 @@
 <script>
 import { getImageUrl } from '../utils/formHelpers.js';
     import { page } from '@inertiajs/svelte';
+    import HeroIcon from './UI/HeroIcon.svelte';
     
     export let settings = {};
     let isMobileMenuOpen = false;
@@ -100,9 +101,7 @@ import { getImageUrl } from '../utils/formHelpers.js';
                         href="/dashboard"
                         class="px-3 py-2 lg:px-4 lg:py-2 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors duration-300 font-medium text-sm lg:text-base flex items-center gap-2"
                     >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                        </svg>
+                        <HeroIcon name="home" class="w-4 h-4" />
                         Dashboard
                     </a>
                 {:else}
@@ -123,14 +122,10 @@ import { getImageUrl } from '../utils/formHelpers.js';
             >
                 {#if isMobileMenuOpen}
                     <!-- Close Icon -->
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
+                    <HeroIcon name="x-mark" class="w-6 h-6" />
                 {:else}
                     <!-- Hamburger Icon -->
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
+                    <HeroIcon name="bars-3" class="w-6 h-6" />
                 {/if}
             </button>
         </div>
@@ -195,9 +190,7 @@ import { getImageUrl } from '../utils/formHelpers.js';
                             on:click={closeMobileMenu}
                             class="block px-4 py-3 text-base font-medium bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors duration-300 text-center flex items-center justify-center gap-2"
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                            </svg>
+                            <HeroIcon name="home" class="w-5 h-5" />
                             Dashboard
                         </a>
                     {:else}

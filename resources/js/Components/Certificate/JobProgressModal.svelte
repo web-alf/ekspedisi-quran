@@ -1,6 +1,7 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
     import { writable } from 'svelte/store';
+    import HeroIcon from '../UI/HeroIcon.svelte';
 
     export let isOpen = false;
     export let onClose = () => {};
@@ -167,9 +168,7 @@
                 on:click={onClose}
                 class="text-gray-400 hover:text-gray-600 transition-colors"
             >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <HeroIcon name="x-mark" class="w-6 h-6" />
             </button>
         </div>
 
@@ -210,9 +209,7 @@
                     <div class="bg-red-50 border border-red-200 rounded-md p-4">
                         <div class="flex">
                             <div class="flex-shrink-0">
-                                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                </svg>
+                                <HeroIcon name="x-circle" class="h-5 w-5 text-red-400" />
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm text-red-800">Error: {error}</p>
@@ -225,9 +222,7 @@
                 {#if activeTab === 'active' && !loading}
                     {#if $activeJobs.length === 0}
                         <div class="text-center py-8">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M34 40h10v-4a6 6 0 00-10.712-3.714M34 40H14m20 0v-4a9.971 9.971 0 00-.712-3.714M14 40H4v-4a6 6 0 0110.712-3.714M14 40v-4a9.971 9.971 0 01.712-3.714M8 20a6 6 0 1112 0v12a9 9 0 11-18 0V20z" />
-                            </svg>
+                            <HeroIcon name="inbox-stack" class="mx-auto h-12 w-12 text-gray-400" />
                             <h3 class="mt-2 text-sm font-medium text-gray-900">Tidak ada pekerjaan aktif</h3>
                             <p class="mt-1 text-sm text-gray-500">Semua pekerjaan sertifikat telah selesai.</p>
                         </div>
@@ -299,9 +294,7 @@
                 {#if activeTab === 'recent' && !loading}
                     {#if $recentJobs.length === 0}
                         <div class="text-center py-8">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5l7-7 7 7M9 20h6" />
-                            </svg>
+                            <HeroIcon name="clock" class="mx-auto h-12 w-12 text-gray-400" />
                             <h3 class="mt-2 text-sm font-medium text-gray-900">Belum ada riwayat</h3>
                             <p class="mt-1 text-sm text-gray-500">Riwayat pekerjaan akan muncul di sini.</p>
                         </div>
@@ -328,17 +321,13 @@
                                                 on:click={() => toggleJobDetails(job.id)}
                                                 class="text-gray-400 hover:text-gray-600"
                                             >
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                                </svg>
+                                                <HeroIcon name="chevron-down" class="w-5 h-5" />
                                             </button>
                                             <button 
                                                 on:click={() => deleteJob(job.id)}
                                                 class="text-red-400 hover:text-red-600"
                                             >
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
+                                                <HeroIcon name="trash" class="w-5 h-5" />
                                             </button>
                                         </div>
                                     </div>
@@ -394,11 +383,9 @@
                                                 <div class="mt-3">
                                                     <a 
                                                         href={job.results.zip_download_url} 
-                                                        class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                                        class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 gap-1.5"
                                                     >
-                                                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                        </svg>
+                                                        <HeroIcon name="arrow-down-tray" class="h-4 w-4" />
                                                         Download ZIP
                                                     </a>
                                                 </div>
@@ -489,11 +476,9 @@
             <div class="flex space-x-3">
                 <button 
                     on:click={loadJobData}
-                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 gap-2"
                 >
-                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <HeroIcon name="arrow-path" class="h-4 w-4" />
                     Refresh
                 </button>
                 <button 

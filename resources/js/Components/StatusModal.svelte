@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   const dispatch = createEventDispatcher();
   
@@ -39,16 +40,16 @@
   function getIcon(type) {
     switch (type) {
       case 'success':
-        return '✅';
+        return 'check-circle';
       case 'error':
-        return '❌';
+        return 'x-circle';
       case 'warning':
-        return '⚠️';
+        return 'exclamation-triangle';
       case 'confirm':
-        return '❓';
+        return 'question-mark-circle';
       case 'info':
       default:
-        return 'ℹ️';
+        return 'information-circle';
     }
   }
   
@@ -112,7 +113,7 @@
         <!-- Icon and Title -->
         <div class="flex items-center mb-4">
           <div class="w-12 h-12 rounded-full flex items-center justify-center mr-4 {colorClasses.icon}">
-            <span class="text-2xl">{icon}</span>
+            <HeroIcon name={icon} class="w-7 h-7" />
           </div>
           <div>
             <h3 class="text-lg font-semibold text-gray-900">{title}</h3>

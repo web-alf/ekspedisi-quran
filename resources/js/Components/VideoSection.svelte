@@ -1,5 +1,6 @@
 <script>
   import { onDestroy } from 'svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
 
   export let settings = {};
   export let videos = [];
@@ -164,9 +165,7 @@
                   <!-- Play Button Overlay -->
                   <div class="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors duration-300">
                     <div class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
+                      <HeroIcon name="play" class="w-8 h-8 text-white ml-1" />
                     </div>
                   </div>
                 </div>
@@ -205,9 +204,7 @@
                     <!-- Play Button Overlay -->
                     <div class="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors duration-300">
                       <div class="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform duration-300">
-                        <svg class="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
+                        <HeroIcon name="play" class="w-10 h-10 text-white ml-1" />
                       </div>
                     </div>
                     {#if showCaptions}
@@ -233,18 +230,14 @@
               class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
               aria-label="Previous video"
             >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-              </svg>
+              <HeroIcon name="chevron-left" class="w-6 h-6" />
             </button>
             <button
               on:click={nextSlide}
               class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
               aria-label="Next video"
             >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-              </svg>
+              <HeroIcon name="chevron-right" class="w-6 h-6" />
             </button>
           {/if}
 
@@ -276,9 +269,7 @@
         class="absolute -top-12 right-0 bg-white text-gray-800 rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors z-10"
         aria-label="Close lightbox"
       >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
+        <HeroIcon name="x-mark" class="w-6 h-6" />
       </button>
 
       <!-- Video Embed -->
@@ -298,9 +289,7 @@
           <div class="flex items-center justify-center w-full h-full min-h-[300px]">
             <div class="text-white text-center">
               <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
+                <HeroIcon name="play" class="w-8 h-8 text-gray-400" />
               </div>
               <p>Loading video...</p>
             </div>
@@ -325,18 +314,14 @@
           class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-all duration-200"
           aria-label="Previous video"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-          </svg>
+          <HeroIcon name="chevron-left" class="w-6 h-6" />
         </button>
         <button
           on:click={nextLightbox}
           class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-all duration-200"
           aria-label="Next video"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
+          <HeroIcon name="chevron-right" class="w-6 h-6" />
         </button>
 
         <!-- Video counter -->

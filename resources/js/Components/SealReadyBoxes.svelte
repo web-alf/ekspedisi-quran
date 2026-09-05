@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   // Props
   export const currentUser = null;
@@ -146,9 +147,7 @@
 
   {#if sealReadyBoxes.length === 0}
     <div class="text-center py-8 text-gray-500">
-      <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-      </svg>
+      <HeroIcon name="cube" class="w-12 h-12 mx-auto mb-4 text-gray-400" />
       <p class="font-medium">Tidak ada boxes yang siap untuk sealing</p>
       <p class="text-sm mt-1">Boxes akan muncul di sini ketika semua contributor telah selesai</p>
     </div>
@@ -171,9 +170,7 @@
                 {getStatusBadge(box.status).text}
               </span>
               {#if box.assignment_type === 'shared'}
-                <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
-                </svg>
+                <HeroIcon name="user-group" class="w-4 h-4 text-green-600" />
               {/if}
             </div>
           </div>
@@ -231,9 +228,7 @@
             on:click={() => proceedToSeal(box)}
             class="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-            </svg>
+            <HeroIcon name="lock-closed" class="w-4 h-4" />
             <span>Seal Box</span>
           </button>
         </div>

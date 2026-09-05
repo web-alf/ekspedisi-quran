@@ -1,5 +1,6 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   export let center = [-2.5, 118]; // Indonesia center
   export let zoom = 5;
@@ -139,9 +140,7 @@
     <div class="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
       <div class="text-center">
         <div class="text-red-400 mb-2">
-          <svg class="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2l6 3 5.447-2.724A1 1 0 0121 3.618v10.764a1 1 0 01-.553.894L15 18l-6-3z" />
-          </svg>
+          <HeroIcon name="map" class="w-8 h-8 mx-auto" />
         </div>
         <p class="text-sm text-red-700">{error}</p>
         <button 

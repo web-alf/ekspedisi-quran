@@ -2,6 +2,7 @@
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { onMount } from 'svelte';
   import { showSuccess, showError } from '../../../stores/toast.js';
 
@@ -288,9 +289,7 @@
             on:click={() => router.visit('/admin/certificate-templates')}
             class="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
+            <HeroIcon name="arrow-left" class="w-4 h-4 mr-2" />
             Kembali
           </button>
           
@@ -299,9 +298,7 @@
               on:click={() => editMode = false}
               class="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
+              <HeroIcon name="x-mark" class="w-4 h-4 mr-2" />
               Batal Edit
             </button>
             <button
@@ -316,9 +313,7 @@
                 </svg>
                 Menyimpan...
               {:else}
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
+                <HeroIcon name="check" class="w-4 h-4 mr-2" />
                 Simpan Perubahan
               {/if}
             </button>
@@ -327,9 +322,7 @@
               on:click={toggleEditMode}
               class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center justify-center"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-              </svg>
+              <HeroIcon name="pencil-square" class="w-4 h-4 mr-2" />
               Edit Template
             </button>
           {/if}
@@ -346,10 +339,7 @@
           <div class="p-4 border-b bg-gradient-to-r from-gray-50 to-white">
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-semibold text-gray-900 flex items-center">
-                <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
+                <HeroIcon name="eye" class="w-5 h-5 mr-2 text-[#eb3434]" />
                 Preview Template
               </h3>
               <div class="text-sm text-gray-500">
@@ -374,9 +364,7 @@
               
               <div class="hidden items-center justify-center h-64 text-gray-400">
                 <div class="text-center">
-                  <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z"/>
-                  </svg>
+                  <HeroIcon name="photo" class="w-16 h-16 mx-auto mb-4" />
                   <p>Template tidak dapat dimuat</p>
                 </div>
               </div>
@@ -445,9 +433,7 @@
           <!-- Template Info Edit -->
           <div class="bg-white rounded-lg shadow-sm border p-4 lg:p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
+              <HeroIcon name="information-circle" class="w-5 h-5 mr-2 text-[#eb3434]" />
               Edit Informasi Template
             </h3>
             
@@ -506,9 +492,7 @@
           <!-- File Upload Edit -->
           <div class="bg-white rounded-lg shadow-sm border p-4 lg:p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
+              <HeroIcon name="photo" class="w-5 h-5 mr-2 text-[#eb3434]" />
               Update Template PNG
             </h3>
             <p class="text-sm text-gray-600 mb-4">Upload file baru jika ingin mengganti template</p>
@@ -558,9 +542,7 @@
                 </div>
               {:else}
                 <div class="space-y-4">
-                  <svg class="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                  </svg>
+                  <HeroIcon name="photo" class="w-16 h-16 mx-auto text-gray-400" />
                   <div>
                     <p class="text-gray-600 mb-2">Drag & drop template PNG di sini</p>
                     <p class="text-sm text-gray-400 mb-4">atau</p>
@@ -593,9 +575,7 @@
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="text-lg font-semibold text-gray-900 flex items-center">
-                  <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"/>
-                  </svg>
+                  <HeroIcon name="adjustments-horizontal" class="w-5 h-5 mr-2 text-[#eb3434]" />
                   Live Field Positioning
                 </h3>
                 <p class="text-sm text-gray-600 mt-1">Ubah posisi field dan klik tombol Save untuk menyimpan</p>
@@ -614,9 +594,7 @@
                   </svg>
                   Saving...
                 {:else}
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
+                  <HeroIcon name="check" class="w-4 h-4" />
                   Save Changes
                   {#if hasUnsavedChanges}
                     <span class="ml-1 bg-red-500 text-white text-xs rounded-full w-2 h-2"></span>
@@ -741,9 +719,7 @@
           <!-- Edit Mode Info -->
           <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6 sticky top-6">
             <h3 class="text-lg font-semibold text-blue-900 mb-4 flex items-center">
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-              </svg>
+              <HeroIcon name="pencil-square" class="w-5 h-5 mr-2" />
               Mode Edit
             </h3>
             
@@ -770,9 +746,7 @@
           <!-- Status & Quick Actions -->
           <div class="bg-white rounded-lg shadow-sm border p-6 sticky top-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
+              <HeroIcon name="check-circle" class="w-5 h-5 mr-2 text-[#eb3434]" />
               Status
             </h3>
             
@@ -780,9 +754,7 @@
               <div class="flex flex-wrap gap-2">
                 {#if template.is_default}
                   <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
-                    </svg>
+                    <HeroIcon name="star" class="w-4 h-4 mr-1" />
                     Default
                   </span>
                 {/if}
@@ -798,9 +770,7 @@
                     on:click={setAsDefault}
                     class="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center justify-center"
                   >
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
-                    </svg>
+                    <HeroIcon name="star" class="w-4 h-4 mr-2" />
                     Set sebagai Default
                   </button>
                 {/if}
@@ -809,9 +779,7 @@
                   on:click={toggleStatus}
                   class="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 >
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"/>
-                  </svg>
+                  <HeroIcon name="arrow-path" class="w-4 h-4 mr-2" />
                   {template.is_active ? 'Nonaktifkan' : 'Aktifkan'} Template
                 </button>
                 
@@ -819,9 +787,7 @@
                   on:click={confirmDelete}
                   class="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
                 >
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                  </svg>
+                  <HeroIcon name="trash" class="w-4 h-4 mr-2" />
                   Hapus Template
                 </button>
               </div>
@@ -832,9 +798,7 @@
         <!-- Template Information -->
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <svg class="w-5 h-5 mr-2 text-[#eb3434]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
+            <HeroIcon name="information-circle" class="w-5 h-5 mr-2 text-[#eb3434]" />
             Info Template
           </h3>
           
@@ -856,9 +820,7 @@
               {#if imageInfo?.size}
                 <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
                   <span class="text-gray-600 flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-                    </svg>
+                    <HeroIcon name="document-text" class="w-4 h-4 mr-2" />
                     Ukuran File:
                   </span>
                   <span class="font-medium">{formatFileSize(imageInfo?.size)}</span>
@@ -867,9 +829,7 @@
               
               <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
                 <span class="text-gray-600 flex items-center">
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                  </svg>
+                  <HeroIcon name="calendar-days" class="w-4 h-4 mr-2" />
                   Dibuat:
                 </span>
                 <span class="font-medium">{formatDate(template.created_at)}</span>
@@ -877,9 +837,7 @@
               
               <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
                 <span class="text-gray-600 flex items-center">
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                  </svg>
+                  <HeroIcon name="user" class="w-4 h-4 mr-2" />
                   Pembuat:
                 </span>
                 <span class="font-medium">{template.creator?.name || 'System'}</span>
@@ -891,9 +849,7 @@
         <!-- Tips & Help -->
         <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
           <h3 class="text-lg font-semibold text-blue-900 mb-4 flex items-center">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-            </svg>
+            <HeroIcon name="sparkles" class="w-5 h-5 mr-2" />
             Tips & Bantuan
           </h3>
           
@@ -939,9 +895,7 @@
       <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
         <div class="sm:flex sm:items-start">
           <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
+            <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-red-600" />
           </div>
           <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
             <h3 class="text-lg leading-6 font-medium text-gray-900">Hapus Template</h3>

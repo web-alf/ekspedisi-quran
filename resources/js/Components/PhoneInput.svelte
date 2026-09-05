@@ -1,6 +1,7 @@
 <script>
   import { TelInput, normalizedCountries, getCountryForPartialE164Number } from 'svelte-tel-input';
   import 'svelte-tel-input/styles/flags.css';
+  import HeroIcon from './UI/HeroIcon.svelte';
 
   export let value = '';
   export let id = 'phone';
@@ -131,9 +132,7 @@
     >
       <span class="flag flag-{country.toLowerCase()} w-6 h-4 inline-block mr-2"></span>
       <span class="font-medium">+{selectedCountryDialCode}</span>
-      <svg class="w-4 h-4 ml-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-      </svg>
+      <HeroIcon name="chevron-down" class="w-4 h-4 ml-2 text-gray-500" />
     </button>
 
     <!-- Phone Number Input -->

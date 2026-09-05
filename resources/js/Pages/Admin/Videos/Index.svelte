@@ -1,6 +1,7 @@
 <script>
   import { router, page } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { dialog } from '../../../utils/notifications.js';
   import { hasPermission } from '../../../utils/permissions.js';
 
@@ -108,9 +109,10 @@
         {#if canCreate && activeTab === 'videos'}
           <a
             href="/admin/videos/create"
-            class="bg-[#eb3434] text-white px-6 py-3 rounded-lg hover:bg-red-600 transition-colors font-medium"
+            class="bg-[#eb3434] text-white px-6 py-3 rounded-lg hover:bg-red-600 transition-colors font-medium inline-flex items-center gap-2"
           >
-            + Tambah Video
+            <HeroIcon name="plus" class="w-5 h-5" />
+            Tambah Video
           </a>
         {/if}
       </div>
@@ -122,15 +124,17 @@
         <nav class="flex space-x-8">
           <button
             on:click={() => activeTab = 'videos'}
-            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors {activeTab === 'videos' ? 'border-[#eb3434] text-[#eb3434]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 {activeTab === 'videos' ? 'border-[#eb3434] text-[#eb3434]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
           >
-            🎬 Video Items
+            <HeroIcon name="video-camera" class="w-4 h-4" />
+            Video Items
           </button>
           <button
             on:click={() => activeTab = 'settings'}
-            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors {activeTab === 'settings' ? 'border-[#eb3434] text-[#eb3434]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            class="py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 {activeTab === 'settings' ? 'border-[#eb3434] text-[#eb3434]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
           >
-            ⚙️ Pengaturan Video
+            <HeroIcon name="cog-6-tooth" class="w-4 h-4" />
+            Pengaturan Video
           </button>
         </nav>
       </div>
@@ -155,9 +159,7 @@
                     <!-- Play Button Overlay -->
                     <div class="absolute inset-0 flex items-center justify-center bg-black/30">
                       <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
-                        <svg class="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
+                        <HeroIcon name="play" class="w-6 h-6 text-white ml-0.5" />
                       </div>
                     </div>
                   </div>
@@ -187,9 +189,7 @@
                             class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                             title={video.is_active ? 'Nonaktifkan' : 'Aktifkan'}
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707"/>
-                            </svg>
+                            <HeroIcon name="sun" class="w-4 h-4" />
                           </button>
                         {/if}
 
@@ -199,9 +199,7 @@
                             class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Edit"
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                            </svg>
+                            <HeroIcon name="pencil-square" class="w-4 h-4" />
                           </a>
                         {/if}
 
@@ -211,9 +209,7 @@
                             class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Hapus"
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                            </svg>
+                            <HeroIcon name="trash" class="w-4 h-4" />
                           </button>
                         {/if}
 
@@ -244,9 +240,7 @@
             {/if}
           {:else}
             <div class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-              </svg>
+              <HeroIcon name="video-camera" class="mx-auto h-12 w-12 text-gray-400" />
               <h3 class="mt-2 text-sm font-medium text-gray-900">Belum ada video</h3>
               <p class="mt-1 text-sm text-gray-500">Mulai dengan menambahkan video YouTube pertama.</p>
               <div class="mt-6">
@@ -366,9 +360,7 @@
                           class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Edit"
                         >
-                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                          </svg>
+                          <HeroIcon name="pencil-square" class="w-5 h-5" />
                         </button>
                       </div>
                     {/if}
@@ -378,10 +370,7 @@
             </div>
           {:else}
             <div class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
+              <HeroIcon name="cog-6-tooth" class="mx-auto h-12 w-12 text-gray-400" />
               <h3 class="mt-2 text-sm font-medium text-gray-900">Belum ada pengaturan video</h3>
               <p class="mt-1 text-sm text-gray-500">Jalankan migrasi untuk menambahkan pengaturan video.</p>
             </div>

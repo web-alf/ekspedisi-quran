@@ -12,6 +12,7 @@ export default defineConfig({
             refresh: true,
         }),
         svelte({
+            configFile: './svelte.config.js',
             compilerOptions: {
                 dev: process.env.NODE_ENV === 'development',
             }
@@ -49,6 +50,13 @@ export default defineConfig({
             },
         },
         rollupOptions: {
+            onwarn(warning, defaultHandler) {
+                // Ignore missing sourcemap warnings from third-party libraries (e.g., html5-qrcode)
+                if (warning.code === 'SOURCEMAP_ERROR' || warning.message?.includes('Sourcemap')) {
+                    return;
+                }
+                defaultHandler(warning);
+            },
             output: {
                 manualChunks(id) {
                     // **CRITICAL FIX**: Prevent CSS and virtual modules from creating JS dependencies
@@ -166,14 +174,14 @@ export default defineConfig({
             '@inertiajs/svelte',
             'svelte',
             'axios',
-            'leaflet'
-        ],
-        // Exclude large libraries that should be lazy loaded
-        exclude: [
-            'chart.js',
-            '@tinymce/tinymce-svelte',
+            'leaflet',
             'html5-qrcode',
             'qr-scanner'
+        ],
+        // Exclude libraries that should be lazy loaded
+        exclude: [
+            'chart.js',
+            '@tinymce/tinymce-svelte'
         ]
     },
     resolve: {

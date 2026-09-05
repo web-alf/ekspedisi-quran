@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   // Props
   export const errors = {};
@@ -106,9 +107,7 @@
             on:click={() => router.reload()}
             class="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
+            <HeroIcon name="arrow-path" class="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -119,9 +118,7 @@
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div class="flex items-center">
           <div class="p-2 bg-blue-100 rounded-lg">
-            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-            </svg>
+            <HeroIcon name="clipboard-document-list" class="w-6 h-6 text-blue-600" />
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Today's Operations</p>
@@ -133,9 +130,7 @@
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div class="flex items-center">
           <div class="p-2 bg-green-100 rounded-lg">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-            </svg>
+            <HeroIcon name="cube" class="w-6 h-6 text-green-600" />
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Items Processed</p>
@@ -147,9 +142,7 @@
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div class="flex items-center">
           <div class="p-2 bg-yellow-100 rounded-lg">
-            <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
-            </svg>
+            <HeroIcon name="user-group" class="w-6 h-6 text-yellow-600" />
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Active Users</p>
@@ -161,9 +154,7 @@
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div class="flex items-center">
           <div class="p-2 bg-purple-100 rounded-lg">
-            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
+            <HeroIcon name="bolt" class="w-6 h-6 text-purple-600" />
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">Avg Processing</p>
@@ -355,9 +346,7 @@
     {#if realtimeStats.last_operation}
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div class="flex items-center">
-          <svg class="w-5 h-5 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
+          <HeroIcon name="information-circle" class="w-5 h-5 text-blue-500 mr-2" />
           <div class="text-sm text-blue-800">
             <strong>Last Operation:</strong> 
             {realtimeStats.last_operation.user_name} processed {realtimeStats.last_operation.items_count} items 

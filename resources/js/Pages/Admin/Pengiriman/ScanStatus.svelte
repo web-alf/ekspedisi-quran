@@ -3,6 +3,7 @@
   import AdminLayout from '@/Layouts/AdminLayout.svelte';
   import TabNavigation from '@/Components/TabNavigation.svelte';
   import DokumentasiUpload from '@/Components/DokumentasiUpload.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { page } from '@inertiajs/svelte';
   import { createScanner } from '@/utils/scanner-core.js';
 
@@ -503,9 +504,7 @@
         <!-- Permission Request -->
         <div class="p-6 sm:p-8 text-center">
           <div class="w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-8 h-8 sm:w-10 sm:h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z"/>
-            </svg>
+            <HeroIcon name="video-camera" class="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
           </div>
           <h3 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Izin Kamera Diperlukan</h3>
           <p class="text-sm sm:text-base text-gray-600 mb-6">Untuk scan QR Code, kami memerlukan akses ke kamera perangkat Anda</p>
@@ -527,36 +526,36 @@
 
             <div class="text-center">
               {#if $scannerStore.scanning}
-                <p class="text-xs sm:text-sm text-green-600 mb-4">
-                  ✅ Scanner aktif - Arahkan kamera ke QR Code pada paket
+                <p class="text-xs sm:text-sm text-green-600 mb-4 flex items-center justify-center gap-1.5">
+                  <HeroIcon name="check-circle" class="w-4 h-4" /> Scanner aktif - Arahkan kamera ke QR Code pada paket
                 </p>
               {:else if loading}
-                <p class="text-xs sm:text-sm text-yellow-600 mb-4">
-                  ⏳ Memproses QR Code...
+                <p class="text-xs sm:text-sm text-yellow-600 mb-4 flex items-center justify-center gap-1.5">
+                  <HeroIcon name="clock" class="w-4 h-4" /> Memproses QR Code...
                 </p>
               {:else if error}
-                <p class="text-xs sm:text-sm text-red-600 mb-4 break-words">
-                  ❌ Error: {error}
+                <p class="text-xs sm:text-sm text-red-600 mb-4 break-words flex items-center justify-center gap-1.5">
+                  <HeroIcon name="x-circle" class="w-4 h-4 flex-shrink-0" /> Error: {error}
                 </p>
               {:else}
-                <p class="text-xs sm:text-sm text-blue-600 mb-4">
-                  🔄 Mempersiapkan scanner...
+                <p class="text-xs sm:text-sm text-blue-600 mb-4 flex items-center justify-center gap-1.5">
+                  <HeroIcon name="arrow-path" class="w-4 h-4" /> Mempersiapkan scanner...
                 </p>
               {/if}
 
               <div class="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4">
                 <button
                   on:click={() => scannerStore.restart()}
-                  class="px-4 py-2 text-red-600 border border-red-600 rounded hover:bg-red-600 hover:text-white transition-colors text-sm"
+                  class="px-4 py-2 text-red-600 border border-red-600 rounded hover:bg-red-600 hover:text-white transition-colors text-sm flex items-center justify-center gap-1.5"
                 >
-                  🔄 Restart Scanner
+                  <HeroIcon name="arrow-path" class="w-4 h-4" /> Restart Scanner
                 </button>
                 
                 <button
                   on:click={() => { resetForm(); getUserLocation(); }}
-                  class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm"
+                  class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm flex items-center justify-center gap-1.5"
                 >
-                  📍 Get Location
+                  <HeroIcon name="map-pin" class="w-4 h-4" /> Get Location
                 </button>
               </div>
               
@@ -587,7 +586,7 @@
               {#if pengirimanInfo}
                 <!-- Pengiriman Info -->
                 <div class="bg-blue-50 p-3 sm:p-4 rounded-lg mb-6">
-                  <h4 class="font-semibold text-blue-900 mb-2 text-sm sm:text-base">📦 {pengirimanInfo.no_resi}</h4>
+                  <h4 class="font-semibold text-blue-900 mb-2 text-sm sm:text-base flex items-center gap-1.5"><HeroIcon name="cube" class="w-5 h-5" /> {pengirimanInfo.no_resi}</h4>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
                     <div><span class="font-medium">Wakif:</span> {pengirimanInfo.wakif}</div>
                     <div><span class="font-medium">Jenis:</span> {pengirimanInfo.jenis_quran}</div>
@@ -607,7 +606,7 @@
               <!-- Test Validation Error Button (for debugging) -->
               {#if typeof window !== 'undefined' && window.location.hostname === 'localhost'}
                 <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                  <h4 class="text-yellow-800 font-semibold text-sm mb-2">🧪 Debug Tools:</h4>
+                  <h4 class="text-yellow-800 font-semibold text-sm mb-2 flex items-center gap-1.5"><HeroIcon name="information-circle" class="w-4 h-4" /> Debug Tools:</h4>
                   <div class="flex flex-col sm:flex-row gap-2">
                     <button 
                       type="button"
@@ -640,7 +639,7 @@
                   <!-- Debug info -->
                   
                   <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                    <h4 class="text-red-800 font-semibold text-sm mb-2">❌ Validation Errors:</h4>
+                    <h4 class="text-red-800 font-semibold text-sm mb-2 flex items-center gap-1.5"><HeroIcon name="x-circle" class="w-4 h-4" /> Validation Errors:</h4>
                     {#each Object.entries(validationErrors) as [field, errors]}
                       <div class="mb-3 last:mb-0">
                         <div class="text-red-700 font-medium text-sm capitalize">{field.replace('_', ' ')}:</div>
@@ -649,8 +648,8 @@
                           <div class="text-red-600 text-sm mt-1">
                             • {errorMsg}
                             {#if hint}
-                              <div class="text-blue-600 text-xs mt-1 ml-3">
-                                💡 {hint}
+                              <div class="text-blue-600 text-xs mt-1 ml-3 flex items-center gap-1">
+                                <HeroIcon name="sparkles" class="w-3 h-3" /> {hint}
                               </div>
                             {:else}
                               <!-- Debug: no hint found -->
@@ -732,17 +731,23 @@
                   <button 
                     type="submit" 
                     disabled={loading || !selectedStatus}
-                    class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                    class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors text-sm font-medium inline-flex items-center justify-center gap-2"
                   >
-                    {loading ? '⏳ Memproses...' : '✅ Update Status'}
+                    {#if loading}
+                      Memproses...
+                    {:else}
+                      <HeroIcon name="check" class="w-4 h-4" />
+                      Update Status
+                    {/if}
                   </button>
                   
-                  <button 
-                    type="button" 
-                    on:click={() => { resetForm(); restartScanner(); }}
-                    class="px-4 py-2.5 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm font-medium"
+                  <button
+                    type="button"
+                    on:click={resetForm}
+                    class="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                   >
-                    🔄 Batal
+                    <HeroIcon name="arrow-path" class="w-4 h-4" />
+                    Batal
                   </button>
                 </div>
               </form>
@@ -751,12 +756,10 @@
             <!-- Success Message -->
             <div class="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6 text-center">
               <div class="w-12 h-12 sm:w-16 sm:h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-6 h-6 sm:w-8 sm:h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
+                <HeroIcon name="check" class="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
               </div>
               
-              <h3 class="text-base sm:text-lg font-semibold text-green-900 mb-2">Status Berhasil Diupdate! ✅</h3>
+              <h3 class="text-base sm:text-lg font-semibold text-green-900 mb-2 flex items-center justify-center gap-1.5">Status Berhasil Diupdate! <HeroIcon name="check-circle" class="w-5 h-5 text-green-600" /></h3>
               
               <div class="text-xs sm:text-sm text-green-700 space-y-1">
                 <p><strong>Resi:</strong> {successData.no_resi}</p>

@@ -423,6 +423,53 @@
     </div>
 </div>@endforeach</div>
 <script>
+// Auto print when images are fully loaded
+window.addEventListener('load', function() {
+    const images = document.querySelectorAll('img.qr-code');
+    let loaded = 0;
+    const total = images.length;
+    
+    function triggerPrint() {
+        setTimeout(function() {
+            window.print();
+        }, 400);
+    }
+    
+    if (total === 0) {
+        triggerPrint();
+    } else {
+        images.forEach(function(img) {
+            if (img.complete) {
+                loaded++;
+                if (loaded >= total) triggerPrint();
+            } else {
+                img.addEventListener('load', function() {
+                    loaded++;
+                    if (loaded >= total) triggerPrint();
+                });
+                img.addEventListener('error', function() {
+                    loaded++;
+                    if (loaded >= total) triggerPrint();
+                });
+            }
+        });
+        
+        // Fallback timer
+        setTimeout(triggerPrint, 2500);
+    }
+});
+
+// Keyboard shortcut
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        window.print();
+    }
+    if (e.key === 'Escape') {
+        window.close();
+    }
+});
+
 // Ensure only exact number of labels are printed
 window.addEventListener('beforeprint', function() {
     const labels = document.querySelectorAll('.thermal-label');

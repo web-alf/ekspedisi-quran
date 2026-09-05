@@ -4,6 +4,7 @@
   import PublicLayout from '@/Layouts/PublicLayout.svelte';
   import GallerySection from '@/Components/GallerySection.svelte';
   import VideoSection from '@/Components/VideoSection.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { formatPageTitle, pageTitles, generateMetaDescription } from '@/utils/seo.js';
   
   // Add missing props declarations
@@ -163,8 +164,7 @@
   // Use galleries and faqs from database props directly
   
   // Add CSS for location markers
-  const markerStyle = `
-    <style>
+  const markerStyle = '<' + 'style>' + `
       .location-marker {
         transition: transform 0.2s, filter 0.2s;
       }
@@ -178,8 +178,7 @@
       .location-marker div {
         cursor: pointer;
       }
-    </style>
-  `;
+  ` + '</' + 'style>';
   
   // Inject styles
   if (typeof document !== 'undefined') {
@@ -730,9 +729,7 @@
 
                 <!-- Floating Achievement Badge -->
                 <div class="absolute -top-4 -right-4 sm:-top-6 sm:-right-6 bg-[#eb3434] text-white p-3 sm:p-4 rounded-full shadow-lg z-0">
-                  <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                  </svg>
+                  <HeroIcon name="book-open" class="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 </div>
               </div>
 
@@ -786,9 +783,7 @@
               <div class="space-y-6">
                 <div class="flex items-start space-x-4">
                   <div class="flex-shrink-0 w-12 h-12 bg-[#eb3434] rounded-lg flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                    </svg>
+                    <HeroIcon name="book-open" class="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">Mushaf Berkualitas</h3>
@@ -798,10 +793,7 @@
 
                 <div class="flex items-start space-x-4">
                   <div class="flex-shrink-0 w-12 h-12 bg-[#eb3434] rounded-lg flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
+                    <HeroIcon name="map-pin" class="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">Jangkauan Luas</h3>
@@ -811,9 +803,7 @@
 
                 <div class="flex items-start space-x-4">
                   <div class="flex-shrink-0 w-12 h-12 bg-[#eb3434] rounded-lg flex items-center justify-center">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
+                    <HeroIcon name="check-circle" class="w-6 h-6 text-white" />
                   </div>
                   <div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">Transparan & Terpercaya</h3>
@@ -847,9 +837,7 @@
                       <div class="absolute w-20 h-20 bg-white/20 rounded-full animate-pulse"></div>
                       <!-- Play button -->
                       <div class="relative w-20 h-20 bg-[#eb3434] rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <svg class="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
+                        <HeroIcon name="play" class="w-10 h-10 text-white ml-1" />
                       </div>
                     </div>
                   </div>
@@ -937,9 +925,7 @@
               <div class="bg-white rounded-2xl shadow-lg p-8 hover:shadow-xl transition-shadow duration-300">
                 <div class="text-center mb-6">
                   <div class="w-16 h-16 bg-[#eb3434] rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
+                    <HeroIcon name="magnifying-glass" class="w-8 h-8 text-white" />
                   </div>
                   <h3 class="text-2xl font-bold text-gray-900 mb-3">Pantau Status Pengiriman</h3>
                   <p class="text-gray-600 text-lg">Masukkan nomor resi Anda untuk melihat status terkini perjalanan mushaf Al-Quran</p>
@@ -1000,9 +986,7 @@
                   </div>
                   <div class="flex-1 text-center md:text-left">
                     <div class="text-[#eb3434] mb-4">
-                      <svg class="w-8 h-8 mx-auto md:mx-0" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h4v10h-10z"/>
-                      </svg>
+                      <HeroIcon name="quote" class="w-8 h-8 mx-auto md:mx-0" />
                     </div>
                     <blockquote class="text-lg md:text-xl text-gray-700 mb-6 leading-relaxed">
                       "{testimonials[currentTestimonial]?.quote}"
@@ -1050,14 +1034,10 @@
                     class="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors duration-200"
                   >
                     <span class="font-semibold text-gray-900">{faq.question}</span>
-                    <svg
-                      class="w-5 h-5 text-gray-500 transform transition-transform duration-200 {openFaqIndex === index ? 'rotate-45' : ''}"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                    </svg>
+                    <HeroIcon
+                      name="chevron-down"
+                      class="w-5 h-5 text-gray-500 transform transition-transform duration-200 {openFaqIndex === index ? 'rotate-180' : ''}"
+                    />
                   </button>
                   {#if openFaqIndex === index}
                     <div class="px-6 pb-4">
@@ -1120,9 +1100,7 @@
           class="absolute -top-12 right-0 bg-white text-gray-800 rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors z-10"
           aria-label="Close video"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          <HeroIcon name="x-mark" class="w-6 h-6" />
         </button>
 
         <!-- Video Embed -->

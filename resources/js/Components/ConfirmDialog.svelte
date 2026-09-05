@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import HeroIcon from './UI/HeroIcon.svelte';
 
   export let show = false;
   export let title = 'Konfirmasi';
@@ -19,33 +20,25 @@
       iconBg: 'bg-amber-100',
       iconColor: 'text-amber-600',
       confirmBtn: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500',
-      icon: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z"/>
-             </svg>`
+      iconName: 'exclamation-triangle'
     },
     danger: {
       iconBg: 'bg-red-100',
       iconColor: 'text-red-600',
       confirmBtn: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
-      icon: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-             </svg>`
+      iconName: 'x-circle'
     },
     info: {
       iconBg: 'bg-blue-100',
       iconColor: 'text-blue-600',
       confirmBtn: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
-      icon: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-             </svg>`
+      iconName: 'information-circle'
     },
     success: {
       iconBg: 'bg-green-100',
       iconColor: 'text-green-600',
       confirmBtn: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
-      icon: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-             </svg>`
+      iconName: 'check-circle'
     }
   };
 
@@ -100,9 +93,7 @@
             <div class="sm:flex sm:items-start">
               <!-- Icon -->
               <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full {config.iconBg} sm:mx-0 sm:h-10 sm:w-10">
-                <div class="{config.iconColor}">
-                  {@html config.icon}
-                </div>
+                <HeroIcon name={config.iconName} class="w-6 h-6 {config.iconColor}" />
               </div>
               
               <!-- Content -->

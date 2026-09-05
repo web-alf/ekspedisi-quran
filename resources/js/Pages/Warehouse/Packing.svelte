@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import { fade } from 'svelte/transition';
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
@@ -849,9 +850,7 @@
       <!-- No Task State -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
         <div class="flex flex-col items-center">
-          <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-          </svg>
+          <HeroIcon name="cube" class="w-16 h-16 text-gray-400 mb-4" />
           <h2 class="text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
           <p class="text-gray-600 mb-6 max-w-md">{noTaskMessage}</p>
           <div class="flex space-x-4">
@@ -883,9 +882,7 @@
             href="/admin/warehouse" 
             class="text-gray-600 hover:text-gray-900"
           >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
+            <HeroIcon name="x-mark" class="w-6 h-6" />
           </a>
         </div>
         
@@ -1034,9 +1031,7 @@
                   {#if errorState.hasError}
                     <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
                       <div class="flex items-start gap-3">
-                        <svg class="h-5 w-5 text-red-600 mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <HeroIcon name="exclamation-triangle" class="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                         <div class="flex-1">
                           <p class="text-red-800 font-medium">Kesalahan Sistem</p>
                           <p class="text-sm text-red-600 mt-1">{errorState.message}</p>
@@ -1076,16 +1071,18 @@
                     <div class="flex gap-2">
                       <button 
                         on:click={stopScanner}
-                        class="flex-1 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors {isMobileDevice ? 'min-h-[44px]' : 'py-2'}"
+                        class="flex-1 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5 {isMobileDevice ? 'min-h-[44px]' : 'py-2'}"
                       >
-                        {isMobileDevice ? '⏹️ Stop' : 'Stop Scanner'}
+                        <HeroIcon name="stop" class="w-4 h-4" />
+                        <span>Stop Scanner</span>
                       </button>
                       {#if isMobileDevice && cameraPermissionDenied}
                         <button 
                           on:click={() => showFileScanner = true}
-                          class="flex-1 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors min-h-[44px]"
+                          class="flex-1 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors min-h-[44px] flex items-center justify-center gap-1.5"
                         >
-                          📁 Use File
+                          <HeroIcon name="folder" class="w-4 h-4" />
+                          <span>Use File</span>
                         </button>
                       {/if}
                     </div>
@@ -1252,10 +1249,7 @@
       <div class="bg-white rounded-lg max-w-md w-full mx-4 p-6">
         <div class="flex items-center mb-4">
           <div class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
-            <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 13.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
+            <HeroIcon name="exclamation-triangle" class="w-6 h-6 text-yellow-600" />
           </div>
           <div>
             <h3 class="text-lg font-medium text-gray-900">Peringatan Jenis Berbeda</h3>
@@ -1319,9 +1313,7 @@
       <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
         <div class="text-center">
           <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-            <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-            </svg>
+            <HeroIcon name="check" class="h-6 w-6 text-green-600" />
           </div>
           <h3 class="text-lg font-semibold mb-2">Tugas Selesai!</h3>
           <p class="text-gray-600 mb-6">Selamat! Anda telah menyelesaikan tugas packing hari ini.</p>

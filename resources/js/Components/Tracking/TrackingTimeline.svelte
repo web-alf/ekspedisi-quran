@@ -1,4 +1,6 @@
 <script>
+    import HeroIcon from '../UI/HeroIcon.svelte';
+    
     export let statusHistory = [];
     export let currentStatus = null;
     export let allStatuses = [];
@@ -28,22 +30,22 @@
         return colors[color] || 'bg-gray-100 text-gray-800 border-gray-200';
     }
     
-    // Get icon based on status slug
+    // Get icon name based on status slug
     function getStatusIcon(slug) {
         const icons = {
-            'pending': '⏳',
-            'dikemas': '📦',
-            'dikirim': '🚚',
-            'diterima': '✅',
-            'batal': '❌',
-            'pemesanan': '📝',
-            'produksi': '🏭',
-            'kedatangan': '📦',
-            'packing': '🎁',
-            'selesai-packing': '✅',
-            'pengiriman': '🚚'
+            'pending': 'clock',
+            'dikemas': 'cube',
+            'dikirim': 'truck',
+            'diterima': 'check-circle',
+            'batal': 'x-circle',
+            'pemesanan': 'pencil-square',
+            'produksi': 'building-office-2',
+            'kedatangan': 'inbox-stack',
+            'packing': 'cube',
+            'selesai-packing': 'check-circle',
+            'pengiriman': 'truck'
         };
-        return icons[slug] || '📋';
+        return icons[slug] || 'document-text';
     }
     
     // Get the date for a status from history
@@ -92,7 +94,7 @@
             <!-- Timeline marker -->
             <div class="flex-shrink-0 h-14 w-14 rounded-full flex items-center justify-center z-10 mr-4 
                     {isActive(status) ? 'bg-[#eb3434] text-white shadow-lg' : 'bg-gray-100 text-gray-400'}">
-                <span class="text-2xl">{getStatusIcon(status.slug)}</span>
+                <HeroIcon name={getStatusIcon(status.slug)} class="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             
             <!-- Status content -->
@@ -129,10 +131,8 @@
          on:click={() => showModal = false}>
         <div class="relative max-w-4xl max-h-screen p-2" on:click|stopPropagation>
             <button on:click={() => showModal = false} 
-                    class="absolute top-2 right-2 bg-white rounded-full p-2 shadow-lg z-10">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
+                    class="absolute top-2 right-2 bg-white rounded-full p-2 shadow-lg z-10 hover:bg-gray-100 transition-colors">
+                <HeroIcon name="x-mark" class="w-6 h-6 text-gray-700" />
             </button>
             <img src={currentPhoto} alt="Dokumentasi" class="max-w-full max-h-[90vh] rounded-lg">
         </div>

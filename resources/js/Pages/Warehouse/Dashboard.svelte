@@ -6,6 +6,7 @@
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import SharedBoxCollaboration from '../../Components/SharedBoxCollaboration.svelte';
   import SealReadyBoxes from '../../Components/SealReadyBoxes.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   
   // Props - FIXED: Added missing props
   export let todayTask = null;
@@ -205,9 +206,7 @@
                 on:click={() => showNotifications = !showNotifications}
                 class="relative p-2 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 border border-gray-100 hover:border-gray-200"
               >
-                <svg class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
+                <HeroIcon name="bell" class="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
                 {#if notifications.length > 0}
                   <span class="notification-badge absolute -top-2 -right-2 h-4 w-4 sm:h-5 sm:w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                     {notifications.length}
@@ -250,7 +249,9 @@
     <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex items-center justify-center sm:justify-start mb-4 sm:mb-6">
         <div class="flex items-center space-x-2 sm:space-x-3">
-          <div class="text-xl sm:text-2xl">📝</div>
+          <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+            <HeroIcon name="pencil-square" class="w-5 h-5" />
+          </div>
           <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Tugas Hari Ini</h2>
         </div>
       </div>
@@ -290,7 +291,9 @@
               <!-- Action Button - Responsive -->
               {#if todayTask.is_completed}
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6">
-                  <div class="text-3xl sm:text-4xl mb-2">🎉</div>
+                  <div class="mb-2 flex justify-center">
+                    <HeroIcon name="sparkles" class="w-10 h-10 text-green-600" />
+                  </div>
                   <p class="text-green-800 font-semibold text-base sm:text-lg mb-1">Selamat! Tugas hari ini telah selesai!</p>
                   <p class="text-sm sm:text-base text-green-600">Total: <span class="font-semibold">{todayTask.total_selesai} mushaf</span> berhasil dipacking</p>
                 </div>
@@ -307,9 +310,7 @@
                     </svg>
                     Memulai...
                   {:else}
-                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
+                    <HeroIcon name="plus" class="w-5 h-5 mr-2" />
                     {todayTask.status === 'assigned' ? 'Mulai Packing' : 'Lanjutkan Packing'}
                   {/if}
                 </button>
@@ -318,16 +319,16 @@
           {:else}
             <div class="text-center py-8 sm:py-12">
               <div class="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 rounded-full mb-4 sm:mb-6">
-                <svg class="w-8 h-8 sm:w-10 sm:h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
-                </svg>
+                <HeroIcon name="inbox-stack" class="w-8 h-8 sm:w-10 sm:h-10 text-gray-400" />
               </div>
               <div class="text-gray-900 text-lg sm:text-xl font-bold mb-2 sm:mb-3">Tidak ada tugas untuk hari ini</div>
-              <div class="text-gray-600 text-sm sm:text-lg px-4">
+              <div class="text-gray-600 text-sm sm:text-lg px-4 flex items-center justify-center gap-1.5">
                 {#if new Date().getDay() === 0 || new Date().getDay() === 6}
-                  🌴 Hari libur - tidak ada penugasan
+                  <HeroIcon name="calendar" class="w-5 h-5 text-amber-500 inline" />
+                  <span>Hari libur - tidak ada penugasan</span>
                 {:else}
-                  📞 Hubungi supervisor jika ada kesalahan
+                  <HeroIcon name="phone" class="w-5 h-5 text-blue-500 inline" />
+                  <span>Hubungi supervisor jika ada kesalahan</span>
                 {/if}
               </div>
             </div>
@@ -340,7 +341,9 @@
       <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
-            <div class="text-xl sm:text-2xl">📊</div>
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <HeroIcon name="chart-bar" class="w-5 h-5" />
+            </div>
             <div>
               <h3 class="text-base sm:text-lg font-semibold text-gray-900">Performa Minggu Ini</h3>
               <p class="text-xs sm:text-sm text-gray-500">7 hari terakhir</p>
@@ -372,7 +375,9 @@
       <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
-            <div class="text-xl sm:text-2xl">📅</div>
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <HeroIcon name="calendar-days" class="w-5 h-5" />
+            </div>
             <div>
               <h3 class="text-base sm:text-lg font-semibold text-gray-900">Performa Bulan Ini</h3>
               <p class="text-xs sm:text-sm text-gray-500">30 hari terakhir</p>

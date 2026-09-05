@@ -1,6 +1,7 @@
 <script>
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
 
   export let video;
 
@@ -62,9 +63,7 @@
           href="/admin/videos"
           class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-          </svg>
+          <HeroIcon name="chevron-left" class="w-5 h-5" />
         </a>
         <div>
           <h1 class="text-3xl font-bold text-gray-900">Edit Video</h1>
@@ -112,9 +111,7 @@
               />
               <div class="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
                 <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
-                  <svg class="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
+                  <HeroIcon name="play" class="w-6 h-6 text-white ml-0.5" />
                 </div>
               </div>
             </div>

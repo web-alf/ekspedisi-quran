@@ -4,6 +4,7 @@
   import { toast, dialog } from '@/utils/notifications.js';
   import FileQRScanner from '@/Components/FileQRScanner.svelte';
   import DokumentasiUpload from '@/Components/DokumentasiUpload.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import axios from 'axios';
   import { createScanner } from '@/utils/scanner-core.js';
 
@@ -382,9 +383,10 @@
               {#if isMobileDevice && !showManualInput}
                 <button
                   on:click={toggleFileScanner}
-                  class="self-start sm:self-auto px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  class="self-start sm:self-auto px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1.5"
                 >
-                  {showFileScanner ? '📷 Camera' : '📁 File'}
+                  <HeroIcon name={showFileScanner ? 'camera' : 'folder'} class="w-4 h-4" />
+                  <span>{showFileScanner ? 'Camera' : 'File'}</span>
                 </button>
               {/if}
             </div>
@@ -395,9 +397,7 @@
           <div class="max-w-xl mx-auto">
             <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div class="flex items-start">
-                <svg class="h-5 w-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
+                <HeroIcon name="information-circle" class="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
                 <div class="flex-1">
                   <h4 class="text-sm font-medium text-blue-800 mb-1">Format Kode Box</h4>
                   <p class="text-xs text-blue-600">KB-YYYYMMDD-XXX-JENIS-NN</p>
@@ -426,15 +426,22 @@
               <button
                 on:click={submitManualCode}
                 disabled={loading || !manualBoxCode.trim()}
-                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
-                {loading ? '⏳ Memproses...' : '🔍 Cari Box'}
+                {#if loading}
+                  <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  <span>Memproses...</span>
+                {:else}
+                  <HeroIcon name="magnifying-glass" class="w-4 h-4" />
+                  <span>Cari Box</span>
+                {/if}
               </button>
             </div>
 
             {#if error}
-              <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p class="text-sm text-red-600">❌ {error}</p>
+              <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <HeroIcon name="x-circle" class="w-4 h-4 text-red-600 flex-shrink-0" />
+                <p class="text-sm text-red-600">{error}</p>
               </div>
             {/if}
           </div>
@@ -444,9 +451,7 @@
             <!-- Permission Request -->
             <div class="text-center py-6 sm:py-8">
               <div class="mb-4 p-4 sm:p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <svg class="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-yellow-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                </svg>
+                <HeroIcon name="video-camera" class="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-yellow-600 mb-2" />
                 <h3 class="text-base sm:text-lg font-medium text-yellow-800">Izin Kamera Diperlukan</h3>
                 <p class="text-sm text-yellow-600 mt-1">Untuk scan QR Code, kami memerlukan akses ke kamera perangkat Anda</p>
               </div>
@@ -476,7 +481,10 @@
           <!-- Scanner Status -->
           <div class="mt-4 sm:mt-6 text-center px-2">
             {#if $scannerStore.scanning}
-              <p class="text-sm sm:text-base text-green-600 leading-relaxed">✅ Scanner aktif - Arahkan kamera ke QR Code pada box</p>
+              <p class="text-sm sm:text-base text-green-600 leading-relaxed flex items-center justify-center gap-1.5">
+                <HeroIcon name="check-circle" class="w-4 h-4 text-green-600" />
+                <span>Scanner aktif - Arahkan kamera ke QR Code pada box</span>
+              </p>
             {:else if loading}
               <div class="inline-flex items-center px-4 py-2 text-sm font-medium text-yellow-700 bg-yellow-50 rounded-lg">
                 <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -487,7 +495,10 @@
               </div>
             {:else if error}
               <div class="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
-                <p class="text-sm text-red-600 mb-3">❌ {error}</p>
+                <p class="text-sm text-red-600 mb-3 flex items-center justify-center gap-1.5">
+                  <HeroIcon name="x-circle" class="w-4 h-4 text-red-600" />
+                  <span>{error}</span>
+                </p>
                 <button
                   class="w-full sm:w-auto text-sm bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors font-medium"
                   on:click={() => scannerStore.restart()}
@@ -496,15 +507,19 @@
                 </button>
               </div>
             {:else if $scannerStore.permissionGranted}
-              <p class="text-sm text-blue-600">🔄 Mempersiapkan scanner...</p>
+              <p class="text-sm text-blue-600 flex items-center justify-center gap-1.5">
+                <HeroIcon name="arrow-path" class="w-4 h-4 text-blue-600 animate-spin" />
+                <span>Mempersiapkan scanner...</span>
+              </p>
             {/if}
 
             <div class="mt-4 sm:mt-6 flex justify-center">
               <button
                 on:click={() => scannerStore.restart()}
-                class="px-4 py-3 sm:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors text-sm font-medium min-w-[140px]"
+                class="px-4 py-3 sm:py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors text-sm font-medium min-w-[140px] flex items-center justify-center gap-1.5"
               >
-                🔄 Restart Scanner
+                <HeroIcon name="arrow-path" class="w-4 h-4" />
+                <span>Restart Scanner</span>
               </button>
             </div>
         </div>
@@ -516,7 +531,10 @@
         <div class="bg-white rounded-lg shadow p-4 sm:p-6">
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 space-y-3 sm:space-y-0">
             <div class="min-w-0 flex-1">
-              <h2 class="text-lg sm:text-xl font-semibold truncate">📦 Detail Box</h2>
+              <div class="flex items-center gap-2 mb-1">
+                <HeroIcon name="cube" class="w-5 h-5 text-gray-700" />
+                <h2 class="text-lg sm:text-xl font-semibold truncate">Detail Box</h2>
+              </div>
               <p class="text-sm sm:text-base text-gray-600 font-mono break-all">{scannedBox.kode_kerdus}</p>
             </div>
             <button
@@ -551,17 +569,19 @@
             <div class="space-y-3">
               <button
                 on:click={() => showStatusForm = !showStatusForm}
-                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center justify-center gap-1.5"
               >
-                📋 Update Status
+                <HeroIcon name="document-text" class="w-4 h-4" />
+                <span>Update Status</span>
               </button>
               
               {#if boxSummary?.mushaf_requests?.length > 0}
                 <button
                   on:click={() => showMushafForm = !showMushafForm}
-                  class="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+                  class="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center justify-center gap-1.5"
                 >
-                  📍 Set Alamat Mushaf
+                  <HeroIcon name="map-pin" class="w-4 h-4" />
+                  <span>Set Alamat Mushaf</span>
                 </button>
               {/if}
             </div>
@@ -638,10 +658,16 @@
                 <div class="flex flex-col sm:flex-row gap-3 pt-2">
                   <button
                     on:click={updateStatus}
-                    class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     disabled={loading || !selectedStatusId}
                   >
-                    {loading ? '⏳ Processing...' : `📋 Update (${boxItems.length})`}
+                    {#if loading}
+                      <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                      <span>Processing...</span>
+                    {:else}
+                      <HeroIcon name="document-text" class="w-4 h-4" />
+                      <span>Update ({boxItems.length})</span>
+                    {/if}
                   </button>
                   <button
                     on:click={() => showStatusForm = false}
@@ -679,10 +705,16 @@
                 <div class="flex flex-col sm:flex-row gap-3">
                   <button
                     on:click={setMushafAddress}
-                    class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     disabled={loading || !selectedMushafRequestId}
                   >
-                    {loading ? '⏳ Processing...' : `📍 Set (${boxItems.length})`}
+                    {#if loading}
+                      <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                      <span>Processing...</span>
+                    {:else}
+                      <HeroIcon name="map-pin" class="w-4 h-4" />
+                      <span>Set ({boxItems.length})</span>
+                    {/if}
                   </button>
                   <button
                     on:click={() => showMushafForm = false}

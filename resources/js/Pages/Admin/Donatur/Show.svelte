@@ -2,6 +2,7 @@
     import AdminLayout from '../../../Layouts/AdminLayout.svelte';
     import { router } from '@inertiajs/svelte';
     import { toast, dialog } from '../../../utils/notifications.js';
+    import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
     
     // Required props
     export let donatur;
@@ -270,22 +271,17 @@
                                     <a 
                                         href={certificate.download_url} 
                                         target="_blank"
-                                        class="inline-flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors text-sm"
+                                        class="inline-flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors text-sm gap-1.5"
                                     >
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
+                                        <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
                                         Download
                                     </a>
                                     <a 
                                         href={certificate.download_url + '?preview=1'} 
                                         target="_blank"
-                                        class="inline-flex items-center px-3 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors text-sm"
+                                        class="inline-flex items-center px-3 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors text-sm gap-1.5"
                                     >
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                        </svg>
+                                        <HeroIcon name="eye" class="w-4 h-4" />
                                         Preview
                                     </a>
                                 </div>
@@ -296,9 +292,7 @@
                     
                     <div class="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                         <p class="text-sm text-blue-800 flex items-start">
-                            <svg class="w-4 h-4 mr-2 mt-0.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
+                            <HeroIcon name="information-circle" class="w-4 h-4 mr-2 mt-0.5 text-blue-500 flex-shrink-0" />
                             <span>Sertifikat ini dapat diunduh dan dibagikan kepada donatur sebagai bukti wakaf Al-Qur'an yang telah tersalurkan.</span>
                         </p>
                     </div>

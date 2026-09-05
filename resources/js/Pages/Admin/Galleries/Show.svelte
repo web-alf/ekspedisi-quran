@@ -1,5 +1,6 @@
 <script>
   import AdminLayout from '@/Layouts/AdminLayout.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { inertia, page } from '@inertiajs/svelte';
 
   export let gallery;
@@ -17,9 +18,7 @@
           on:click={goBack}
           class="text-gray-600 hover:text-gray-900 transition-colors"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-          </svg>
+          <HeroIcon name="arrow-left" class="w-6 h-6" />
         </button>
         <div>
           <h2 class="text-xl font-semibold text-gray-800">Detail Gallery</h2>

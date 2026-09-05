@@ -1,5 +1,6 @@
 <script>
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   
   // Props
   export let userPerformance = [];
@@ -199,9 +200,7 @@
       {:else}
         <div class="text-center py-8 text-gray-500">
           <div class="flex flex-col items-center">
-            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+            <HeroIcon name="chart-bar" class="w-12 h-12 text-gray-400 mb-4" />
             <p class="text-lg font-medium">Belum ada data performa</p>
             <p class="text-sm">Data performa akan muncul setelah ada aktivitas packing minggu ini</p>
           </div>

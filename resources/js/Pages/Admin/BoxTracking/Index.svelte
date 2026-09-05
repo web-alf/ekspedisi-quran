@@ -1,5 +1,6 @@
 <script>
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { router } from '@inertiajs/svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import { can } from '../../../utils/permissions.js';
@@ -297,10 +298,7 @@
                         title="Detail"
                         aria-label="Lihat detail kerdus"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        <HeroIcon name="eye" class="h-5 w-5" />
                         <span class="sr-only">Detail</span>
                       </button>
                     {/if}
@@ -310,9 +308,7 @@
                       title="Print Label Kerdus"
                       aria-label="Print label kerdus"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                      </svg>
+                      <HeroIcon name="printer" class="w-4 h-4" />
                       <span class="sr-only">Print</span>
                     </button>
                   </div>
@@ -375,9 +371,7 @@
       {/if}
     {:else}
       <div class="p-12 text-center">
-        <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-        </svg>
+        <HeroIcon name="cube" class="w-16 h-16 mx-auto text-gray-300 mb-4" />
         <h3 class="text-lg font-medium text-gray-900 mb-2">Tidak ada kerdus ditemukan</h3>
         <p class="text-gray-600">Belum ada kerdus yang sesuai dengan filter yang dipilih</p>
       </div>

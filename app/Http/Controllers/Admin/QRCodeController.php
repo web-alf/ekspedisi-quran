@@ -95,9 +95,10 @@ class QRCodeController extends Controller
             return response()->view('errors.qr-not-found', [], 404);
         }
 
-        // Return file as inline image response
+        $mimeType = str_ends_with(strtolower($pengiriman->qr_code_path), '.svg') ? 'image/svg+xml' : 'image/png';
+
         return response()->file(Storage::path($pengiriman->qr_code_path), [
-            'Content-Type' => 'image/png',
+            'Content-Type' => $mimeType,
         ]);
     }
 
@@ -123,7 +124,8 @@ class QRCodeController extends Controller
         }
 
         // Generate filename for download
-        $filename = "QR-{$pengiriman->no_resi}.png";
+        $extension = pathinfo($pengiriman->qr_code_path, PATHINFO_EXTENSION) ?: 'png';
+        $filename = "QR-{$pengiriman->no_resi}.{$extension}";
 
         // Return file download response
         return Storage::download($pengiriman->qr_code_path, $filename);
@@ -302,7 +304,7 @@ class QRCodeController extends Controller
             }
 
             // Generate image content with optimized settings for easy scanning
-            $qrImage = QrCode::format('png')
+            $qrImage = QrCode::format('svg')
                 ->size(300) // Smaller size since data is much simpler
                 ->margin(1) // Minimal margin
                 ->errorCorrection('L') // Low error correction for maximum simplicity
@@ -310,7 +312,7 @@ class QRCodeController extends Controller
 
             // Define file path with timestamp for uniqueness
             $timestamp = now()->format('YmdHis');
-            $filename = "QR-{$pengiriman->no_resi}-{$timestamp}.png";
+            $filename = "QR-{$pengiriman->no_resi}-{$timestamp}.svg";
             $filePath = "{$this->storagePath}/{$filename}";
 
             // Save to storage

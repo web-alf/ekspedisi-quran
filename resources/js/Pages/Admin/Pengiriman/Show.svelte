@@ -1,6 +1,7 @@
 <script>
     import AdminLayout from '../../../Layouts/AdminLayout.svelte';
     import FlashMessage from '../../../Components/FlashMessage.svelte';
+    import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
     import { router } from '@inertiajs/svelte';
     
     // Required props
@@ -86,9 +87,7 @@
                         on:click={handleBack}
                         class="inline-flex items-center px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md transition-colors"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                        </svg>
+                        <HeroIcon name="arrow-left" class="w-5 h-5 mr-2" />
                         Kembali
                     </button>
                     
@@ -96,9 +95,7 @@
                         on:click={handleEdit}
                         class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                        </svg>
+                        <HeroIcon name="pencil-square" class="w-5 h-5 mr-2" />
                         Edit
                     </button>
                     
@@ -106,9 +103,7 @@
                         on:click={handleUpdateStatus}
                         class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
+                        <HeroIcon name="arrow-path" class="w-5 h-5 mr-2" />
                         Update Status
                     </button>
                 </div>
@@ -211,9 +206,7 @@
                                     {#if !pengiriman.alamat_tujuan && !pengiriman.nama_penerima}
                                         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                                             <p class="text-sm text-yellow-800">
-                                                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 15.5c-.77.833.192 2.5 1.732 2.5z"/>
-                                                </svg>
+                                                <HeroIcon name="exclamation-triangle" class="w-4 h-4 inline mr-1" />
                                                 Alamat pengiriman belum diset. Silakan edit pengiriman untuk mengatur alamat tujuan.
                                             </p>
                                         </div>

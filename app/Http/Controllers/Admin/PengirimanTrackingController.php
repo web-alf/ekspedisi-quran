@@ -4,14 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengiriman;
-use App\Models\StatusPengiriman;
 use App\Models\StatusHistory;
+use App\Models\StatusPengiriman;
 use App\Models\TrackingHistory;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use App\Services\Cache\StatusPengirimanCache;
 
 class PengirimanTrackingController extends Controller
 {
@@ -21,11 +20,11 @@ class PengirimanTrackingController extends Controller
     public function showUpdateStatusForm(Pengiriman $pengiriman)
     {
         $pengiriman->load(['donatur', 'jenisQuran', 'status', 'creator']);
-        
+
         // Get next possible statuses
         $currentStatus = $pengiriman->status;
         $nextStatuses = $this->getNextPossibleStatuses($currentStatus->id);
-        
+
         return Inertia::render('Admin/Pengiriman/UpdateStatus', [
             'pengiriman' => $pengiriman,
             'statusList' => $nextStatuses,
@@ -34,7 +33,7 @@ class PengirimanTrackingController extends Controller
                 ->with(['status', 'user'])
                 ->orderBy('created_at', 'desc')
                 ->get()
-                ->map(function($history) {
+                ->map(function ($history) {
                     return [
                         'id' => $history->id,
                         'status' => $history->status ? [
@@ -52,7 +51,7 @@ class PengirimanTrackingController extends Controller
                 }),
         ]);
     }
-    
+
     /**
      * Update status with documentation
      */
@@ -69,24 +68,32 @@ class PengirimanTrackingController extends Controller
         ]);
 
         \Log::info('Update Status Request', [
-            'request_all' => $request->all(),
-            'files' => $request->hasFile('dokumentasi') ? 'Yes' : 'No',
-            'file_count' => $request->hasFile('dokumentasi') ? count($request->file('dokumentasi')) : 0
+            'pengiriman_id' => $pengiriman->id,
+            'no_resi' => $pengiriman->no_resi,
+            'has_files' => $request->hasFile('dokumentasi'),
+            'file_count' => $request->hasFile('dokumentasi') ? count($request->file('dokumentasi')) : 0,
         ]);
 
         try {
             DB::beginTransaction();
 
+            // Lock row untuk mencegah update status bersamaan
+            $locked = Pengiriman::where('id', $pengiriman->id)->lockForUpdate()->first();
+            if (! $locked) {
+                throw new \Exception('Pengiriman tidak ditemukan');
+            }
+            $pengiriman = $locked;
+
             $oldStatus = $pengiriman->status_id;
-            
+
             // Validasi perubahan status
             $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
-            if (!$validTransition['valid']) {
+            if (! $validTransition['valid']) {
                 return back()->withErrors([
-                    'error' => 'Perubahan status tidak valid: ' . $validTransition['message']
+                    'error' => 'Perubahan status tidak valid: '.$validTransition['message'],
                 ])->withInput();
             }
-            
+
             // Update status
             $pengiriman->status_id = $request->status_id;
             $pengiriman->save();
@@ -101,23 +108,25 @@ class PengirimanTrackingController extends Controller
                         $originalName = $file->getClientOriginalName();
                         $safeBaseName = \Str::slug(pathinfo($originalName, PATHINFO_FILENAME));
                         $extension = $file->getClientOriginalExtension();
-                        
+
                         // Validate file extension
                         $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-                        if (!in_array(strtolower($extension), $allowedExtensions)) {
+                        if (! in_array(strtolower($extension), $allowedExtensions)) {
                             \Log::warning('Invalid file extension', ['extension' => $extension, 'index' => $index]);
+
                             continue;
                         }
-                        
+
                         // Validate MIME type
                         $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                        if (!in_array($file->getMimeType(), $allowedMimes)) {
+                        if (! in_array($file->getMimeType(), $allowedMimes)) {
                             \Log::warning('Invalid MIME type', ['mime' => $file->getMimeType(), 'index' => $index]);
+
                             continue;
                         }
-                        
-                        $filename = time() . '_' . $index . '_' . $safeBaseName . '.' . $extension;
-                        $path = $file->storeAs('dokumentasi/' . $pengiriman->no_resi, $filename, 'public');
+
+                        $filename = time().'_'.$index.'_'.$safeBaseName.'.'.$extension;
+                        $path = $file->storeAs('dokumentasi/'.$pengiriman->no_resi, $filename, 'public');
                         $dokFiles[] = $path;
                         \Log::info('File saved', ['path' => $path]);
                     } else {
@@ -125,7 +134,7 @@ class PengirimanTrackingController extends Controller
                     }
                 }
             }
-            
+
             \Log::info('Final dokFiles array', ['dokFiles' => $dokFiles]);
 
             // Create tracking history with documentation
@@ -153,13 +162,13 @@ class PengirimanTrackingController extends Controller
             DB::commit();
 
             return redirect()->route('admin.pengiriman.show', $pengiriman)
-                            ->with('success', "Status pengiriman {$pengiriman->no_resi} berhasil diupdate.");
+                ->with('success', "Status pengiriman {$pengiriman->no_resi} berhasil diupdate.");
 
         } catch (\Exception $e) {
             DB::rollback();
-            
+
             return back()->withErrors([
-                'error' => 'Gagal update status: ' . $e->getMessage()
+                'error' => 'Gagal update status: '.$e->getMessage(),
             ])->withInput();
         }
     }
@@ -182,18 +191,21 @@ class PengirimanTrackingController extends Controller
 
             $updated = 0;
             $failed = 0;
-            $pengirimanList = Pengiriman::whereIn('id', $request->pengiriman_ids)->get();
+            $pengirimanList = Pengiriman::whereIn('id', $request->pengiriman_ids)
+                ->lockForUpdate()
+                ->get();
 
             foreach ($pengirimanList as $pengiriman) {
                 $oldStatus = $pengiriman->status_id;
-                
+
                 // Validasi transisi status
                 $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
-                if (!$validTransition['valid']) {
+                if (! $validTransition['valid']) {
                     $failed++;
+
                     continue;
                 }
-                
+
                 // Update status
                 $pengiriman->update(['status_id' => $request->status_id]);
 
@@ -230,9 +242,9 @@ class PengirimanTrackingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            
+
             return back()->withErrors([
-                'error' => 'Gagal bulk update: ' . $e->getMessage()
+                'error' => 'Gagal bulk update: '.$e->getMessage(),
             ]);
         }
     }
@@ -247,49 +259,49 @@ class PengirimanTrackingController extends Controller
         if ($newStatus->slug === 'batal') {
             return [
                 'valid' => true,
-                'message' => 'Status dapat dibatalkan kapan saja'
+                'message' => 'Status dapat dibatalkan kapan saja',
             ];
         }
-        
+
         // Jika status sama, tidak perlu update
         if ($currentStatusId == $newStatusId) {
             return [
                 'valid' => false,
-                'message' => 'Status sudah sama, tidak perlu diupdate'
+                'message' => 'Status sudah sama, tidak perlu diupdate',
             ];
         }
-        
+
         $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
-        
+
         // Jika status lama adalah status final, tidak bisa diubah
         if ($currentStatus->is_final && $currentStatus->slug !== 'batal') {
             return [
                 'valid' => false,
-                'message' => 'Status sudah final, tidak bisa diubah'
+                'message' => 'Status sudah final, tidak bisa diubah',
             ];
         }
-        
+
         // Cek urutan status, hanya boleh maju ke status selanjutnya
         if ($newStatus->urutan !== $currentStatus->urutan + 1) {
             return [
                 'valid' => false,
-                'message' => 'Status hanya bisa berubah ke status selanjutnya dalam urutan'
+                'message' => 'Status hanya bisa berubah ke status selanjutnya dalam urutan',
             ];
         }
-        
+
         return [
             'valid' => true,
-            'message' => 'Perubahan status valid'
+            'message' => 'Perubahan status valid',
         ];
     }
-    
+
     /**
      * Get next possible statuses
      */
     private function getNextPossibleStatuses($currentStatusId)
     {
         $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
-        
+
         // If status is already final (except 'batal'), show final message
         if ($currentStatus->is_final && $currentStatus->slug !== 'batal') {
             return collect([
@@ -303,24 +315,24 @@ class PengirimanTrackingController extends Controller
                     'icon' => '🏁',
                     'is_final' => true,
                     'badge_class' => 'bg-gray-100 text-gray-800',
-                    'disabled' => true
-                ]
+                    'disabled' => true,
+                ],
             ]);
         }
-        
+
         // Get statuses with next order
         $nextStatuses = StatusPengiriman::where('urutan', $currentStatus->urutan + 1)
             ->where('is_active', true)
             ->get();
-            
+
         // Always add 'Batal' status as option
         $batalStatus = StatusPengiriman::where('slug', 'batal')->first();
         if ($batalStatus && $currentStatus->slug !== 'batal') {
             $nextStatuses->push($batalStatus);
         }
-        
+
         // Map data to add icon and description
-        return $nextStatuses->map(function($status) {
+        return $nextStatuses->map(function ($status) {
             return [
                 'id' => $status->id,
                 'nama' => $status->nama,
@@ -330,11 +342,11 @@ class PengirimanTrackingController extends Controller
                 'urutan' => $status->urutan,
                 'icon' => $status->icon, // This will use the getIconAttribute method
                 'is_final' => $status->is_final,
-                'badge_class' => $status->badge_class // This will use the getBadgeClassAttribute method
+                'badge_class' => $status->badge_class, // This will use the getBadgeClassAttribute method
             ];
         });
     }
-    
+
     /**
      * Safely get foto dokumentasi URLs
      */
@@ -342,12 +354,12 @@ class PengirimanTrackingController extends Controller
     {
         try {
             $fotoDokumentasi = $history->foto_dokumentasi;
-            
+
             // If null or empty, return empty array
-            if (!$fotoDokumentasi) {
+            if (! $fotoDokumentasi) {
                 return [];
             }
-            
+
             // If it's a string, try to decode as JSON
             if (is_string($fotoDokumentasi)) {
                 $decoded = json_decode($fotoDokumentasi, true);
@@ -358,20 +370,20 @@ class PengirimanTrackingController extends Controller
                     $fotoDokumentasi = [$fotoDokumentasi];
                 }
             }
-            
+
             // Ensure it's an array
-            if (!is_array($fotoDokumentasi)) {
+            if (! is_array($fotoDokumentasi)) {
                 return [];
             }
-            
+
             // Process each item
-            return array_map(function($item) {
+            return array_map(function ($item) {
                 // Handle different formats
                 if (is_array($item) && isset($item['path'])) {
-                    return asset('storage/' . $item['path']);
+                    return asset('storage/'.$item['path']);
                 }
                 if (is_object($item) && isset($item->path)) {
-                    return asset('storage/' . $item->path);
+                    return asset('storage/'.$item->path);
                 }
                 if (is_string($item)) {
                     // Skip if already a full URL
@@ -382,22 +394,25 @@ class PengirimanTrackingController extends Controller
                     if (str_starts_with($item, 'storage/')) {
                         return asset($item);
                     }
-                    return asset('storage/' . $item);
+
+                    return asset('storage/'.$item);
                 }
+
                 // Convert any other type to string and use as path
-                return asset('storage/' . (string)$item);
+                return asset('storage/'.(string) $item);
             }, $fotoDokumentasi);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error processing foto_dokumentasi', [
                 'history_id' => $history->id ?? 'unknown',
                 'foto_data' => $history->foto_dokumentasi ?? 'null',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return [];
         }
     }
-    
+
     /**
      * Update status untuk proses wakaf quran
      */
@@ -413,10 +428,23 @@ class PengirimanTrackingController extends Controller
         try {
             DB::beginTransaction();
 
+            // Lock row untuk mencegah update status bersamaan
+            $locked = Pengiriman::where('id', $pengiriman->id)->lockForUpdate()->first();
+            if (! $locked) {
+                throw new \Exception('Pengiriman tidak ditemukan');
+            }
+            $pengiriman = $locked;
+
             // Dapatkan status ID berdasarkan proses
             $status = StatusPengiriman::where('slug', $request->proses)->firstOrFail();
             $oldStatus = $pengiriman->status_id;
-            
+
+            // Validasi transisi status (cegah lompatan / mundur)
+            $validTransition = $this->validateStatusTransition($oldStatus, $status->id);
+            if (! $validTransition['valid']) {
+                throw new \Exception($validTransition['message']);
+            }
+
             // Update status
             $pengiriman->update(['status_id' => $status->id]);
 
@@ -424,7 +452,7 @@ class PengirimanTrackingController extends Controller
             $dokFiles = [];
             if ($request->hasFile('dokumentasi')) {
                 foreach ($request->file('dokumentasi') as $file) {
-                    $path = $file->store('dokumentasi/' . $pengiriman->no_resi, 'public');
+                    $path = $file->store('dokumentasi/'.$pengiriman->no_resi, 'public');
                     $dokFiles[] = $path;
                 }
             }
@@ -451,13 +479,13 @@ class PengirimanTrackingController extends Controller
             DB::commit();
 
             return redirect()->route('admin.pengiriman.show', $pengiriman)
-                            ->with('success', "Status pengiriman {$pengiriman->no_resi} berhasil diupdate ke {$status->nama}.");
+                ->with('success', "Status pengiriman {$pengiriman->no_resi} berhasil diupdate ke {$status->nama}.");
 
         } catch (\Exception $e) {
             DB::rollback();
-            
+
             return back()->withErrors([
-                'error' => 'Gagal update status: ' . $e->getMessage()
+                'error' => 'Gagal update status: '.$e->getMessage(),
             ])->withInput();
         }
     }

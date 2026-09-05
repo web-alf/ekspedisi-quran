@@ -2,6 +2,7 @@
   import { fade, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import WarehouseButton from './WarehouseButton.svelte';
+  import HeroIcon from '../UI/HeroIcon.svelte';
 
   export let show = false;
   export let title = '';
@@ -97,9 +98,7 @@
               on:click={handleClose}
               disabled={loading}
             >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
+              <HeroIcon name="x-mark" class="w-6 h-6" />
             </button>
           {/if}
         </div>

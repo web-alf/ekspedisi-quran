@@ -1,6 +1,7 @@
 <script>
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let permissions = {};
   export let categories = {};
@@ -58,9 +59,7 @@
         href="/admin/roles"
         class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
       >
-        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-        </svg>
+        <HeroIcon name="chevron-left" class="w-4 h-4 mr-1" />
         Kembali
       </a>
       <h1 class="text-2xl font-bold text-gray-900">Tambah Role Baru</h1>

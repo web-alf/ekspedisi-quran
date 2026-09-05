@@ -1,5 +1,6 @@
 <script>
   import { router } from '@inertiajs/svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   export let data = {};
   export let additionalParams = {};
@@ -47,21 +48,23 @@
     <!-- Pagination links -->
     <div class="flex items-center space-x-2">
       {#each pagination.links as link}
-        {#if link.label.includes('Previous')}
+        {#if link.label.includes('Previous') || link.label.includes('&laquo;')}
           <button
             on:click={() => goToPage(link.url)}
             disabled={!link.url}
-            class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed gap-1"
           >
-            Previous
+            <HeroIcon name="chevron-left" class="w-4 h-4" />
+            <span>Previous</span>
           </button>
-        {:else if link.label.includes('Next')}
+        {:else if link.label.includes('Next') || link.label.includes('&raquo;')}
           <button
             on:click={() => goToPage(link.url)}
             disabled={!link.url}
-            class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed gap-1"
           >
-            Next
+            <span>Next</span>
+            <HeroIcon name="chevron-right" class="w-4 h-4" />
           </button>
         {:else}
           <button

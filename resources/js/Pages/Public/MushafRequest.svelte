@@ -2,6 +2,7 @@
   import { router } from '@inertiajs/svelte';
   import PublicLayout from '@/Layouts/PublicLayout.svelte';
   import AddressFormIndonesia from '@/Components/AddressFormIndonesia.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { onMount } from 'svelte';
   import { toast } from '../../utils/notifications.js';
   import { formatPageTitle, pageTitles, generateMetaDescription } from '@/utils/seo.js';
@@ -524,9 +525,7 @@
               <div class="bg-red-50 border-2 border-red-300 rounded-xl p-6 mb-8">
                 <div class="flex items-start">
                   <div class="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-4">
-                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                    </svg>
+                    <HeroIcon name="exclamation-triangle" class="w-6 h-6 text-red-600" />
                   </div>
                   <div class="flex-1">
                     <h3 class="text-lg font-bold text-red-800 mb-2">Kesalahan: {validationErrors.error}</h3>
@@ -952,9 +951,7 @@
                       <div class="mt-3 bg-red-50 border border-red-300 rounded-lg p-4 animate-pulse">
                         <div class="flex items-start">
                           <div class="flex-shrink-0">
-                            <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                            </svg>
+                            <HeroIcon name="x-circle" class="w-5 h-5 text-red-400" />
                           </div>
                           <div class="ml-3">
                             <p class="text-sm font-medium text-red-800">
@@ -983,10 +980,8 @@
                     {#if form.foto_santri}
                       <div class="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
                         <p class="text-sm text-green-800 font-medium flex items-center">
-                          <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                          </svg>
-                          ✅ {form.foto_santri.name}
+                          <HeroIcon name="check-circle" class="w-4 h-4 mr-2 flex-shrink-0 text-green-600" />
+                          {form.foto_santri.name}
                         </p>
                         <p class="text-xs text-green-600 mt-1">Ukuran: {formatFileSize(form.foto_santri.size)}</p>
                       </div>
@@ -1010,9 +1005,7 @@
                       <div class="mt-3 bg-red-50 border border-red-300 rounded-lg p-4 animate-pulse">
                         <div class="flex items-start">
                           <div class="flex-shrink-0">
-                            <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                            </svg>
+                            <HeroIcon name="x-circle" class="w-5 h-5 text-red-400" />
                           </div>
                           <div class="ml-3">
                             <p class="text-sm font-medium text-red-800">
@@ -1041,10 +1034,8 @@
                     {#if form.foto_lembaga}
                       <div class="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
                         <p class="text-sm text-green-800 font-medium flex items-center">
-                          <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                          </svg>
-                          ✅ {form.foto_lembaga.name}
+                          <HeroIcon name="check-circle" class="w-4 h-4 mr-2 flex-shrink-0 text-green-600" />
+                          {form.foto_lembaga.name}
                         </p>
                         <p class="text-xs text-green-600 mt-1">Ukuran: {formatFileSize(form.foto_lembaga.size)}</p>
                       </div>
@@ -1068,9 +1059,7 @@
                       <div class="mt-3 bg-red-50 border border-red-300 rounded-lg p-4 animate-pulse">
                         <div class="flex items-start">
                           <div class="flex-shrink-0">
-                            <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                            </svg>
+                            <HeroIcon name="x-circle" class="w-5 h-5 text-red-400" />
                           </div>
                           <div class="ml-3">
                             <p class="text-sm font-medium text-red-800">
@@ -1100,10 +1089,8 @@
                     {#if form.file_nama_santri}
                       <div class="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
                         <p class="text-sm text-green-800 font-medium flex items-center">
-                          <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                          </svg>
-                          ✅ {form.file_nama_santri.name}
+                          <HeroIcon name="check-circle" class="w-4 h-4 mr-2 flex-shrink-0 text-green-600" />
+                          {form.file_nama_santri.name}
                         </p>
                         <p class="text-xs text-green-600 mt-1">Ukuran: {formatFileSize(form.file_nama_santri.size)}</p>
                       </div>
@@ -1163,9 +1150,7 @@
                   <div class="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full mr-4"></div>
                   Mengirim Permintaan...
                 {:else}
-                  <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                  </svg>
+                  <HeroIcon name="paper-airplane" class="w-6 h-6 mr-3" />
                   Kirim Permintaan Mushaf
                 {/if}
               </button>

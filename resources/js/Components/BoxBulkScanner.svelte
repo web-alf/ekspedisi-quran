@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
   import LazyQRScanner from './LazyQRScanner.svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   const dispatch = createEventDispatcher();
   
@@ -321,9 +322,7 @@
   <!-- Scanner Instructions -->
   <div class="mb-4 p-3 bg-gray-50 rounded-lg">
     <div class="flex items-start space-x-2">
-      <svg class="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
+      <HeroIcon name="information-circle" class="w-5 h-5 text-blue-500 mt-0.5" />
       <div>
         <p class="text-sm font-medium text-gray-900">
           {scanMode === 'box' ? 'Box Bulk Operations Mode' : 'Individual Item Mode'}
@@ -350,9 +349,7 @@
     {:else}
       <div class="aspect-square flex items-center justify-center bg-gray-100">
         <div class="text-center">
-          <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M12 12h-4.01"/>
-          </svg>
+          <HeroIcon name="qr-code" class="w-16 h-16 mx-auto text-gray-400 mb-4" />
           <p class="text-gray-500">Scanner Inactive</p>
           <p class="text-sm text-gray-400">Activate scanner to start scanning</p>
         </div>

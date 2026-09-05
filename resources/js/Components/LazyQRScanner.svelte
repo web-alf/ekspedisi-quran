@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   export let width = 300;
   export let height = 300;
@@ -174,9 +175,7 @@
     <div class="flex items-center justify-center p-8 bg-red-50 rounded-lg border-2 border-red-300" style="width: {width}px; height: {height}px">
       <div class="text-center">
         <div class="text-red-400 mb-2">
-          <svg class="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
+          <HeroIcon name="video-camera" class="w-8 h-8 mx-auto" />
         </div>
         <p class="text-sm text-red-700 mb-3">{error}</p>
         {#if error.includes('permission')}
@@ -209,9 +208,7 @@
             on:click={toggleCamera}
             title="Switch Camera"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
+            <HeroIcon name="arrow-path" class="w-5 h-5" />
           </button>
         </div>
       {/if}

@@ -7,10 +7,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ScanStatusRequest;
 use App\Models\Donatur;
 use App\Models\JenisQuran;
+use App\Models\MushafRequest;
 use App\Models\Pengiriman;
+use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
+use App\Models\TrackingHistory;
 use App\Services\Cache\StatusPengirimanCache;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class PengirimanController extends Controller
@@ -129,7 +136,7 @@ class PengirimanController extends Controller
             $slicedData = collect($pengiriman->items())->slice($skipInPage, $itemsToTake)->values();
 
             // Rebuild pagination with sliced data
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -154,7 +161,7 @@ class PengirimanController extends Controller
             $skipInPage = ($numberFrom - 1) % $perPage;
             $slicedData = collect($pengiriman->items())->slice($skipInPage)->values();
 
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -178,7 +185,7 @@ class PengirimanController extends Controller
             $takeInPage = (($numberTo - 1) % $perPage) + 1;
             $slicedData = collect($pengiriman->items())->take($takeInPage)->values();
 
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -259,7 +266,7 @@ class PengirimanController extends Controller
         $pengiriman->load(['donatur', 'jenisQuran', 'status', 'creator', 'wakafItem']);
 
         // OPTIMIZED: Get approved mushaf requests for address selection with column selection
-        $approvedMushafRequests = \App\Models\MushafRequest::approved()
+        $approvedMushafRequests = MushafRequest::approved()
             ->where(function ($query) use ($pengiriman) {
                 $query->whereNull('pengiriman_id') // Only those not yet processed
                     ->orWhere('pengiriman_id', $pengiriman->id); // Or the one linked to this pengiriman
@@ -306,18 +313,38 @@ class PengirimanController extends Controller
         try {
             \DB::beginTransaction();
 
+            // Lock the pengiriman row to prevent concurrent status updates
+            $lockedPengiriman = Pengiriman::where('id', $pengiriman->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedPengiriman) {
+                throw new \Exception('Pengiriman tidak ditemukan');
+            }
+
+            $oldStatus = $lockedPengiriman->status_id;
+
+            // Validate status transition ONLY if status actually changes
+            // (update() also handles address/recipient edits with unchanged status)
+            if ((int) $oldStatus !== (int) $request->status_id) {
+                $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
+                if (! $validTransition['valid']) {
+                    throw new \Exception($validTransition['message']);
+                }
+            }
+
             // Update pengiriman
-            $pengiriman->update($request->only([
+            $lockedPengiriman->update($request->only([
                 'status_id', 'alamat_tujuan', 'nama_penerima',
                 'no_hp_penerima', 'catatan',
             ]));
 
             // Log status change if changed
-            if ($pengiriman->wasChanged('status_id')) {
-                \App\Models\StatusHistory::create([
-                    'pengiriman_id' => $pengiriman->id,
-                    'status_from' => $pengiriman->getOriginal('status_id'),
-                    'status_to' => $pengiriman->status_id,
+            if ($lockedPengiriman->wasChanged('status_id')) {
+                StatusHistory::create([
+                    'pengiriman_id' => $lockedPengiriman->id,
+                    'status_from' => $oldStatus,
+                    'status_to' => $lockedPengiriman->status_id,
                     'catatan' => $request->catatan,
                     'created_by' => auth()->id(),
                 ]);
@@ -326,7 +353,7 @@ class PengirimanController extends Controller
             \DB::commit();
 
             return redirect()->route('admin.pengiriman.index')
-                ->with('success', "Pengiriman {$pengiriman->no_resi} berhasil diupdate.");
+                ->with('success', "Pengiriman {$lockedPengiriman->no_resi} berhasil diupdate.");
 
         } catch (\Exception $e) {
             \DB::rollback();
@@ -375,7 +402,10 @@ class PengirimanController extends Controller
             \DB::beginTransaction();
 
             $updated = 0;
-            $pengirimanList = Pengiriman::whereIn('id', $request->pengiriman_ids)->get();
+            $skipped = 0;
+            $pengirimanList = Pengiriman::whereIn('id', $request->pengiriman_ids)
+                ->lockForUpdate()
+                ->get();
 
             // Handle multiple file uploads (from camera or file input)
             $uploadedFiles = [];
@@ -417,11 +447,26 @@ class PengirimanController extends Controller
             foreach ($pengirimanList as $pengiriman) {
                 $oldStatus = $pengiriman->status_id;
 
+                // Validate status transition — skip illegal transitions (backwards, final, same)
+                $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
+                if (! $validTransition['valid']) {
+                    \Log::info('Bulk update skipped invalid transition', [
+                        'pengiriman_id' => $pengiriman->id,
+                        'no_resi' => $pengiriman->no_resi,
+                        'status_from' => $oldStatus,
+                        'status_to' => $request->status_id,
+                        'reason' => $validTransition['message'],
+                    ]);
+                    $skipped++;
+
+                    continue;
+                }
+
                 // Update status
                 $pengiriman->update(['status_id' => $request->status_id]);
 
                 // Log status change in StatusHistory
-                \App\Models\StatusHistory::create([
+                StatusHistory::create([
                     'pengiriman_id' => $pengiriman->id,
                     'status_from' => $oldStatus,
                     'status_to' => $request->status_id,
@@ -430,7 +475,7 @@ class PengirimanController extends Controller
                 ]);
 
                 // Create tracking history for the public tracking page
-                \App\Models\TrackingHistory::create([
+                TrackingHistory::create([
                     'pengiriman_id' => $pengiriman->id,
                     'status_id' => $request->status_id,
                     'user_id' => auth()->id(),
@@ -449,16 +494,19 @@ class PengirimanController extends Controller
             if ($request->expectsJson() || $request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => "{$updated} pengiriman berhasil diupdate statusnya.",
+                    'message' => "{$updated} pengiriman berhasil diupdate statusnya."
+                        .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''),
                     'data' => [
                         'updated_count' => $updated,
+                        'skipped_count' => $skipped,
                         'files_uploaded' => count($uploadedFiles),
                         'file_paths' => $uploadedFiles,
                     ],
                 ]);
             }
 
-            return back()->with('success', "{$updated} pengiriman berhasil diupdate statusnya.");
+            return back()->with('success', "{$updated} pengiriman berhasil diupdate statusnya."
+                .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''));
 
         } catch (\Exception $e) {
             \DB::rollback();
@@ -629,7 +677,7 @@ class PengirimanController extends Controller
             $slicedData = collect($pengiriman->items())->slice($skipInPage, $itemsToTake)->values();
 
             // Rebuild pagination with sliced data
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -652,7 +700,7 @@ class PengirimanController extends Controller
 
             $slicedData = collect($pengiriman->items())->slice($skipInPage)->values();
 
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -673,7 +721,7 @@ class PengirimanController extends Controller
 
             $slicedData = collect($pengiriman->items())->slice(0, $itemsToTake)->values();
 
-            $pengiriman = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pengiriman = new LengthAwarePaginator(
                 $slicedData,
                 $pengiriman->total(),
                 $perPage,
@@ -839,7 +887,7 @@ class PengirimanController extends Controller
 
             try {
                 $nextStatuses = $this->getNextPossibleStatuses($currentStatus->id);
-            } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            } catch (ModelNotFoundException $e) {
                 \Log::error('Status not found in getPengirimanStatusInfo', [
                     'no_resi' => $noResi,
                     'status_id' => $currentStatus->id,
@@ -896,20 +944,16 @@ class PengirimanController extends Controller
 
         try {
             \Log::info('=== SCAN STATUS UPDATE REQUEST ===');
-            \Log::info('Request has file dokumentasi?', ['has_file' => $request->hasFile('dokumentasi')]);
-            \Log::info('All files in request', ['all_files' => $request->allFiles()]);
-            \Log::info('Content-Type header', ['content_type' => $request->header('Content-Type')]);
-            \Log::info('Request input keys', ['keys' => array_keys($request->all())]);
             \Log::info('No resi from request', ['no_resi' => $request->no_resi]);
-            \Log::info('Status ID from request', ['status_id' => $request->status_id]);
 
             \DB::beginTransaction();
 
             // Get validated no_resi (prioritizes QR data if available)
             $noResi = $request->getValidatedNoResi();
 
-            // Find pengiriman
+            // Find pengiriman with row lock to prevent concurrent status updates
             $pengiriman = Pengiriman::where('no_resi', $noResi)
+                ->lockForUpdate()
                 ->with(['donatur', 'status', 'jenisQuran'])
                 ->first();
 
@@ -970,10 +1014,10 @@ class PengirimanController extends Controller
             $pengiriman->update(['status_id' => $request->status_id]);
 
             // Create status history record
-            \App\Models\StatusHistory::create($statusHistoryData);
+            StatusHistory::create($statusHistoryData);
 
             // Create tracking history record (for public tracking page)
-            \App\Models\TrackingHistory::create([
+            TrackingHistory::create([
                 'pengiriman_id' => $pengiriman->id,
                 'status_id' => $request->status_id,
                 'user_id' => auth()->id(),
@@ -1119,8 +1163,9 @@ class PengirimanController extends Controller
             // Get validated no_resi (prioritizes QR data if available)
             $noResi = $request->getValidatedNoResi();
 
-            // Find pengiriman
+            // Find pengiriman (locked to prevent concurrent status updates)
             $pengiriman = Pengiriman::where('no_resi', $noResi)
+                ->lockForUpdate()
                 ->with(['donatur', 'status', 'jenisQuran'])
                 ->first();
 
@@ -1173,7 +1218,7 @@ class PengirimanController extends Controller
             $pengiriman->update(['status_id' => $newStatusId]);
 
             // Create tracking history record - FIXED: Use same format as working method
-            \App\Models\TrackingHistory::create([
+            TrackingHistory::create([
                 'pengiriman_id' => $pengiriman->id,
                 'status_id' => $newStatusId,
                 'user_id' => auth()->id(),
@@ -1186,7 +1231,7 @@ class PengirimanController extends Controller
             ]);
 
             // Create status history - FIXED: Add missing StatusHistory creation
-            \App\Models\StatusHistory::create([
+            StatusHistory::create([
                 'pengiriman_id' => $pengiriman->id,
                 'status_from' => $oldStatus,
                 'status_to' => $newStatusId,
@@ -1235,7 +1280,7 @@ class PengirimanController extends Controller
                 ],
             ]);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             \DB::rollback();
 
             \Log::warning('Validation failed in processScanQR', [
@@ -1411,16 +1456,16 @@ class PengirimanController extends Controller
                     }
 
                     // Generate QR data
-                    $qrController = new \App\Http\Controllers\Admin\QRCodeController;
+                    $qrController = new QRCodeController;
 
                     // Create a fake request for the QR controller
-                    $fakeRequest = new \Illuminate\Http\Request;
+                    $fakeRequest = new Request;
                     $fakeRequest->headers->set('Accept', 'application/json');
                     app()->instance('request', $fakeRequest);
 
                     $result = $qrController->generate($pengiriman);
 
-                    if ($result instanceof \Illuminate\Http\JsonResponse) {
+                    if ($result instanceof JsonResponse) {
                         $data = $result->getData(true);
                         if ($data['success'] ?? false) {
                             $results[] = [

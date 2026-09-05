@@ -7,6 +7,7 @@
   import DialogContainer from '../Components/DialogContainer.svelte';
   import FlashMessage from '../Components/FlashMessage.svelte';
   import JobProgressIndicator from '../Components/Certificate/JobProgressIndicator.svelte';
+  import HeroIcon from '../Components/UI/HeroIcon.svelte';
   import { logout } from '../utils/auth.js';
   import { getImageUrl } from '../utils/formHelpers.js';
   
@@ -443,47 +444,46 @@
   function getMenuIcon(label) {
     const iconMapping = {
       // Main menu items
-      'Dashboard': '📊',
-      'Kelola Donatur': '👥',
-      'Pengiriman': '🚚',
-      'Sertifikat': '🎓',
-      'Permintaan Mushaf': '📖',
-      'Manajemen Gudang': '🏭',
-      'Manajemen Pengguna': '👤',
-      'Konten Landing': '🎨',
+      'Dashboard': 'chart-bar',
+      'Kelola Donatur': 'users',
+      'Pengiriman': 'truck',
+      'Sertifikat': 'academic-cap',
+      'Permintaan Mushaf': 'book-open',
+      'Manajemen Gudang': 'building-office-2',
+      'Manajemen Pengguna': 'user-group',
+      'Konten Landing': 'paint-brush',
       
       // Sertifikat submenu
-      'Manajemen Sertifikat': '📜',
-      'Template Sertifikat': '📝',
-      
+      'Manajemen Sertifikat': 'document-text',
+      'Template Sertifikat': 'pencil-square',
       
       // Warehouse submenu
-      'Dasbor Gudang': '🏠',
-      'Proses Packing': '📦',
-      'Box Scanner': '📱',
-      'Laporan Kinerja': '📄',
-      'Monitor Gudang': '👁️',
-      'Analitik Kinerja': '📉',
-      'Pelacakan Kerdus': '🔍',
+      'Dasbor Gudang': 'home',
+      'Proses Packing': 'cube',
+      'Box Scanner': 'qr-code',
+      'Laporan Kinerja': 'document-chart-bar',
+      'Monitor Gudang': 'eye',
+      'Analitik Kinerja': 'chart-pie',
+      'Pelacakan Kerdus': 'magnifying-glass',
       
       // User management submenu
-      'Kelola Pengguna': '👥',
-      'Kelola Peran': '🎭',
-      'Kelola Izin Akses': '🔐',
+      'Kelola Pengguna': 'users',
+      'Kelola Peran': 'shield-check',
+      'Kelola Izin Akses': 'key',
       
       // Content submenu
-      'Halaman Utama': '🏠',
-      'Umum': '⚙️',
-      'Kontak': '📞',
-      'Media Sosial': '📱',
-      'SEO': '🔍',
-      'Legal & Kebijakan': '📋',
-      'Testimonial': '💭',
-      'Gallery': '🖼️',
-      'Video': '🎬',
-      'FAQ': '❓'
+      'Halaman Utama': 'home',
+      'Umum': 'cog-6-tooth',
+      'Kontak': 'phone',
+      'Media Sosial': 'chat-bubble-left-right',
+      'SEO': 'globe-alt',
+      'Legal & Kebijakan': 'document-text',
+      'Testimonial': 'chat-bubble-left-right',
+      'Gallery': 'photo',
+      'Video': 'video-camera',
+      'FAQ': 'question-mark-circle'
     };
-    return iconMapping[label] || '📄';
+    return iconMapping[label] || 'document-text';
   }
 
 </script>
@@ -509,20 +509,18 @@
           type="button"
           class="hidden lg:block p-2 rounded-lg text-white hover:bg-white/20 transition-colors"
           on:click={toggleSidebarCollapse}
+          title="Ciutkan Sidebar"
         >
-          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7" />
-          </svg>
+          <HeroIcon name="chevron-left" class="h-5 w-5" />
         </button>
       {:else}
         <button
           type="button"
           class="hidden lg:block p-2 rounded-lg text-white hover:bg-white/20 transition-colors"
           on:click={toggleSidebarCollapse}
+          title="Perluas Sidebar"
         >
-          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5l7 7-7 7" />
-          </svg>
+          <HeroIcon name="chevron-right" class="h-5 w-5" />
         </button>
       {/if}
       <!-- Close button for mobile -->
@@ -531,9 +529,7 @@
         class="lg:hidden p-2 rounded-lg text-white hover:bg-white/20 transition-colors"
         on:click={() => sidebarOpen = false}
       >
-        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <HeroIcon name="x-mark" class="h-6 w-6" />
       </button>
     </div>
     
@@ -553,12 +549,13 @@
                 title={sidebarCollapsed ? item.label : ''}
               >
                 {#if sidebarCollapsed}
-                  <span class="text-lg">{getMenuIcon(item.label)}</span>
+                  <HeroIcon name={getMenuIcon(item.label)} class="w-6 h-6 {isDropdownActive(item) ? 'text-[#eb3434]' : 'text-gray-500 group-hover:text-gray-700'}" />
                 {:else}
-                  <span class="font-semibold">{item.label}</span>
-                  <svg class="ml-auto w-5 h-5 transform transition-transform duration-200 {activeDropdown === item.label ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
+                  <div class="flex items-center">
+                    <HeroIcon name={getMenuIcon(item.label)} class="w-5 h-5 mr-3 flex-shrink-0 {isDropdownActive(item) ? 'text-[#eb3434]' : 'text-gray-500 group-hover:text-gray-700'}" />
+                    <span class="font-semibold">{item.label}</span>
+                  </div>
+                  <HeroIcon name="chevron-down" class="ml-auto w-4 h-4 transform transition-transform duration-200 {activeDropdown === item.label ? 'rotate-180' : ''}" />
                 {/if}
               </button>
               
@@ -571,6 +568,7 @@
                       class="group flex items-center px-3 py-2 text-sm text-gray-600 rounded-lg hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 {isCurrentRoute(child.route) ? 'bg-[#eb3434] text-white font-semibold shadow-sm' : ''} relative z-20 pointer-events-auto"
                       on:click={closeSidebarOnMobile}
                     >
+                      <HeroIcon name={getMenuIcon(child.label)} class="w-4 h-4 mr-2.5 flex-shrink-0 {isCurrentRoute(child.route) ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'}" />
                       <span class="truncate">{child.label}</span>
                     </a>
                   {/each}
@@ -578,12 +576,12 @@
               {/if}
               
               <!-- Collapsed sidebar submenu dropdown -->
-              <!-- Debug: {JSON.stringify({activeDropdown, itemLabel: item.label, sidebarCollapsed, hasVisibleChildren})} -->
               {#if activeDropdown === item.label && sidebarCollapsed}
                 <div class="fixed bg-white border border-gray-200 rounded-lg shadow-2xl py-2 z-[99999] min-w-64 max-w-sm"
                      style="left: {sidebarCollapsed ? '80px' : '280px'}; top: {submenuTopPosition}px;"
                      data-dropdown-menu>
-                  <div class="px-4 py-2 text-sm font-semibold text-gray-700 border-b border-gray-100 bg-gray-50">
+                  <div class="px-4 py-2 text-sm font-semibold text-gray-700 border-b border-gray-100 bg-gray-50 flex items-center">
+                    <HeroIcon name={getMenuIcon(item.label)} class="w-4 h-4 mr-2 text-[#eb3434]" />
                     {item.label}
                   </div>
                   {#if visibleChildren && visibleChildren.length > 0}
@@ -594,7 +592,7 @@
                         on:click={() => { closeSidebarOnMobile(); activeDropdown = null; }}
                       >
                         <span class="flex items-center">
-                          <span class="text-sm mr-3">{getMenuIcon(child.label)}</span>
+                          <HeroIcon name={getMenuIcon(child.label)} class="w-4 h-4 mr-3 flex-shrink-0 {isCurrentRoute(child.route) ? 'text-white' : 'text-gray-400'}" />
                           <span class="truncate">{child.label}</span>
                         </span>
                       </a>
@@ -616,8 +614,9 @@
               title={sidebarCollapsed ? item.label : ''}
             >
               {#if sidebarCollapsed}
-                <span class="text-lg">{getMenuIcon(item.label)}</span>
+                <HeroIcon name={getMenuIcon(item.label)} class="w-6 h-6 {isCurrentRoute(item.route) ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'}" />
               {:else}
+                <HeroIcon name={getMenuIcon(item.label)} class="w-5 h-5 mr-3 flex-shrink-0 {isCurrentRoute(item.route) ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'}" />
                 <span class="truncate">{item.label}</span>
               {/if}
             </a>
@@ -640,7 +639,7 @@
   {/if}
 
   <!-- Main content -->
-  <div class="flex-1 flex flex-col min-h-screen sidebar-transition {sidebarCollapsed ? 'main-content-collapsed' : 'main-content-expanded'}">
+  <div class="flex-1 flex flex-col min-h-screen min-w-0 sidebar-transition {sidebarCollapsed ? 'main-content-collapsed' : 'main-content-expanded'}">
     <!-- Top bar -->
     <div class="sticky top-0 z-[9990] flex-shrink-0 flex h-16 bg-white shadow border-b border-gray-200">
       <!-- Mobile menu button -->
@@ -649,9 +648,7 @@
         class="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#eb3434] lg:hidden"
         on:click={() => sidebarOpen = !sidebarOpen}
       >
-        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
+        <HeroIcon name="bars-3" class="h-6 w-6" />
       </button>
       
       <!-- Top bar content -->
@@ -679,9 +676,7 @@
                 <p class="font-semibold text-gray-900">{currentUser.name || 'Admin'}</p>
                 <p class="text-gray-500">{primaryRoleDisplay}</p>
               </div>
-              <svg class="w-4 h-4 text-gray-400 hidden lg:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
+              <HeroIcon name="chevron-down" class="w-4 h-4 text-gray-400 hidden lg:block" />
             </button>
 
             {#if showUserMenu}
@@ -691,9 +686,7 @@
                     on:click={logout}
                     class="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   >
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                    </svg>
+                    <HeroIcon name="arrow-right-on-rectangle" class="w-5 h-5 mr-3" />
                     Keluar
                   </button>
                 </div>

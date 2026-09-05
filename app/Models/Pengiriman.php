@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
 class Pengiriman extends Model
 {
@@ -313,24 +312,44 @@ class Pengiriman extends Model
 
     /**
      * Helper: Update status dengan history
+     * Dibungkus transaksi + row lock untuk mencegah race condition
+     * (dua update bersamaan → history ganda / status saling timpa)
      */
     public function updateStatus($newStatusId, ?string $catatan = null, ?int $userId = null)
     {
-        $oldStatus = $this->status_id;
+        return \DB::transaction(function () use ($newStatusId, $catatan, $userId) {
+            // Lock baris untuk mencegah update bersamaan
+            $locked = static::where('id', $this->id)->lockForUpdate()->first();
 
-        // Update status
-        $this->update(['status_id' => $newStatusId]);
+            if (! $locked) {
+                throw new \Exception('Pengiriman tidak ditemukan');
+            }
 
-        // Create status history
-        StatusHistory::create([
-            'pengiriman_id' => $this->id,
-            'status_from' => $oldStatus,
-            'status_to' => $newStatusId,
-            'catatan' => $catatan,
-            'created_by' => $userId ?: auth()->id() ?? User::query()->value('id'),
-        ]);
+            $oldStatus = $locked->status_id;
 
-        return $this;
+            // Skip jika status sama
+            if ((int) $oldStatus === (int) $newStatusId) {
+                return $locked;
+            }
+
+            // Update status pada instance terkunci
+            $locked->update(['status_id' => $newStatusId]);
+
+            // Create status history
+            StatusHistory::create([
+                'pengiriman_id' => $locked->id,
+                'status_from' => $oldStatus,
+                'status_to' => $newStatusId,
+                'catatan' => $catatan,
+                'created_by' => $userId ?: auth()->id() ?? User::query()->value('id'),
+            ]);
+
+            // Sinkronkan instance asli agar caller melihat nilai terbaru
+            $this->setRawAttributes($locked->getAttributes());
+            $this->syncOriginal();
+
+            return $this;
+        });
     }
 
     /**

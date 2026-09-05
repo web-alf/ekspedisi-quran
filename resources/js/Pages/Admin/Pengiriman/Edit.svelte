@@ -3,6 +3,7 @@
   import { router, page } from '@inertiajs/svelte';
   import { showError, showWarning, showInfo } from '../../../stores/toast.js';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { can } from '../../../utils/permissions.js';
   
   export let pengiriman;
@@ -214,9 +215,7 @@
         on:click={goBack}
         class="px-4 py-2 text-gray-600 hover:text-gray-800 flex items-center gap-2"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-        </svg>
+        <HeroIcon name="arrow-left" class="w-4 h-4" />
         Kembali
       </button>
     </div>
@@ -276,9 +275,7 @@
                       class="px-4 py-3 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
                       title="Clear Selection"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
+                      <HeroIcon name="x-mark" class="w-5 h-5" />
                     </button>
                   {/if}
                 </div>
@@ -294,9 +291,7 @@
                 Alamat Tujuan
                 {#if selectedMushafRequest}
                   <span class="inline-flex items-center px-2 py-1 ml-2 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
-                    </svg>
+                    <HeroIcon name="check" class="w-3 h-3 mr-1" />
                     Dari Permintaan Mushaf
                   </span>
                 {/if}
@@ -319,9 +314,7 @@
                 Nama Penerima
                 {#if selectedMushafRequest}
                   <span class="inline-flex items-center px-2 py-1 ml-2 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
-                    </svg>
+                    <HeroIcon name="check" class="w-3 h-3 mr-1" />
                     Dari Permintaan Mushaf
                   </span>
                 {/if}
@@ -344,9 +337,7 @@
                 No. HP Penerima
                 {#if selectedMushafRequest}
                   <span class="inline-flex items-center px-2 py-1 ml-2 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
-                    </svg>
+                    <HeroIcon name="check" class="w-3 h-3 mr-1" />
                     Dari Permintaan Mushaf
                   </span>
                 {/if}
@@ -418,9 +409,7 @@
         {#if selectedRequest}
           <div class="bg-green-50 rounded-xl border border-green-200 p-6">
             <h4 class="font-semibold text-green-900 mb-4 flex items-center">
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/>
-              </svg>
+              <HeroIcon name="check" class="w-5 h-5 mr-2" />
               Permintaan Mushaf Terpilih
             </h4>
             
@@ -520,9 +509,7 @@
         {#if hasQRImageFile()}
           <div class="text-center space-y-3">
             <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-              </svg>
+              <HeroIcon name="check" class="w-8 h-8 text-green-600" />
             </div>
             <p class="text-sm text-green-600 font-medium">QR Code tersedia</p>
             
@@ -538,9 +525,7 @@
         {:else if hasQRData()}
           <div class="text-center space-y-3">
             <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto">
-              <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-8 h-8 text-yellow-600" />
             </div>
             <p class="text-sm text-yellow-600 font-medium">QR data tersedia, gambar belum dibuat</p>
             
@@ -558,9 +543,7 @@
         {:else}
           <div class="text-center space-y-3">
             <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-              <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
+              <HeroIcon name="x-mark" class="w-8 h-8 text-red-600" />
             </div>
             <p class="text-sm text-red-600 font-medium">QR Code belum dibuat</p>
             
@@ -612,9 +595,7 @@
           {:else}
             <div class="mx-auto w-[250px] h-[250px] bg-gray-100 rounded-lg flex items-center justify-center">
               <div class="text-center">
-                <svg class="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                <HeroIcon name="qr-code" class="w-16 h-16 text-gray-400 mx-auto mb-2" />
                 <p class="text-gray-500 text-sm">QR Code tidak dapat dimuat</p>
               </div>
             </div>

@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { page } from '@inertiajs/svelte';
+  import HeroIcon from './UI/HeroIcon.svelte';
   
   // Props
   export let sharedBoxes = [];
@@ -225,9 +226,7 @@
 
   {#if sharedBoxes.length === 0}
     <div class="text-center py-8 text-gray-500">
-      <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-      </svg>
+      <HeroIcon name="cube" class="w-12 h-12 mx-auto mb-4 text-gray-400" />
       <p class="font-medium">Tidak ada shared boxes aktif</p>
       <p class="text-sm mt-1">Shared boxes akan muncul ketika ada assignment collaboration</p>
     </div>
@@ -252,9 +251,7 @@
                   </span>
                 </div>
                 <div class="flex items-center space-x-2">
-                  <svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
-                  </svg>
+                  <HeroIcon name="user-group" class="w-5 h-5 text-yellow-600" />
                   <span class="text-sm text-gray-600">
                     {box.contributors_count} Contributors
                   </span>
@@ -277,14 +274,10 @@
                   on:click={() => toggleBoxExpansion(box.id)}
                   class="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  <svg 
-                    class="w-5 h-5 transform transition-transform {expandedBoxes.has(box.id) ? 'rotate-180' : ''}"
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
+                  <HeroIcon 
+                    name="chevron-down"
+                    class="w-5 h-5 transform transition-transform {expandedBoxes.has(box.id) ? 'rotate-180' : ''}" 
+                  />
                 </button>
               </div>
             </div>

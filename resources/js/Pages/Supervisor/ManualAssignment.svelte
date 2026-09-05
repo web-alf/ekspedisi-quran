@@ -3,6 +3,7 @@
   import { router } from '@inertiajs/svelte';
   import { showWarning, showError, showInfo } from '../../stores/toast.js';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   
   // Props (unused build-time props removed)
   export let warehouseUsers = [];
@@ -100,9 +101,10 @@
         <div class="flex items-center space-x-4">
           <a 
             href="/admin/supervisor/warehouse-monitor"
-            class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
           >
-            ← Kembali ke Monitor
+            <HeroIcon name="arrow-left" class="w-4 h-4" />
+            <span>Kembali ke Monitor</span>
           </a>
         </div>
       </div>
@@ -296,9 +298,7 @@
         {/if}
       {:else}
         <div class="text-center py-8 text-gray-500">
-          <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
-          </svg>
+          <HeroIcon name="inbox-stack" class="w-12 h-12 mx-auto mb-4 text-gray-400" />
           <p class="font-medium mb-2">Tidak ada pengiriman yang tersedia</p>
           <p class="text-sm">
             {#if searchQuery}

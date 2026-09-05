@@ -3,6 +3,7 @@
     import { writable } from 'svelte/store';
     import { page } from '@inertiajs/svelte';
     import JobProgressModal from './JobProgressModal.svelte';
+    import HeroIcon from '../UI/HeroIcon.svelte';
 
     export let showNotifications = true;
     export let isAuthenticated = false; // Add authentication prop
@@ -301,9 +302,7 @@
                         <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                     {:else}
                         <div class="relative">
-                            <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5l7-7 7 7M9 20h6" />
-                            </svg>
+                            <HeroIcon name="document-text" class="h-6 w-6 text-blue-600" />
                             <div class="absolute -top-1 -right-1 h-4 w-4 bg-blue-600 text-white rounded-full text-xs flex items-center justify-center font-medium">
                                 {$activeJobs.length}
                             </div>

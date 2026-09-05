@@ -4,6 +4,7 @@
   import { showWarning } from '../../../stores/toast.js';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let user;
   export let roles = {};
@@ -62,9 +63,7 @@
             on:click={() => router.visit('/admin/users')}
             class="mr-4 p-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-            </svg>
+            <HeroIcon name="chevron-left" class="w-5 h-5" />
           </button>
           <div>
             <h1 class="text-lg font-bold text-gray-900">Edit User</h1>
@@ -117,9 +116,7 @@
           />
           {#if $form.errors.name}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.name}
             </p>
           {/if}
@@ -141,9 +138,7 @@
           />
           {#if $form.errors.email}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.email}
             </p>
           {/if}
@@ -168,9 +163,7 @@
           </select>
           {#if $form.errors.role}
             <p class="mt-2 text-sm text-red-600 flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
               {$form.errors.role}
             </p>
           {/if}
@@ -196,9 +189,7 @@
             />
             {#if $form.errors.password}
               <p class="mt-2 text-sm text-red-600 flex items-center">
-                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                </svg>
+                <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
                 {$form.errors.password}
               </p>
             {/if}
@@ -235,9 +226,7 @@
               <span class="ml-2 text-sm text-gray-700">User aktif (Akun Anda)</span>
             </div>
             <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-              <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
+              <HeroIcon name="exclamation-triangle" class="w-4 h-4 inline mr-1 text-amber-600" />
               Anda tidak dapat menonaktifkan akun sendiri untuk keamanan sistem.
             </p>
             <!-- Hidden input to maintain the active status -->
@@ -276,9 +265,7 @@
               </svg>
               Menyimpan...
             {:else}
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-              </svg>
+              <HeroIcon name="check" class="w-4 h-4 mr-2" />
               Update User
             {/if}
           </button>

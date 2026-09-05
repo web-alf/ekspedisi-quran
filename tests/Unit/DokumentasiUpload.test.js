@@ -24,27 +24,27 @@ describe('DokumentasiUpload Component', () => {
             const { getByText } = render(DokumentasiUpload, {
                 props: { showToggle: true }
             });
-            expect(getByText('📁 Mode Upload')).toBeTruthy();
+            expect(getByText('Mode Upload')).toBeTruthy();
         });
 
         it('hides mode toggle when showToggle is false', () => {
             const { queryByText } = render(DokumentasiUpload, {
                 props: { showToggle: false }
             });
-            expect(queryByText('📁 Mode Upload')).toBeFalsy();
-            expect(queryByText('📸 Mode Kamera')).toBeFalsy();
+            expect(queryByText('Mode Upload')).toBeFalsy();
+            expect(queryByText('Mode Kamera')).toBeFalsy();
         });
 
         it('starts in upload mode by default', () => {
             const { getByText } = render(DokumentasiUpload);
-            expect(getByText('📁 Mode Upload')).toBeTruthy();
+            expect(getByText('Mode Upload')).toBeTruthy();
         });
 
         it('starts in camera mode when defaultMode is camera', () => {
             const { getByText } = render(DokumentasiUpload, {
                 props: { defaultMode: 'camera' }
             });
-            expect(getByText('📸 Mode Kamera')).toBeTruthy();
+            expect(getByText('Mode Kamera')).toBeTruthy();
         });
     });
 
@@ -54,11 +54,11 @@ describe('DokumentasiUpload Component', () => {
                 props: { showToggle: true, allowModeSwitch: true }
             });
 
-            const toggleButton = getByText('📁 Mode Upload');
+            const toggleButton = getByText('Mode Upload');
             await fireEvent.click(toggleButton);
 
             await waitFor(() => {
-                expect(getByText('📸 Mode Kamera')).toBeTruthy();
+                expect(getByText('Mode Kamera')).toBeTruthy();
             });
         });
 
@@ -71,7 +71,7 @@ describe('DokumentasiUpload Component', () => {
 
             component.$on('modeChanged', handleModeChanged);
 
-            const toggleButton = getByText('📁 Mode Upload');
+            const toggleButton = getByText('Mode Upload');
             await fireEvent.click(toggleButton);
 
             await waitFor(() => {
@@ -96,12 +96,12 @@ describe('DokumentasiUpload Component', () => {
             await fireEvent.change(input);
 
             // Switch mode
-            const toggleButton = getByText('📁 Mode Upload');
+            const toggleButton = getByText('Mode Upload');
             await fireEvent.click(toggleButton);
 
             // Data should be cleared
             await waitFor(() => {
-                expect(getByText('📸 Mode Kamera')).toBeTruthy();
+                expect(getByText('Mode Kamera')).toBeTruthy();
             });
         });
 
@@ -111,8 +111,8 @@ describe('DokumentasiUpload Component', () => {
             });
 
             // Toggle button should not be present when mode switching is disabled
-            expect(queryByText('📁 Mode Upload')).toBeFalsy();
-            expect(queryByText('📸 Mode Kamera')).toBeFalsy();
+            expect(queryByText('Mode Upload')).toBeFalsy();
+            expect(queryByText('Mode Kamera')).toBeFalsy();
         });
     });
 

@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   
   // Props
 // Omit unused props to reduce build warnings
@@ -117,9 +118,7 @@
           href="/admin/warehouse" 
           class="text-gray-600 hover:text-gray-900"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          <HeroIcon name="x-mark" class="w-6 h-6" />
         </a>
       </div>
     </div>
@@ -157,9 +156,7 @@
             <p class="text-2xl font-bold text-gray-900">{performanceMetrics.totalTarget}</p>
           </div>
           <div class="p-3 bg-blue-100 rounded-full">
-            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-            </svg>
+            <HeroIcon name="clipboard-document-check" class="w-6 h-6 text-blue-600" />
           </div>
         </div>
       </div>
@@ -171,9 +168,7 @@
             <p class="text-2xl font-bold text-green-600">{performanceMetrics.totalAchieved}</p>
           </div>
           <div class="p-3 bg-green-100 rounded-full">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
+            <HeroIcon name="check-circle" class="w-6 h-6 text-green-600" />
           </div>
         </div>
       </div>
@@ -185,9 +180,7 @@
             <p class="text-2xl font-bold {performanceMetrics.achievementRate >= 80 ? 'text-green-600' : performanceMetrics.achievementRate >= 60 ? 'text-yellow-600' : 'text-red-600'}">{performanceMetrics.achievementRate}%</p>
           </div>
           <div class="p-3 bg-purple-100 rounded-full">
-            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-            </svg>
+            <HeroIcon name="arrow-trending-up" class="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>
@@ -199,9 +192,7 @@
             <p class="text-2xl font-bold text-gray-900">{performanceMetrics.averageDaily}</p>
           </div>
           <div class="p-3 bg-orange-100 rounded-full">
-            <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
-            </svg>
+            <HeroIcon name="chart-bar" class="w-6 h-6 text-orange-600" />
           </div>
         </div>
       </div>

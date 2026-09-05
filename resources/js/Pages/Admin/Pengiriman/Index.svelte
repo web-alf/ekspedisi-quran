@@ -8,6 +8,7 @@
   import TabNavigation from '@/Components/TabNavigation.svelte';
   import StatusModal from '@/Components/StatusModal.svelte';
   import CameraCapture from '@/Components/CameraCapture.svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { can } from '../../../utils/permissions.js';
   
   // Props from Inertia
@@ -758,10 +759,8 @@
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6">
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
       <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-          <svg class="w-5 h-5 md:w-6 md:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-          </svg>
+        <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+          <HeroIcon name="cube" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
         <div class="ml-3 md:ml-4 min-w-0 flex-1">
           <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Pemesanan</p>
@@ -772,10 +771,8 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
       <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-          <svg class="w-5 h-5 md:w-6 md:h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-          </svg>
+        <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center text-yellow-600">
+          <HeroIcon name="inbox-stack" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
         <div class="ml-3 md:ml-4 min-w-0 flex-1">
           <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Proses Packing</p>
@@ -786,10 +783,8 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
       <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-          <svg class="w-5 h-5 md:w-6 md:h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
-          </svg>
+        <div class="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
+          <HeroIcon name="truck" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
         <div class="ml-3 md:ml-4 min-w-0 flex-1">
           <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Dalam Pengiriman</p>
@@ -800,10 +795,8 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
       <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-          <svg class="w-5 h-5 md:w-6 md:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
+        <div class="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
+          <HeroIcon name="check-circle" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
         <div class="ml-3 md:ml-4 min-w-0 flex-1">
           <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Diterima</p>
@@ -830,9 +823,7 @@
               placeholder="No resi, nama donatur, atau penerima..."
               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <svg class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
+            <HeroIcon name="magnifying-glass" class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
           </div>
         </div>
 
@@ -944,11 +935,9 @@
         <div class="mt-4">
           <button
             on:click={() => clearFilters()}
-            class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            class="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1"
           >
-            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
+            <HeroIcon name="x-mark" class="w-4 h-4" />
             Hapus Filter
           </button>
           
@@ -961,9 +950,7 @@
                   on:click={() => { filters.search = ''; handleFilter(); }}
                   class="ml-2 text-blue-600 hover:text-blue-800"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
               </div>
             {/if}
@@ -975,9 +962,7 @@
                   on:click={() => { filters.status = ''; handleFilter(); }}
                   class="ml-2 text-green-600 hover:text-green-800"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
               </div>
             {/if}
@@ -989,9 +974,7 @@
                   on:click={() => { filters.jenis_quran = ''; handleFilter(); }}
                   class="ml-2 text-purple-600 hover:text-purple-800"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
               </div>
             {/if}
@@ -1003,9 +986,7 @@
                   on:click={() => { startDate = ''; handleFilter(); }}
                   class="ml-2 text-orange-600 hover:text-orange-800"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
               </div>
             {/if}
@@ -1017,9 +998,7 @@
                   on:click={() => { endDate = ''; handleFilter(); }}
                   class="ml-2 text-red-600 hover:text-red-800"
                 >
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
               </div>
             {/if}
@@ -1034,9 +1013,7 @@
     <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-          </svg>
+          <HeroIcon name="clipboard-document-check" class="w-5 h-5 text-blue-600" />
           <span class="font-semibold text-blue-900">{selectedItems.length} item terpilih</span>
         </div>
         <button
@@ -1050,7 +1027,10 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <!-- Bulk Update Status -->
         <div class="bg-white rounded-lg p-4 border">
-          <h4 class="font-medium text-gray-900 mb-3">📦 Update Status Massal</h4>
+          <div class="flex items-center gap-2 font-medium text-gray-900 mb-3">
+            <HeroIcon name="cube" class="w-5 h-5 text-blue-600" />
+            <h4>Update Status Massal</h4>
+          </div>
           <div class="space-y-3">
             <div>
               <label for="bulk_status_select" class="block text-sm font-medium text-gray-700 mb-1">Status Baru</label>
@@ -1083,13 +1063,10 @@
                 <button
                   type="button"
                   on:click={toggleBulkCameraMode}
-                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors {useBulkCameraMode ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors gap-1 {useBulkCameraMode ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
                 >
-                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                  {useBulkCameraMode ? 'Gunakan Upload' : 'Gunakan Kamera'}
+                  <HeroIcon name="camera" class="w-4 h-4" />
+                  <span>{useBulkCameraMode ? 'Gunakan Upload' : 'Gunakan Kamera'}</span>
                 </button>
               </div>
 
@@ -1100,8 +1077,9 @@
                   maxPhotos={10}
                 />
                 {#if bulkCapturedPhotos.length > 0}
-                  <p class="text-xs text-green-600 mt-1">
-                    ✓ {bulkCapturedPhotos.length} foto tertangkap
+                  <p class="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <HeroIcon name="check-circle" class="w-3.5 h-3.5" />
+                    <span>{bulkCapturedPhotos.length} foto tertangkap</span>
                   </p>
                 {/if}
               {:else}
@@ -1131,15 +1109,14 @@
             <button
               on:click={bulkUpdateStatus}
               disabled={!bulkStatus || isBulkProcessing || selectedItems.length === 0}
-              class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
               {#if isBulkProcessing}
-                <div class="flex items-center justify-center">
-                  <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                  Updating...
-                </div>
+                <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                Updating...
               {:else}
-                📦 Update Status ({selectedItems.length} item)
+                <HeroIcon name="cube" class="w-4 h-4" />
+                <span>Update Status ({selectedItems.length} item)</span>
               {/if}
             </button>
             {/if}
@@ -1148,13 +1125,14 @@
         
         <!-- Bulk Set Alamat dari Mushaf Request -->
         <div class="bg-white rounded-lg p-4 border">
-          <h4 class="font-medium text-gray-900 mb-3">📍 Set Alamat dari Permintaan Mushaf</h4>
+          <div class="flex items-center gap-2 font-medium text-gray-900 mb-3">
+            <HeroIcon name="map-pin" class="w-5 h-5 text-green-600" />
+            <h4>Set Alamat dari Permintaan Mushaf</h4>
+          </div>
           <div class="space-y-3">
             <div class="bg-green-50 border border-green-200 rounded-lg p-3">
               <div class="flex">
-                <svg class="w-5 h-5 text-green-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                <HeroIcon name="information-circle" class="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
                 <div>
                   <p class="text-sm font-medium text-green-800">Alamat dari Mushaf Request yang Disetujui</p>
                   <p class="text-xs text-green-700 mt-1">Alamat, nama penerima, dan nomor HP akan diambil dari permintaan mushaf yang telah disetujui.</p>
@@ -1194,15 +1172,14 @@
             <button
               on:click={bulkSetAlamat}
               disabled={!bulkMushafRequest || isBulkProcessing}
-              class="w-full px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
               {#if isBulkProcessing}
-                <div class="flex items-center justify-center">
-                  <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                  Processing...
-                </div>
+                <div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                Processing...
               {:else}
-                Set Alamat ({selectedItems.length} item)
+                <HeroIcon name="map-pin" class="w-4 h-4" />
+                <span>Set Alamat ({selectedItems.length} item)</span>
               {/if}
             </button>
             {/if}
@@ -1263,16 +1240,12 @@
                   <div class="text-sm {getQRStatus(item).class}">
                     {#if getQRStatus(item).hasQR}
                       <span class="flex items-center">
-                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
+                        <HeroIcon name="check" class="w-3 h-3 mr-1" />
                         QR: Ada
                       </span>
                     {:else}
                       <span class="flex items-center">
-                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
+                        <HeroIcon name="x-mark" class="w-3 h-3 mr-1" />
                         QR: Belum ada
                       </span>
                     {/if}
@@ -1329,10 +1302,7 @@
                       class="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
                       title="Lihat Detail"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                      </svg>
+                      <HeroIcon name="eye" class="w-4 h-4" />
                     </button>
                     {#if canUpdate}
                     <button
@@ -1340,20 +1310,16 @@
                       class="text-yellow-600 hover:text-yellow-900 p-1 hover:bg-yellow-50 rounded transition-colors"
                       title="Edit"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                      </svg>
+                      <HeroIcon name="pencil-square" class="w-4 h-4" />
                     </button>
                     {/if}
                     
                     <a
                       href={`/admin/pengiriman/${item.id}/update-status`}
-                      class="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded transition-colors"
+                      class="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded transition-colors inline-flex items-center"
                       title="Update Status"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                      </svg>
+                      <HeroIcon name="arrow-path" class="w-4 h-4" />
                     </a>
                   </div>
                 </td>
@@ -1363,9 +1329,7 @@
             <tr>
               <td colspan="7" class="px-6 py-12 text-center">
                 <div class="text-gray-500">
-                  <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                  </svg>
+                  <HeroIcon name="cube" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
                   <p class="text-lg font-medium">Tidak ada pengiriman ditemukan</p>
                   <p class="text-sm">Belum ada data pengiriman yang tersedia</p>
                 </div>
@@ -1388,19 +1352,15 @@
             {#if pengiriman.prev_page_url}
               <button
                 on:click={() => router.visit(pengiriman.prev_page_url, { preserveScroll: true })}
-                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center"
+                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center gap-1"
               >
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
+                <HeroIcon name="chevron-left" class="w-4 h-4" />
                 <span class="hidden sm:inline">Sebelumnya</span>
                 <span class="sm:hidden">Prev</span>
               </button>
             {:else}
-              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center">
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
+              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center gap-1">
+                <HeroIcon name="chevron-left" class="w-4 h-4" />
                 <span class="hidden sm:inline">Sebelumnya</span>
                 <span class="sm:hidden">Prev</span>
               </span>
@@ -1468,21 +1428,17 @@
             {#if pengiriman.next_page_url}
               <button
                 on:click={() => router.visit(pengiriman.next_page_url, { preserveScroll: true })}
-                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center"
+                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center gap-1"
               >
                 <span class="hidden sm:inline">Selanjutnya</span>
                 <span class="sm:hidden">Next</span>
-                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
+                <HeroIcon name="chevron-right" class="w-4 h-4" />
               </button>
             {:else}
-              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center">
+              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center gap-1">
                 <span class="hidden sm:inline">Selanjutnya</span>
                 <span class="sm:hidden">Next</span>
-                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
+                <HeroIcon name="chevron-right" class="w-4 h-4" />
               </span>
             {/if}
           </div>
@@ -1537,16 +1493,17 @@
       <div class="flex justify-between items-center mb-4 sm:mb-6">
         <h3 class="text-lg sm:text-xl font-bold text-gray-900">Detail Pengiriman</h3>
         <button on:click={() => showDetailModal = false} class="text-gray-400 hover:text-gray-600 p-1">
-          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          <HeroIcon name="x-mark" class="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
       </div>
       
       <div class="space-y-4 sm:space-y-6">
         <!-- Header Info -->
         <div class="bg-gradient-to-r from-[#eb3434] to-red-600 rounded-xl p-4 sm:p-6 text-white">
-          <h4 class="text-base sm:text-lg font-semibold mb-2">📦 {selectedItem.no_resi || 'Belum ada resi'}</h4>
+          <div class="flex items-center gap-2 mb-2">
+            <HeroIcon name="cube" class="w-5 h-5 text-white" />
+            <h4 class="text-base sm:text-lg font-semibold">{selectedItem.no_resi || 'Belum ada resi'}</h4>
+          </div>
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
             <div>
               <p class="text-red-100 text-sm">Donatur: {selectedItem.donatur?.nama_donatur || 'N/A'}</p>
@@ -1691,22 +1648,18 @@
           <a
             href={qrImageUrl}
             download="qr-{currentQRResi}.png"
-            class="flex-1 px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-center text-sm flex items-center justify-center"
+            class="flex-1 px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-center text-sm flex items-center justify-center gap-1.5"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+            <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
             <span class="hidden sm:inline">Download</span>
             <span class="sm:hidden">Download</span>
           </a>
           <button
             on:click={() => window.print()}
-            class="flex-1 px-4 py-2.5 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center justify-center"
+            class="flex-1 px-4 py-2.5 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center justify-center gap-1.5"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-            </svg>
-            Print
+            <HeroIcon name="printer" class="w-4 h-4" />
+            <span>Print</span>
           </button>
         </div>
         

@@ -3,6 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import { logout } from '../../utils/auth.js';
   import { hasRole, can } from '../../utils/permissions.js';
   import { ROLES } from '../../constants/roles.js';
@@ -292,28 +293,28 @@
             value: formatNumber(stats.totalPengiriman || 0),
             change: `+${stats.monthlyPengiriman || 0} bulan ini`,
             trend: 'up',
-            icon: '📦'
+            icon: 'cube'
           },
           {
             title: 'Mushaf Tersalurkan',
             value: formatNumber(stats.totalMushafDistributed || 0),
             change: stats.totalMushafDistributed === 0 ? 'Belum ada yang diterima' : 'Sudah diterima penerima',
             trend: stats.totalMushafDistributed === 0 ? 'neutral' : 'up',
-            icon: '📖'
+            icon: 'book-open'
           },
           {
             title: 'Total Donatur',
             value: formatNumber(stats.totalDonatur || 0),
             change: 'Donatur terdaftar',
             trend: 'up',
-            icon: '👥'
+            icon: 'users'
           },
           {
             title: 'Permintaan Mushaf',
             value: formatNumber(stats.totalMushafRequests || 0),
             change: `+${stats.monthlyMushafRequests || 0} bulan ini`,
             trend: 'up',
-            icon: '📋'
+            icon: 'document-text'
           }
         ];
       
@@ -324,28 +325,28 @@
             value: formatNumber(stats.pendingMushafRequests || 0),
             change: 'Menunggu review',
             trend: 'neutral',
-            icon: '⏳'
+            icon: 'clock'
           },
           {
             title: 'Permintaan Disetujui',
             value: formatNumber(stats.approvedMushafRequests || 0),
             change: 'Sudah disetujui',
             trend: 'up',
-            icon: '✅'
+            icon: 'check-circle'
           },
           {
             title: 'Total Donatur',
             value: formatNumber(stats.totalDonatur || 0),
             change: 'Donatur terdaftar',
             trend: 'up',
-            icon: '👥'
+            icon: 'users'
           },
           {
             title: 'Bulan Ini',
             value: formatNumber(stats.monthlyMushafRequests || 0),
             change: 'Permintaan baru',
             trend: 'up',
-            icon: '📅'
+            icon: 'calendar-days'
           }
         ];
       
@@ -356,28 +357,28 @@
             value: formatNumber(stats.pendingShipments || 0),
             change: 'Siap dikemas',
             trend: 'neutral',
-            icon: '📦'
+            icon: 'inbox-stack'
           },
           {
             title: 'Dalam Perjalanan',
             value: formatNumber(stats.inTransitShipments || 0),
             change: 'Sedang dikirim',
             trend: 'up',
-            icon: '🚚'
+            icon: 'truck'
           },
           {
             title: 'Mushaf Tersalurkan',
             value: formatNumber(stats.totalMushafDistributed || 0),
             change: 'Total terdistribusi',
             trend: 'up',
-            icon: '📖'
+            icon: 'book-open'
           },
           {
             title: 'Bulan Ini',
             value: formatNumber(stats.monthlyPengiriman || 0),
             change: 'Pengiriman baru',
             trend: 'up',
-            icon: '📅'
+            icon: 'calendar-days'
           }
         ];
       
@@ -388,28 +389,28 @@
             value: formatNumber(stats.pendingShipments || 0),
             change: 'Siap diantar',
             trend: 'neutral',
-            icon: '📦'
+            icon: 'inbox-stack'
           },
           {
             title: 'Dalam Perjalanan',
             value: formatNumber(stats.inTransitShipments || 0),
             change: 'Sedang diantar',
             trend: 'up',
-            icon: '🚚'
+            icon: 'truck'
           },
           {
             title: 'Selesai Diantar',
             value: formatNumber(stats.completedShipments || 0),
             change: 'Total terkirim',
             trend: 'up',
-            icon: '✅'
+            icon: 'check-circle'
           },
           {
             title: 'Mushaf Diantar',
             value: formatNumber(stats.totalMushafDistributed || 0),
             change: 'Total mushaf',
             trend: 'up',
-            icon: '📖'
+            icon: 'book-open'
           }
         ];
       
@@ -424,7 +425,7 @@
     if (can.shipments.read()) {
       baseActions.push({
         title: 'Kelola Pengiriman',
-        icon: '📦',
+        icon: 'truck',
         color: 'bg-blue-500',
         href: '/admin/pengiriman'
       });
@@ -432,8 +433,8 @@
 
     if (can.donatur.read()) {
       baseActions.push({
-        title: 'Kelola Wakif',
-        icon: '👥',
+        title: 'Kelola Donatur',
+        icon: 'users',
         color: 'bg-green-500',
         href: '/admin/donatur'
       });
@@ -442,7 +443,7 @@
     if (can.mushafRequests.read()) {
       baseActions.push({
         title: 'Permintaan Mushaf',
-        icon: '📋',
+        icon: 'document-text',
         color: 'bg-purple-500',
         href: '/admin/mushaf-requests'
       });
@@ -451,7 +452,7 @@
     if (can.qr.scan()) {
       baseActions.push({
         title: 'QR Scanner',
-        icon: '📱',
+        icon: 'qr-code',
         color: 'bg-orange-500',
         href: '/admin/qr-scanner'
       });
@@ -642,9 +643,7 @@
                 class="bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-lg p-2 transition-colors"
                 title="Refresh Manual"
               >
-                <svg class="w-4 h-4 text-white {isRefreshing ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
+                <HeroIcon name="arrow-path" class="w-4 h-4 text-white {isRefreshing ? 'animate-spin' : ''}" />
               </button>
 
               <!-- Auto-refresh Toggle -->
@@ -653,13 +652,7 @@
                 class="bg-white/20 hover:bg-white/30 rounded-lg p-2 transition-colors"
                 title="{autoRefreshEnabled ? 'Disable' : 'Enable'} Auto-refresh"
               >
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {#if autoRefreshEnabled}
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  {:else}
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-9-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  {/if}
-                </svg>
+                <HeroIcon name={autoRefreshEnabled ? "pause" : "play"} class="w-4 h-4 text-white" />
               </button>
             </div>
 
@@ -680,7 +673,9 @@
       {#each dynamicStats as stat}
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
           <div class="flex items-center justify-between mb-4">
-            <div class="text-xl md:text-2xl">{stat.icon}</div>
+            <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#eb3434]">
+              <HeroIcon name={stat.icon} class="w-6 h-6" />
+            </div>
             <span class="text-xs md:text-sm font-medium {stat.trend === 'up' ? 'text-green-600' : stat.trend === 'down' ? 'text-red-600' : 'text-gray-600'}">
               {stat.change}
             </span>
@@ -697,7 +692,10 @@
   <!-- Enhanced Quick Stats Summary with Live Updates -->
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-8">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
-      <h2 class="text-lg md:text-xl font-semibold text-gray-900">📊 Ringkasan Hari Ini</h2>
+      <div class="flex items-center gap-2">
+        <HeroIcon name="chart-bar" class="w-5 h-5 text-[#eb3434]" />
+        <h2 class="text-lg md:text-xl font-semibold text-gray-900">Ringkasan Hari Ini</h2>
+      </div>
       <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
         <!-- Refresh Status -->
         <div class="flex items-center space-x-2">
@@ -727,11 +725,11 @@
           {todayStats.shipments}
         </div>
         <p class="text-sm text-gray-600">Pengiriman Hari Ini</p>
-        <div class="mt-2 text-xs text-blue-500">
+        <div class="mt-2 text-xs text-blue-500 font-medium">
           {#if todayStats.shipments > 0}
-            📈 Aktif
+            Aktif
           {:else}
-            💤 Belum ada
+            Belum ada
           {/if}
         </div>
       </div>
@@ -741,11 +739,11 @@
           {todayStats.mushafSent}
         </div>
         <p class="text-sm text-gray-600">Mushaf Dikirim Hari Ini</p>
-        <div class="mt-2 text-xs text-green-500">
+        <div class="mt-2 text-xs text-green-500 font-medium">
           {#if todayStats.mushafSent > 0}
-            🚚 Sudah dikirim
+            Sudah dikirim
           {:else}
-            📦 Belum ada pengiriman
+            Belum ada pengiriman
           {/if}
         </div>
       </div>
@@ -755,13 +753,13 @@
           {todayStats.requests}
         </div>
         <p class="text-sm text-gray-600">Permintaan Baru</p>
-        <div class="mt-2 text-xs text-purple-500">
+        <div class="mt-2 text-xs text-purple-500 font-medium">
           {#if todayStats.requests > 5}
-            📈 Tinggi
+            Tinggi
           {:else if todayStats.requests > 2}
-            📊 Normal
+            Normal
           {:else}
-            📉 Rendah
+            Rendah
           {/if}
         </div>
       </div>
@@ -771,11 +769,11 @@
           {todayStats.completed}
         </div>
         <p class="text-sm text-gray-600">Pengiriman Selesai</p>
-        <div class="mt-2 text-xs text-orange-500">
+        <div class="mt-2 text-xs text-orange-500 font-medium">
           {#if todayStats.completed > 0}
-            ✅ Berhasil
+            Berhasil
           {:else}
-            ⏳ Menunggu
+            Menunggu
           {/if}
         </div>
       </div>
@@ -800,8 +798,8 @@
               {#each activities as activity}
                 <div class="flex items-start space-x-4 p-4 rounded-lg hover:bg-gray-50 transition-colors">
                   <div class="flex-shrink-0">
-                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg">
-                      {activity.icon}
+                    <div class="w-10 h-10 rounded-full bg-red-50 text-[#eb3434] flex items-center justify-center text-sm font-semibold">
+                      <HeroIcon name="clock" class="w-5 h-5" />
                     </div>
                   </div>
                   <div class="flex-1 min-w-0">
@@ -831,7 +829,7 @@
             </div>
           {:else}
             <div class="text-center py-8">
-              <div class="text-gray-400 text-4xl mb-4">📭</div>
+              <HeroIcon name="inbox-stack" class="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p class="text-gray-500">Belum ada aktivitas terbaru</p>
             </div>
           {/if}
@@ -858,7 +856,10 @@
       <div class="bg-white rounded-xl shadow-sm border border-gray-100">
         <div class="px-6 py-4 border-b border-gray-200">
           <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900">📊 Performa Operasional</h3>
+            <div class="flex items-center gap-2">
+              <HeroIcon name="chart-bar" class="w-5 h-5 text-[#eb3434]" />
+              <h3 class="text-lg font-semibold text-gray-900">Performa Operasional</h3>
+            </div>
             <div class="flex items-center space-x-1">
               {#if isRefreshing}
                 <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
@@ -890,7 +891,7 @@
               <div class="text-right">
                 <span class="text-lg font-bold text-blue-600">{stats.totalWakif || 0}</span>
                 <div class="text-xs text-blue-500">
-                  {stats.totalWakif > 0 ? '📈 Aktif' : '📊 Normal'}
+                  {stats.totalWakif > 0 ? 'Aktif' : 'Normal'}
                 </div>
               </div>
             </div>
@@ -912,15 +913,15 @@
                 </span>
                 <div class="text-xs text-green-500">
                   {#if stats.completedShipments === 0 && stats.totalPengiriman > 0}
-                    🔄 Dalam Proses
+                    Dalam Proses
                   {:else if (stats.completedShipments / Math.max(stats.totalPengiriman, 1)) > 0.8}
-                    🎯 Excellent
+                    Excellent
                   {:else if (stats.completedShipments / Math.max(stats.totalPengiriman, 1)) > 0.6}
-                    👍 Good
+                    Good
                   {:else if stats.totalPengiriman > 0}
-                    📈 Improving
+                    Improving
                   {:else}
-                    📊 Ready
+                    Ready
                   {/if}
                 </div>
               </div>
@@ -948,13 +949,13 @@
                 <span class="text-sm text-purple-600">hari</span>
                 <div class="text-xs text-purple-500">
                   {#if stats.avgDeliveryDays === 0}
-                    ⏳ Menunggu
+                    Menunggu
                   {:else if stats.avgDeliveryDays <= 7}
-                    🚀 Cepat
+                    Cepat
                   {:else if stats.avgDeliveryDays <= 14}
-                    📦 Normal
+                    Normal
                   {:else}
-                    🔄 Review
+                    Review
                   {/if}
                 </div>
               </div>
@@ -990,13 +991,11 @@
         <div class="bg-gradient-to-r from-[#eb3434] to-red-500 px-4 md:px-6 py-4 text-white">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div class="flex-1">
-              <h3 class="text-lg md:text-xl font-bold">📊 Analisis Statistik 6 Bulan Terakhir</h3>
+              <h3 class="text-lg md:text-xl font-bold">Analisis Statistik 6 Bulan Terakhir</h3>
               <p class="text-red-100 text-sm">Visualisasi data pengiriman dan permintaan dengan Chart.js</p>
             </div>
             <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-              </svg>
+              <HeroIcon name="chart-bar" class="w-6 h-6 text-white" />
             </div>
           </div>
         </div>
@@ -1008,7 +1007,7 @@
             <!-- Monthly Shipments Line Chart -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-md transition-shadow">
               <div class="flex items-center justify-between mb-4 md:mb-6">
-                <h4 class="text-base md:text-lg font-semibold text-gray-800">📈 Penghimpunan Quran Bulanan</h4>
+                <h4 class="text-base md:text-lg font-semibold text-gray-800 flex items-center gap-2"><HeroIcon name="arrow-trending-up" class="w-5 h-5 text-gray-600" /> Penghimpunan Quran Bulanan</h4>
                 <div class="flex items-center space-x-2">
                   <div class="w-3 h-3 bg-[#eb3434] rounded-full"></div>
                   <span class="text-xs text-gray-500">Line Chart</span>
@@ -1050,7 +1049,7 @@
             {#if chartsData?.monthlyMushafRequests && Array.isArray(chartsData.monthlyMushafRequests) && chartsData.monthlyMushafRequests.length > 0}
               <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-md transition-shadow">
                 <div class="flex items-center justify-between mb-4 md:mb-6">
-                  <h4 class="text-base md:text-lg font-semibold text-gray-800">📊 Permintaan Mushaf Bulanan</h4>
+                  <h4 class="text-base md:text-lg font-semibold text-gray-800 flex items-center gap-2"><HeroIcon name="document-text" class="w-5 h-5 text-gray-600" /> Permintaan Mushaf Bulanan</h4>
                   <div class="flex items-center space-x-2">
                     <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
                     <span class="text-xs text-gray-500">Bar Chart</span>
@@ -1098,7 +1097,7 @@
             {#if chartsData?.statusDistribution && Array.isArray(chartsData.statusDistribution) && chartsData.statusDistribution.length > 0}
               <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-md transition-shadow">
                 <div class="flex items-center justify-between mb-4 md:mb-6">
-                  <h4 class="text-base md:text-lg font-semibold text-gray-800">🎯 Distribusi Status</h4>
+                  <h4 class="text-base md:text-lg font-semibold text-gray-800 flex items-center gap-2"><HeroIcon name="chart-pie" class="w-5 h-5 text-gray-600" /> Distribusi Status</h4>
                   <div class="flex items-center space-x-2">
                     <div class="w-3 h-3 bg-green-500 rounded-full"></div>
                     <span class="text-xs text-gray-500">Doughnut Chart</span>
@@ -1123,7 +1122,7 @@
             {#if chartsData?.dailyActivities && Array.isArray(chartsData.dailyActivities) && chartsData.dailyActivities.length > 0}
               <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-md transition-shadow">
                 <div class="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 space-y-2 lg:space-y-0">
-                  <h4 class="text-base md:text-lg font-semibold text-gray-800">📊 Aktivitas 7 Hari Terakhir</h4>
+                  <h4 class="text-base md:text-lg font-semibold text-gray-800 flex items-center gap-2"><HeroIcon name="calendar" class="w-5 h-5 text-gray-600" /> Aktivitas 7 Hari Terakhir</h4>
                   <div class="flex flex-wrap items-center gap-2 lg:gap-4">
                     <div class="flex items-center space-x-2">
                       <div class="w-3 h-3 bg-[#eb3434] rounded-full"></div>
@@ -1170,23 +1169,23 @@
           
           <!-- Enhanced Insights Section -->
           <div class="mt-6 md:mt-8 bg-gradient-to-r from-gray-50 to-white rounded-xl p-4 md:p-6 border border-gray-200">
-            <h5 class="text-base md:text-lg font-semibold text-gray-800 mb-4">💡 Insights & Rekomendasi Real-time</h5>
+            <h5 class="text-base md:text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2"><HeroIcon name="light-bulb" class="w-5 h-5 text-yellow-500" /> Insights & Rekomendasi Real-time</h5>
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
               
               <!-- Growth Analysis -->
               <div class="bg-white rounded-lg p-4 border border-green-200 hover:shadow-md transition-shadow">
                 <div class="flex items-center mb-3">
                   <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
-                    <span class="text-white text-sm">📈</span>
+                    <HeroIcon name="arrow-trending-up" class="w-4 h-4 text-white" />
                   </div>
                   <h6 class="text-sm font-medium text-gray-800">Growth Analysis</h6>
                 </div>
                 <p class="text-xs text-gray-600">
-                  Pengiriman menunjukkan tren {(chartsData?.monthlyShipments?.length >= 2 && chartsData.monthlyShipments[chartsData.monthlyShipments.length-1]?.count > chartsData.monthlyShipments[chartsData.monthlyShipments.length-2]?.count) ? 'positif 📈' : 'perlu perhatian ⚠️'} 
+                  Pengiriman menunjukkan tren {(chartsData?.monthlyShipments?.length >= 2 && chartsData.monthlyShipments[chartsData.monthlyShipments.length-1]?.count > chartsData.monthlyShipments[chartsData.monthlyShipments.length-2]?.count) ? 'positif' : 'perlu perhatian'} 
                   dibanding bulan sebelumnya.
                 </p>
                 <div class="mt-2 text-xs font-medium {(chartsData?.monthlyShipments?.length >= 2 && chartsData.monthlyShipments[chartsData.monthlyShipments.length-1]?.count > chartsData.monthlyShipments[chartsData.monthlyShipments.length-2]?.count) ? 'text-green-600' : 'text-yellow-600'}">
-                  {(chartsData?.monthlyShipments?.length >= 2 && chartsData.monthlyShipments[chartsData.monthlyShipments.length-1]?.count > chartsData.monthlyShipments[chartsData.monthlyShipments.length-2]?.count) ? '✅ Trending Up' : '⚠️ Needs Attention'}
+                  {(chartsData?.monthlyShipments?.length >= 2 && chartsData.monthlyShipments[chartsData.monthlyShipments.length-1]?.count > chartsData.monthlyShipments[chartsData.monthlyShipments.length-2]?.count) ? 'Trending Up' : 'Needs Attention'}
                 </div>
               </div>
 
@@ -1194,7 +1193,7 @@
               <div class="bg-white rounded-lg p-4 border border-blue-200 hover:shadow-md transition-shadow">
                 <div class="flex items-center mb-3">
                   <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                    <span class="text-white text-sm">⭐</span>
+                    <HeroIcon name="star" class="w-4 h-4 text-white" />
                   </div>
                   <h6 class="text-sm font-medium text-gray-800">Performance Rating</h6>
                 </div>
@@ -1215,21 +1214,21 @@
               <div class="bg-white rounded-lg p-4 border border-purple-200 hover:shadow-md transition-shadow">
                 <div class="flex items-center mb-3">
                   <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
-                    <span class="text-white text-sm">🤖</span>
+                    <HeroIcon name="cpu-chip" class="w-4 h-4 text-white" />
                   </div>
                   <h6 class="text-sm font-medium text-gray-800">AI Recommendation</h6>
                 </div>
                 <p class="text-xs text-gray-600">
                   {#if (chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 25}
-                    🚨 Critical: Implementasi strategi peningkatan pengiriman segera diperlukan.
+                    Critical: Implementasi strategi peningkatan pengiriman segera diperlukan.
                   {:else if (chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 50}
-                    ⚡ Good: Sedikit peningkatan lagi untuk mencapai target optimal.
+                    Good: Sedikit peningkatan lagi untuk mencapai target optimal.
                   {:else}
-                    🎉 Excellent! Pertahankan momentum dan eksplorasi target lebih tinggi.
+                    Excellent! Pertahankan momentum dan eksplorasi target lebih tinggi.
                   {/if}
                 </p>
                 <div class="mt-2 text-xs font-medium {(chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 25 ? 'text-red-600' : (chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 50 ? 'text-yellow-600' : 'text-green-600'}">
-                  {(chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 25 ? '🔴 Action Required' : (chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 50 ? '🟡 On Track' : '🟢 Exceeding Goals'}
+                  {(chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 25 ? 'Action Required' : (chartsData?.monthlyShipments?.[chartsData.monthlyShipments.length-1]?.count || 0) < 50 ? 'On Track' : 'Exceeding Goals'}
                 </div>
               </div>
 
@@ -1269,9 +1268,7 @@
           <div class="sm:flex sm:items-start">
             <!-- Warning Icon -->
             <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-              <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+              <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-red-600" />
             </div>
             
             <!-- Content -->
@@ -1295,9 +1292,7 @@
               class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm transition-colors duration-200"
               on:click={confirmLogout}
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-              </svg>
+              <HeroIcon name="arrow-right-on-rectangle" class="w-4 h-4 mr-2" />
               Ya, Logout
             </button>
             

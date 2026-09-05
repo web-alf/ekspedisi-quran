@@ -1,5 +1,6 @@
 <script>
   import { onDestroy } from 'svelte';
+  import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   
   export let settings = {};
   export let galleries = [];
@@ -156,9 +157,7 @@
               <!-- Lightbox indicator -->
               {#if lightboxEnabled}
                 <div class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                  </svg>
+                  <HeroIcon name="magnifying-glass" class="w-4 h-4" />
                 </div>
               {/if}
             </div>
@@ -189,9 +188,7 @@
                   <!-- Lightbox indicator -->
                   {#if lightboxEnabled}
                     <div class="absolute top-6 right-6 bg-black/50 text-white p-3 rounded-full">
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                      </svg>
+                      <HeroIcon name="magnifying-glass" class="w-5 h-5" />
                     </div>
                   {/if}
                 </div>
@@ -206,18 +203,14 @@
               class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
               aria-label="Previous image"
             >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-              </svg>
+              <HeroIcon name="chevron-left" class="w-6 h-6" />
             </button>
             <button
               on:click={nextSlide}
               class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
               aria-label="Next image"
             >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-              </svg>
+              <HeroIcon name="chevron-right" class="w-6 h-6" />
             </button>
           {/if}
           
@@ -271,18 +264,14 @@
                 class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white p-4 rounded-full backdrop-blur-sm transition-all duration-200 hover:scale-110"
                 aria-label="Previous image"
               >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
+                <HeroIcon name="chevron-left" class="w-6 h-6" />
               </button>
               <button
                 on:click={nextSlide}
                 class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white p-4 rounded-full backdrop-blur-sm transition-all duration-200 hover:scale-110"
                 aria-label="Next image"
               >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
+                <HeroIcon name="chevron-right" class="w-6 h-6" />
               </button>
             {/if}
           </div>
@@ -345,9 +334,7 @@
               <!-- Lightbox indicator -->
               {#if lightboxEnabled}
                 <div class="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                  </svg>
+                  <HeroIcon name="magnifying-glass" class="w-4 h-4" />
                 </div>
               {/if}
             </div>
@@ -368,9 +355,7 @@
         class="absolute -top-2 -right-2 bg-white text-gray-800 rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors z-10"
         aria-label="Close lightbox"
       >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
+        <HeroIcon name="x-mark" class="w-6 h-6" />
       </button>
       
       <!-- Image -->
@@ -396,18 +381,14 @@
           class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-all duration-200"
           aria-label="Previous image"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-          </svg>
+          <HeroIcon name="chevron-left" class="w-6 h-6" />
         </button>
         <button
           on:click={nextLightbox}
           class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-3 rounded-full transition-all duration-200"
           aria-label="Next image"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
+          <HeroIcon name="chevron-right" class="w-6 h-6" />
         </button>
       {/if}
       

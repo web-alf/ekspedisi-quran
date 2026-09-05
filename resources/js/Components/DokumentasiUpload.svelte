@@ -5,6 +5,7 @@
      */
     import CameraCapture from './CameraCapture.svelte';
     import { createEventDispatcher } from 'svelte';
+    import HeroIcon from './UI/HeroIcon.svelte';
 
     export let maxPhotos = 5;
     export let label = 'Dokumentasi (Foto)';
@@ -127,9 +128,15 @@
             <button
                 type="button"
                 on:click={toggleMode}
-                class="text-xs px-3 py-1 rounded-full {useCameraMode ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-700 border border-gray-300'} font-medium transition hover:shadow"
+                class="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full {useCameraMode ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-700 border border-gray-300'} font-medium transition hover:shadow"
             >
-                {useCameraMode ? '📸 Mode Kamera' : '📁 Mode Upload'}
+                {#if useCameraMode}
+                    <HeroIcon name="camera" class="w-3.5 h-3.5" />
+                    <span>Mode Kamera</span>
+                {:else}
+                    <HeroIcon name="arrow-up-tray" class="w-3.5 h-3.5" />
+                    <span>Mode Upload</span>
+                {/if}
             </button>
         {/if}
     </div>
@@ -147,10 +154,8 @@
         <!-- File Upload Mode -->
         <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition">
             <div class="space-y-1 text-center">
-                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <div class="flex text-sm text-gray-600">
+                <HeroIcon name="photo" class="mx-auto h-12 w-12 text-gray-400" />
+                <div class="flex text-sm text-gray-600 justify-center">
                     <label for="file-upload-docs" class="relative cursor-pointer bg-white rounded-md font-medium text-red-600 hover:text-red-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-red-500">
                         <span>Upload file</span>
                         <input
@@ -189,10 +194,8 @@
 
     <!-- Photo count indicator -->
     {#if (useCameraMode && capturedPhotos.length > 0) || (!useCameraMode && uploadedFiles.length > 0)}
-        <div class="mt-2 text-xs text-gray-600 flex items-center gap-1">
-            <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-            </svg>
+        <div class="mt-2 text-xs text-gray-600 flex items-center gap-1.5">
+            <HeroIcon name="check-circle" class="w-4 h-4 text-green-600" />
             <span class="font-medium">
                 {useCameraMode ? capturedPhotos.length : uploadedFiles.length}/{maxPhotos} foto dipilih
             </span>

@@ -1,4 +1,5 @@
 <script>
+  import HeroIcon from './UI/HeroIcon.svelte';
   export let previewImage = null;
   export let imageInfo = null;
   export let fieldPositions = {};
@@ -124,9 +125,7 @@
           class="p-1 text-gray-500 hover:text-gray-700 border rounded"
           title="Zoom Out"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
-          </svg>
+          <HeroIcon name="minus" class="w-4 h-4" />
         </button>
         
         <span class="text-xs text-gray-500 px-2">{Math.round(previewScale * 100)}%</span>
@@ -136,9 +135,7 @@
           class="p-1 text-gray-500 hover:text-gray-700 border rounded"
           title="Zoom In"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-          </svg>
+          <HeroIcon name="plus" class="w-4 h-4" />
         </button>
         
         <button
@@ -156,9 +153,7 @@
     <!-- Instructions -->
     <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
       <div class="flex items-start space-x-2">
-        <svg class="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
+        <HeroIcon name="information-circle" class="w-5 h-5 text-blue-500 mt-0.5" />
         <div class="text-sm text-blue-700">
           <p class="font-medium mb-1">Cara menggunakan preview:</p>
           <ol class="list-decimal list-inside space-y-1 text-xs">
@@ -234,9 +229,7 @@
     <!-- No Preview State -->
     <div class="h-64 flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
       <div class="text-center">
-        <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-        </svg>
+        <HeroIcon name="photo" class="mx-auto h-12 w-12 text-gray-400 mb-3" />
         <p class="text-gray-500">Upload template untuk melihat preview</p>
       </div>
     </div>
