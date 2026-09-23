@@ -74,64 +74,67 @@ class PackingAssignmentService
      */
     public function assignDailyTaskToUser(User $user, $date = null)
     {
-        $date = $date ? Carbon::parse($date) : today();
+        return DB::transaction(function () use ($user, $date) {
+            $date = $date ? Carbon::parse($date) : today();
 
-        // Check if task already exists
-        $existingTask = DailyPackingTask::where('user_id', $user->id)
-            ->whereDate('tanggal_tugas', $date)
-            ->first();
+            // Check if task already exists (with lock - race-safe)
+            $existingTask = DailyPackingTask::where('user_id', $user->id)
+                ->whereDate('tanggal_tugas', $date)
+                ->lockForUpdate()
+                ->first();
 
-        if ($existingTask) {
-            Log::info('Task already exists for user', [
+            if ($existingTask) {
+                Log::info('Task already exists for user', [
+                    'user_id' => $user->id,
+                    'date' => $date->format('Y-m-d'),
+                ]);
+
+                return [
+                    'user_id' => $user->id,
+                    'task_id' => $existingTask->id,
+                    'status' => 'existing',
+                    'target' => $existingTask->total_target,
+                ];
+            }
+
+            // Calculate carry over from yesterday
+            $carryOver = $this->calculateCarryOver($user, $date);
+
+            // Calculate today's target
+            $dailyTarget = config('packing.default_daily_target', self::DEFAULT_DAILY_TARGET) + $carryOver;
+
+            // Create new task with TARGET ONLY (no specific assignments)
+            $task = DailyPackingTask::create([
                 'user_id' => $user->id,
-                'date' => $date->format('Y-m-d'),
+                'tanggal_tugas' => $date,
+                'total_target' => $dailyTarget,
+                'sisa_kemarin' => $carryOver,
+                'status' => DailyPackingTask::STATUS_ASSIGNED,
+                'assigned_at' => now(),
+            ]);
+
+            // Generate packing boxes for different jenis
+            $task->generateJenisBasedPackingBoxes();
+
+            // Send notification
+            $this->sendAssignmentNotification($task);
+
+            Log::info('Daily task assigned (target-only)', [
+                'user_id' => $user->id,
+                'task_id' => $task->id,
+                'target' => $dailyTarget,
+                'carry_over' => $carryOver,
+                'assignment_type' => 'target_only',
             ]);
 
             return [
                 'user_id' => $user->id,
-                'task_id' => $existingTask->id,
-                'status' => 'existing',
-                'target' => $existingTask->total_target,
+                'task_id' => $task->id,
+                'status' => 'new',
+                'target' => $dailyTarget,
+                'carry_over' => $carryOver,
             ];
-        }
-
-        // Calculate carry over from yesterday
-        $carryOver = $this->calculateCarryOver($user, $date);
-
-        // Calculate today's target
-        $dailyTarget = config('packing.default_daily_target', self::DEFAULT_DAILY_TARGET) + $carryOver;
-
-        // Create new task with TARGET ONLY (no specific assignments)
-        $task = DailyPackingTask::create([
-            'user_id' => $user->id,
-            'tanggal_tugas' => $date,
-            'total_target' => $dailyTarget,
-            'sisa_kemarin' => $carryOver,
-            'status' => DailyPackingTask::STATUS_ASSIGNED,
-            'assigned_at' => now(),
-        ]);
-
-        // Generate packing boxes for different jenis
-        $task->generateJenisBasedPackingBoxes();
-
-        // Send notification
-        $this->sendAssignmentNotification($task);
-
-        Log::info('Daily task assigned (target-only)', [
-            'user_id' => $user->id,
-            'task_id' => $task->id,
-            'target' => $dailyTarget,
-            'carry_over' => $carryOver,
-            'assignment_type' => 'target_only',
-        ]);
-
-        return [
-            'user_id' => $user->id,
-            'task_id' => $task->id,
-            'status' => 'new',
-            'target' => $dailyTarget,
-            'carry_over' => $carryOver,
-        ];
+        }, 3); // Retry up to 3 times for deadlock
     }
 
     /**
@@ -410,11 +413,10 @@ class PackingAssignmentService
             throw new \Exception('Pengiriman ini tidak dalam status packing.');
         }
 
-        // Check if already assigned today
-        $existingAssignment = DailyPackingTaskItem::whereHas('dailyPackingTask', function ($q) use ($date) {
-            $q->whereDate('tanggal_tugas', $date);
-        })
-            ->where('pengiriman_id', $pengiriman->id)
+        // Check if already assigned (ANY date - unique constraint pengiriman_id is global)
+        // Jangan filter by tanggal: unique constraint `daily_packing_task_items.pengiriman_id`
+        // berlaku global, jadi pengiriman yang di-assign kemarin pun tidak boleh di-assign lagi.
+        $existingAssignment = DailyPackingTaskItem::where('pengiriman_id', $pengiriman->id)
             ->with('dailyPackingTask.user')
             ->first();
 

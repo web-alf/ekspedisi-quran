@@ -253,11 +253,20 @@ class MushafRequestController extends Controller
             }
 
             // FIXED: Find existing pengiriman without address and assign mushaf request to it
-            // instead of creating a new pengiriman
+            // instead of creating a new pengiriman.
+            // Race-safe: lock baris yang dipilih (lockForUpdate) sehingga dua proses
+            // paralel tidak bisa memilih pengiriman kosong yang sama lalu saling menimpa.
             $pengiriman = Pengiriman::where('donatur_id', $request->donatur_id)
                 ->whereNull('alamat_tujuan') // Find pengiriman without address assigned
                 ->whereNull('nama_penerima') // And without recipient assigned
+                ->lockForUpdate()
                 ->first();
+
+            // Double-check setelah lock diperoleh: request lain mungkin sudah mengklaim
+            // pengiriman ini dan mengisi alamat di sela-sela pemilihan baris tadi.
+            if ($pengiriman && !empty($pengiriman->fresh(['alamat_tujuan', 'nama_penerima'])->alamat_tujuan)) {
+                $pengiriman = null;
+            }
 
             // ✅ FIX: Build catatan with quantity adjustment info
             $originalTotal = $mushafRequest->jumlah_mushaf + $mushafRequest->jumlah_iqra;

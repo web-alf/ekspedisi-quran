@@ -72,9 +72,12 @@ class BoxBasedAssignmentService
             throw new \Exception("User not found: {$userId}");
         }
 
-        // Check if task already exists
+        // Check if task already exists (with lock - race-safe)
+        // assignBoxBasedTarget membungkus ini dalam DB::transaction, jadi lockForUpdate
+        // membuat dua panggilan paralel saling menunggu, mencegah duplicate task.
         $existingTask = DailyPackingTask::where('user_id', $userId)
             ->whereDate('tanggal_tugas', $date)
+            ->lockForUpdate()
             ->first();
 
         if ($existingTask) {
@@ -166,11 +169,13 @@ class BoxBasedAssignmentService
             $sequence = str_pad($i, 2, '0', STR_PAD_LEFT);
             $boxCode = "KB-{$dateStr}-{$userIdPadded}-{$jenis->kode_jenis}-{$sequence}";
 
-            // Check for unique code
+            // Check for unique code (with lock - race-safe)
+            // assignBoxBasedTarget membungkus ini dalam DB::transaction, jadi lockForUpdate
+            // membuat dua proses paralel saling menunggu, mencegah duplicate box code.
             $attempts = 0;
             $maxAttempts = 5;
             while ($attempts < $maxAttempts) {
-                $existing = PackingBox::where('kode_kerdus', $boxCode)->first();
+                $existing = PackingBox::where('kode_kerdus', $boxCode)->lockForUpdate()->first();
                 if (! $existing) {
                     break;
                 }
@@ -221,8 +226,12 @@ class BoxBasedAssignmentService
      */
     private function createSharedBoxAssignment(DailyPackingTask $task, array $allocation): array
     {
-        // Find or create the shared box
-        $sharedBox = PackingBox::where('kode_kerdus', $allocation['box_code'])->first();
+        // Find or create the shared box (with lock - race-safe)
+        // assignBoxBasedTarget membungkus ini dalam DB::transaction, jadi lockForUpdate
+        // membuat dua proses paralel saling menunggu, mencegah duplicate box.
+        $sharedBox = PackingBox::where('kode_kerdus', $allocation['box_code'])
+            ->lockForUpdate()
+            ->first();
 
         if (! $sharedBox) {
             // Create the shared box if it doesn't exist

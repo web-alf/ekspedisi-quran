@@ -146,46 +146,19 @@ class MushafRequest extends Model
 
     /**
      * Generate nomor request unik dengan format REQ-YYYY-XXXXX
+     *
+     * Race-condition safe: memakai database sequence (NoRequestSequence)
+     * dengan lockForUpdate + transaction, sehingga dua permintaan publik
+     * yang datang paralel tidak akan menghasilkan nomor yang sama.
      */
-    public function generateUniqueNoRequest($maxAttempts = 10)
+    public function generateUniqueNoRequest()
     {
-        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
-            $noRequest = $this->generateNoRequest();
+        $tahun = (int) date('Y');
 
-            $exists = static::where('no_request', $noRequest)->exists();
+        // Ambil nomor berikutnya secara atomic dari sequence table
+        $nextNumber = \App\Models\NoRequestSequence::getNextNumber($tahun);
 
-            if (! $exists) {
-                return $noRequest;
-            }
-
-            usleep(1000); // 1ms delay
-        }
-
-        // Fallback dengan timestamp jika masih gagal
-        return 'REQ-'.date('Y').'-'.str_pad(time() % 99999, 5, '0', STR_PAD_LEFT);
-    }
-
-    /**
-     * Generate nomor request dengan format REQ-YYYY-XXXXX
-     */
-    private function generateNoRequest()
-    {
-        $tahun = date('Y');
-        $prefix = "REQ-{$tahun}-";
-
-        // Cari nomor terakhir untuk tahun ini
-        $lastRequest = static::where('no_request', 'LIKE', $prefix.'%')
-            ->orderBy('no_request', 'DESC')
-            ->first();
-
-        if ($lastRequest) {
-            $lastNumber = (int) substr($lastRequest->no_request, -5);
-            $nextNumber = $lastNumber + 1;
-        } else {
-            $nextNumber = 1;
-        }
-
-        return $prefix.str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+        return "REQ-{$tahun}-".str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -481,8 +454,15 @@ class MushafRequest extends Model
     /**
      * Helper methods untuk update status
      */
-    public function approve(int $adminId, ?string $catatan = null)
+    public function approve($adminId, $catatan = null)
     {
+        // Guard: hanya request yang masih pending/reviewed yang bisa disetujui.
+        // Mencegah request yang sudah rejected/approved/processed/completed di-approve ulang
+        // (race condition: dua admin approve bersamaan, atau approve setelah reject).
+        if (! in_array($this->status, ['pending', 'reviewed'], true)) {
+            throw new \Exception("Permintaan dengan status {$this->status} tidak dapat disetujui");
+        }
+
         return $this->update([
             'status' => 'approved',
             'approved_at' => now(),
@@ -493,6 +473,11 @@ class MushafRequest extends Model
 
     public function reject($adminId, $catatan)
     {
+        // Guard: hanya request yang masih pending/reviewed yang bisa ditolak.
+        if (! in_array($this->status, ['pending', 'reviewed'], true)) {
+            throw new \Exception("Permintaan dengan status {$this->status} tidak dapat ditolak");
+        }
+
         return $this->update([
             'status' => 'rejected',
             'rejected_at' => now(),
