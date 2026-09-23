@@ -257,19 +257,30 @@ class Donatur extends Model
     }
 
     /**
-     * Generate wakaf items for this donation
+     * Generate wakaf items for this donation.
+     *
+     * @param  array{a5?:int,a6?:int,iqra?:int}|null  $counts
+     *                                                         Jumlah item yang digenerate. Jika null, memakai total kumulatif
+     *                                                         donatur (perilaku create donatur baru). Untuk import/penambahan
+     *                                                         bertahap, kirim jumlah delta dari baris yang diimport agar item
+     *                                                         tidak berlipat ganda.
+     * @return array<int, array<string, mixed>>
      */
-    public function generateWakafItems()
+    public function generateWakafItems(?array $counts = null): array
     {
         $items = [];
         $globalSequence = 1;
+
+        $countA5 = $counts !== null ? (int) ($counts['a5'] ?? 0) : (int) ($this->attributes['total_a5_count'] ?? 0);
+        $countA6 = $counts !== null ? (int) ($counts['a6'] ?? 0) : (int) ($this->attributes['total_a6_count'] ?? 0);
+        $countIqra = $counts !== null ? (int) ($counts['iqra'] ?? 0) : (int) ($this->attributes['total_iqra_count'] ?? 0);
 
         // Determine wakif name and doa based on prayer_mode
         $wakifName = ($this->prayer_mode === 'semua_donatur') ? $this->nama_donatur : null;
         $doaRequest = ($this->prayer_mode === 'semua_donatur') ? ($this->doa_untuk_semua ?? '') : '';
 
         // Generate A5 items - use the original database value, not computed
-        for ($i = 1; $i <= ($this->attributes['total_a5_count'] ?? 0); $i++) {
+        for ($i = 1; $i <= $countA5; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'A5',
@@ -286,7 +297,7 @@ class Donatur extends Model
         }
 
         // Generate A6 items
-        for ($i = 1; $i <= ($this->attributes['total_a6_count'] ?? 0); $i++) {
+        for ($i = 1; $i <= $countA6; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'A6',
@@ -303,7 +314,7 @@ class Donatur extends Model
         }
 
         // Generate IQRA items
-        for ($i = 1; $i <= ($this->attributes['total_iqra_count'] ?? 0); $i++) {
+        for ($i = 1; $i <= $countIqra; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'IQRA',

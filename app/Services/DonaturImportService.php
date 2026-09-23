@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Donatur;
 use App\Models\JenisQuran;
 use App\Models\Pengiriman;
+use App\Models\StatusPengiriman;
+use App\Models\User;
 use App\Models\WakafItem;
 use Illuminate\Support\Facades\DB;
 
@@ -50,7 +52,11 @@ class DonaturImportService
                     'jenis_wakaf_dipilih' => array_unique(array_merge($donatur->jenis_wakaf_dipilih ?? [], $jenisWakafDipilih)),
                     'prayer_mode' => 'semua_donatur',
                     'doa_untuk_semua' => $data['doa_untuk_semua'] ?? null,
+                    'created_by' => auth()->id()
+                        ?? $donatur->created_by
+                        ?? User::query()->value('id'),
                 ]);
+                $donatur->refresh();
             } else {
                 $donatur = Donatur::create([
                     'kode_donatur' => $data['kode_donatur'],
@@ -66,12 +72,17 @@ class DonaturImportService
                     'jenis_wakaf_dipilih' => $jenisWakafDipilih,
                     'prayer_mode' => 'semua_donatur',
                     'doa_untuk_semua' => $data['doa_untuk_semua'] ?? null,
-                    'created_by' => auth()->id(),
+                    'created_by' => auth()->id() ?? User::query()->value('id'),
                 ]);
             }
 
-            // Generate and create wakaf items
-            $wakafItemsData = $donatur->generateWakafItems();
+            // Generate wakaf items HANYA sejumlah delta baris ini (bukan total kumulatif),
+            // supaya import ulang donatur yang sama tidak menggandakan item & pengiriman.
+            $wakafItemsData = $donatur->generateWakafItems([
+                'a5' => $currentA5,
+                'a6' => $currentA6,
+                'iqra' => $currentIqra,
+            ]);
             $newWakafItems = [];
             foreach ($wakafItemsData as $itemData) {
                 $wakafItem = WakafItem::create($itemData);
@@ -107,7 +118,7 @@ class DonaturImportService
                 return $jenisQuranMap;
             });
 
-            $defaultStatusId = \App\Models\StatusPengiriman::getDefaultStatusId();
+            $defaultStatusId = StatusPengiriman::getDefaultStatusId();
             if (! $defaultStatusId) {
                 throw new \Exception('Status pengiriman default tidak ditemukan.');
             }
