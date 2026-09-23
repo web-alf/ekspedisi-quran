@@ -79,6 +79,19 @@ qr-debug.*
 # Large log files (>1MB should be archived)
 storage/logs/*.log
 
+# Isi storage runtime (upload user, cache, session) — jangan di-commit.
+# Struktur folder dijaga lewat .gitkeep.
+/storage/app/public/*
+!/storage/app/public/.gitkeep
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/framework/testing/*
+!/storage/framework/cache/data/.gitkeep
+!/storage/framework/sessions/.gitkeep
+!/storage/framework/views/.gitkeep
+!/storage/framework/testing/.gitkeep
+
 # QR Code duplicates (keep only latest per resi)
 storage/app/public/qr-codes/*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].png
 
