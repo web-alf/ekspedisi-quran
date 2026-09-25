@@ -202,23 +202,8 @@
   onMount(async () => {
     // Load Leaflet dynamically and initialize the map
     try {
-      // Import Leaflet CSS first
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-      link.crossOrigin = '';
-      document.head.appendChild(link);
-      
-      // Wait for CSS to load
-      await new Promise((resolve) => {
-        if (link.sheet) {
-          resolve();
-        } else {
-          link.onload = resolve;
-        }
-      });
-      
+      // Leaflet CSS is bundled locally (resources/css/leaflet.css via app.js),
+      // so no CDN <link> is needed here — injecting one violates the site CSP.
       // Import Leaflet module
       const leafletModule = await import('leaflet');
       
