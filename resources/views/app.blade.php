@@ -65,7 +65,9 @@
         
         <!-- Preload Critical Resources -->
         <link rel="preload" href="{{ asset('images/logo-ekspedisi-quran.webp') }}" as="image" type="image/webp">
-        <link rel="preload" href="{{ asset('images/hero-ekspedisi-quran.webp') }}" as="image" type="image/webp">
+        @if (request()->routeIs('home'))
+            <link rel="preload" href="{{ asset('images/hero-ekspedisi-quran.webp') }}" as="image" type="image/webp">
+        @endif
         
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
