@@ -64,7 +64,14 @@
         <link rel="dns-prefetch" href="//fonts.gstatic.com">
         
         <!-- Preload Critical Resources -->
-        <link rel="preload" href="{{ asset('images/logo-ekspedisi-quran.webp') }}" as="image" type="image/webp">
+        @php
+            $preloadLogo = \App\Models\Setting::where('key', 'app_logo')->where('is_active', true)->value('value')
+                ?: 'images/logo-ekspedisi-quran.webp';
+            $preloadLogo = str_starts_with($preloadLogo, 'http') || str_starts_with($preloadLogo, '/')
+                ? $preloadLogo
+                : (str_starts_with($preloadLogo, 'images/') ? asset($preloadLogo) : asset('storage/'.$preloadLogo));
+        @endphp
+        <link rel="preload" href="{{ $preloadLogo }}" as="image">
         @if (request()->routeIs('home'))
             <link rel="preload" href="{{ asset('images/hero-ekspedisi-quran.webp') }}" as="image" type="image/webp">
         @endif
