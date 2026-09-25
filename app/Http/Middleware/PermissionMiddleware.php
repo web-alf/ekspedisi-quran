@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\RoleEnum;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -11,7 +12,7 @@ class PermissionMiddleware
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next, ...$permissions): Response
     {
@@ -44,6 +45,14 @@ class PermissionMiddleware
                 } else {
                     $flatPermissions[] = $permission;
                 }
+            }
+
+            // Super-admin lolos middleware ini tanpa bergantung pada isi tabel
+            // permissions. Penting karena hasAnyPermission() membaca DB langsung dan
+            // TIDAK melewati Gate::before, sehingga tanpa cabang ini super-admin bisa
+            // terkunci bila suatu permission belum di-seed.
+            if ($user->hasRole(RoleEnum::SUPER_ADMIN->value)) {
+                return $next($request);
             }
 
             if (! $user->hasAnyPermission($flatPermissions)) {
