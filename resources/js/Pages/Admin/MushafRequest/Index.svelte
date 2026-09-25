@@ -6,6 +6,7 @@
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import { can } from '../../../utils/permissions.js';
+  import { canonicalProvince, provinceFromGeoJson } from '../../../utils/provinceName.js';
   
   // Props from Inertia
   export let mushafRequests = { data: [], links: [], from: 0, to: 0, total: 0 };
@@ -232,77 +233,15 @@
     }).addTo(map);
     
     // Filter data for completed distributions only
-    let completedData = Array.isArray(mapData) ? mapData.filter(item => item.status === 'completed') : [];
-    
-    // If no valid data, add dummy data for demonstration
-    if (completedData.length === 0) {
-      completedData = [
-        {
-          id: 'dummy1',
-          nama_lembaga: 'Masjid Al-Hikmah (Demo)',
-          provinsi: 'Jawa Barat',
-          kota_kabupaten: 'Bandung',
-          lat: -6.9175,
-          lng: 107.6191,
-          status: 'completed',
-          jumlah_mushaf: 50,
-          nama_penerima: 'Masjid Al-Hikmah'
-        },
-        {
-          id: 'dummy2',
-          nama_lembaga: 'Pesantren Al-Falah (Demo)',
-          provinsi: 'Jawa Tengah',
-          kota_kabupaten: 'Semarang',
-          lat: -7.0051,
-          lng: 110.4381,
-          status: 'completed',
-          jumlah_mushaf: 100,
-          nama_penerima: 'Pesantren Al-Falah'
-        },
-        {
-          id: 'dummy3',
-          nama_lembaga: 'Masjid Baiturrahman (Demo)',
-          provinsi: 'Aceh',
-          kota_kabupaten: 'Banda Aceh',
-          lat: 5.5483,
-          lng: 95.3238,
-          status: 'completed',
-          jumlah_mushaf: 75,
-          nama_penerima: 'Masjid Baiturrahman'
-        },
-        {
-          id: 'dummy4',
-          nama_lembaga: 'Masjid Istiqlal (Demo)',
-          provinsi: 'DKI Jakarta',
-          kota_kabupaten: 'Jakarta Pusat',
-          lat: -6.1702,
-          lng: 106.8311,
-          status: 'completed',
-          jumlah_mushaf: 200,
-          nama_penerima: 'Masjid Istiqlal'
-        },
-        {
-          id: 'dummy5',
-          nama_lembaga: 'Masjid Raya Surabaya (Demo)',
-          provinsi: 'Jawa Timur',
-          kota_kabupaten: 'Surabaya',
-          lat: -7.2575,
-          lng: 112.7521,
-          status: 'completed',
-          jumlah_mushaf: 150,
-          nama_penerima: 'Masjid Raya Surabaya'
-        }
-      ];
-    }
+    const completedData = Array.isArray(mapData) ? mapData.filter(item => item.status === 'completed') : [];
     
     // Calculate total distribution by province
+    // Kunci provinsi dinormalkan agar ejaan berbeda tetap menyatu
     const distributionByProvince = {};
     completedData.forEach(item => {
-      const province = item.provinsi;
-      if (!distributionByProvince[province]) {
-        distributionByProvince[province] = 0;
-      }
-      distributionByProvince[province] += item.jumlah_mushaf;
+      const province = canonicalProvince(item.provinsi);
+      if (!province) return;
+      distributionByProvince[province] = (distributionByProvince[province] || 0) + item.jumlah_mushaf;
     });
     
     // Load GeoJSON provinsi Indonesia
@@ -319,9 +258,8 @@
         // Tambahkan layer GeoJSON dengan warna berdasarkan distribusi
         provinceLayer = L.geoJSON(data, {
           style: function(feature) {
-            // Ambil nama provinsi dari GeoJSON
-            // Perhatikan: perlu menyesuaikan properti sesuai dengan struktur file GeoJSON Anda
-            const provinceName = feature.properties.name || feature.properties.provinsi || feature.properties.NAME || feature.properties.Propinsi;
+            // Nama provinsi dari GeoJSON dinormalkan agar cocok dengan data
+            const provinceName = provinceFromGeoJson(feature.properties);
             
             // Dapatkan total distribusi untuk provinsi ini
             const totalDistribution = distributionByProvince[provinceName] || 0;
@@ -336,11 +274,11 @@
             };
           },
           onEachFeature: function(feature, layer) {
-            const provinceName = feature.properties.name || feature.properties.provinsi || feature.properties.NAME || feature.properties.Propinsi;
+            const provinceName = provinceFromGeoJson(feature.properties);
             const totalDistribution = distributionByProvince[provinceName] || 0;
             
-            // Calculate additional stats for this province
-            const provinceData = completedData.filter(item => item.provinsi === provinceName);
+            // Calculate additional stats for this province (nama dinormalkan juga)
+            const provinceData = completedData.filter(item => canonicalProvince(item.provinsi) === provinceName);
             const totalLembaga = new Set(provinceData.map(item => item.nama_penerima)).size;
             const totalShipments = provinceData.length;
             

@@ -6,6 +6,7 @@
   import VideoSection from '@/Components/VideoSection.svelte';
   import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import { formatPageTitle, pageTitles, generateMetaDescription } from '@/utils/seo.js';
+  import { canonicalProvince, provinceFromGeoJson } from '@/utils/provinceName.js';
   
   // Add missing props declarations
   export const errors = {};
@@ -27,6 +28,11 @@
   $: enabledSections = Array.isArray(sectionOrder)
     ? sectionOrder.filter(s => s.enabled)
     : [];
+
+  // Apakah ada sebaran nyata untuk dipetakan. Dipakai untuk menampilkan empty state
+  // yang jujur — sebelumnya peta mengisi dirinya dengan data contoh bila kosong.
+  $: hasDistributionData = Array.isArray(mapData)
+    && mapData.some(item => item.status === 'diterima' || item.status === 'completed');
 
   // SEO data
   const pageTitle = formatPageTitle(pageTitles.home);
@@ -200,6 +206,13 @@
   }
   
   onMount(async () => {
+    // Tidak ada sebaran → peta tidak dirender sama sekali (lihat empty state),
+    // jadi jangan inisialisasi Leaflet. Tanpa penjagaan ini waitForContainer
+    // akan menunggu elemen yang tidak pernah ada.
+    if (!hasDistributionData) {
+      return;
+    }
+
     // Load Leaflet dynamically and initialize the map
     try {
       // Leaflet CSS is bundled locally (resources/css/leaflet.css via app.js),
@@ -412,80 +425,20 @@
       maxZoom: 18
     }).addTo(map);
     
-    // Gunakan data pengiriman 'diterima'; jika fallback server mengirim 'completed', tetap tampilkan
-    let completedData = Array.isArray(mapData)
+    // Data sebaran sebenarnya. Status 'diterima' dipakai bila server mengirimnya;
+    // 'completed' adalah status yang dipakai saat ini.
+    const completedData = Array.isArray(mapData)
       ? mapData.filter(item => item.status === 'diterima' || item.status === 'completed')
       : [];
     
-    // If no valid data, add dummy data for demonstration
-    if (completedData.length === 0) {
-      completedData = [
-        {
-          id: 'dummy1',
-          nama_lembaga: 'Masjid Al-Hikmah (Demo)',
-          provinsi: 'Jawa Barat',
-          kota_kabupaten: 'Bandung',
-          lat: -6.9175,
-          lng: 107.6191,
-          status: 'completed',
-          jumlah_mushaf: 50,
-          nama_penerima: 'Masjid Al-Hikmah'
-        },
-        {
-          id: 'dummy2',
-          nama_lembaga: 'Pesantren Al-Falah (Demo)',
-          provinsi: 'Jawa Tengah',
-          kota_kabupaten: 'Semarang',
-          lat: -7.0051,
-          lng: 110.4381,
-          status: 'completed',
-          jumlah_mushaf: 100,
-          nama_penerima: 'Pesantren Al-Falah'
-        },
-        {
-          id: 'dummy3',
-          nama_lembaga: 'Masjid Baiturrahman (Demo)',
-          provinsi: 'Aceh',
-          kota_kabupaten: 'Banda Aceh',
-          lat: 5.5483,
-          lng: 95.3238,
-          status: 'completed',
-          jumlah_mushaf: 75,
-          nama_penerima: 'Masjid Baiturrahman'
-        },
-        {
-          id: 'dummy4',
-          nama_lembaga: 'Masjid Istiqlal (Demo)',
-          provinsi: 'DKI Jakarta',
-          kota_kabupaten: 'Jakarta Pusat',
-          lat: -6.1702,
-          lng: 106.8311,
-          status: 'completed',
-          jumlah_mushaf: 200,
-          nama_penerima: 'Masjid Istiqlal'
-        },
-        {
-          id: 'dummy5',
-          nama_lembaga: 'Masjid Raya Surabaya (Demo)',
-          provinsi: 'Jawa Timur',
-          kota_kabupaten: 'Surabaya',
-          lat: -7.2575,
-          lng: 112.7521,
-          status: 'completed',
-          jumlah_mushaf: 150,
-          nama_penerima: 'Masjid Raya Surabaya'
-        }
-      ];
-    }
-    
     // Calculate total distribution by province
+    // Kunci provinsi dinormalkan supaya ejaan berbeda tetap menyatu
+    // ("DI YOGYAKARTA" vs "DAERAH ISTIMEWA YOGYAKARTA").
     const distributionByProvince = {};
     completedData.forEach(item => {
-      const province = item.provinsi;
-      if (!distributionByProvince[province]) {
-        distributionByProvince[province] = 0;
-      }
-      distributionByProvince[province] += item.jumlah_mushaf;
+      const province = canonicalProvince(item.provinsi);
+      if (!province) return;
+      distributionByProvince[province] = (distributionByProvince[province] || 0) + item.jumlah_mushaf;
     });
     
     // Load GeoJSON provinsi Indonesia
@@ -502,9 +455,8 @@
         // Tambahkan layer GeoJSON dengan warna berdasarkan distribusi
         provinceLayer = L.geoJSON(data, {
           style: function(feature) {
-            // Ambil nama provinsi dari GeoJSON
-            // Perhatikan: perlu menyesuaikan properti sesuai dengan struktur file GeoJSON Anda
-            const provinceName = feature.properties.name || feature.properties.provinsi || feature.properties.NAME || feature.properties.Propinsi;
+            // Nama provinsi dari GeoJSON dinormalkan agar cocok dengan data
+            const provinceName = provinceFromGeoJson(feature.properties);
             
             // Dapatkan total distribusi untuk provinsi ini
             const totalDistribution = distributionByProvince[provinceName] || 0;
@@ -519,11 +471,11 @@
             };
           },
           onEachFeature: function(feature, layer) {
-            const provinceName = feature.properties.name || feature.properties.provinsi || feature.properties.NAME || feature.properties.Propinsi;
+            const provinceName = provinceFromGeoJson(feature.properties);
             const totalDistribution = distributionByProvince[provinceName] || 0;
             
-            // Calculate additional stats for this province
-            const provinceData = completedData.filter(item => item.provinsi === provinceName);
+            // Calculate additional stats for this province (nama dinormalkan juga)
+            const provinceData = completedData.filter(item => canonicalProvince(item.provinsi) === provinceName);
             const totalLembaga = new Set(provinceData.map(item => item.nama_penerima)).size;
             const totalShipments = provinceData.length;
             
@@ -856,16 +808,32 @@
                   <p>Visualisasi distribusi Al-Qur'an yang telah selesai. Warna pada peta menunjukkan intensitas distribusi, semakin gelap warna menandakan semakin tinggi jumlah Al-Qur'an yang telah disalurkan. Klik pada provinsi untuk melihat detail.</p>
                 </div>
 
-                <!-- Map Container -->
-                <div id="distribution-map" class="w-full h-[400px] rounded-lg border border-gray-200 bg-gray-100 relative overflow-hidden">
-                  <!-- Loading indicator -->
-                  <div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg z-10">
-                    <div class="text-center">
-                      <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#eb3434]"></div>
-                      <p class="mt-4 text-gray-600">Memuat peta distribusi...</p>
+                {#if !hasDistributionData}
+                  <!-- Empty state: peta disembunyikan agar tidak menampilkan sebaran kosong/palsu -->
+                  <div class="w-full h-[400px] rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center">
+                    <div class="text-center px-6 max-w-md">
+                      <div class="mx-auto w-14 h-14 rounded-full bg-white border border-gray-200 flex items-center justify-center mb-4">
+                        <svg class="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                        </svg>
+                      </div>
+                      <p class="text-gray-700 font-medium mb-1">Belum ada distribusi yang selesai</p>
+                      <p class="text-gray-500 text-sm">Peta akan terisi otomatis begitu ada permintaan mushaf yang rampung disalurkan ke lembaga penerima.</p>
                     </div>
                   </div>
-                </div>
+                {:else}
+                  <!-- Map Container -->
+                  <div id="distribution-map" class="w-full h-[400px] rounded-lg border border-gray-200 bg-gray-100 relative overflow-hidden">
+                    <!-- Loading indicator -->
+                    <div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg z-10">
+                      <div class="text-center">
+                        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#eb3434]"></div>
+                        <p class="mt-4 text-gray-600">Memuat peta distribusi...</p>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
 
                 <!-- Legend will be added here by JavaScript -->
               </div>
