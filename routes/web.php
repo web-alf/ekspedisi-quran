@@ -1,24 +1,54 @@
 <?php
 
+use App\Http\Controllers\Admin\BoxBulkUpdateController;
+use App\Http\Controllers\Admin\BoxTrackingController;
+use App\Http\Controllers\Admin\BulkOperationsAnalyticsController;
+use App\Http\Controllers\Admin\CacheController;
+use App\Http\Controllers\Admin\CertificateController;
+use App\Http\Controllers\Admin\CertificateTemplateController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DonaturController;
+use App\Http\Controllers\Admin\FaqController;
+use App\Http\Controllers\Admin\GalleryController;
 use App\Http\Controllers\Admin\LandingContent\ContactSettingsController;
+// use App\Http\Controllers\Admin\SettingController; // Removed - All settings now under Landing Content
 use App\Http\Controllers\Admin\LandingContent\GeneralSettingsController;
 use App\Http\Controllers\Admin\LandingContent\LandingSettingsController;
 use App\Http\Controllers\Admin\LandingContent\LegalSettingsController;
 use App\Http\Controllers\Admin\LandingContent\SeoSettingsController;
 use App\Http\Controllers\Admin\LandingContent\SocialSettingsController;
+use App\Http\Controllers\Admin\MonitoringDashboardController;
 use App\Http\Controllers\Admin\PengirimanController;
 use App\Http\Controllers\Admin\PengirimanTrackingController;
 use App\Http\Controllers\Admin\PermissionController;
-// use App\Http\Controllers\Admin\SettingController; // Removed - All settings now under Landing Content
+use App\Http\Controllers\Admin\QRCodeController;
+use App\Http\Controllers\Admin\QueryOptimizationController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\TestimonialController;
+use App\Http\Controllers\Admin\ThermalPrintController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VideoController;
+use App\Http\Controllers\Admin\WakafItemsController;
+use App\Http\Controllers\Api\WilayahController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Public\LegalController;
+use App\Http\Controllers\Public\MushafRequestController;
+use App\Http\Controllers\Public\MushafTrackingController;
 use App\Http\Controllers\Public\TrackingController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\Supervisor\WarehouseMonitorController;
+use App\Http\Controllers\Warehouse\BoxScannerController;
+use App\Http\Controllers\Warehouse\JobMonitorController;
+use App\Http\Controllers\Warehouse\PackingController;
+use App\Http\Controllers\Warehouse\PerformanceController;
+use App\Models\Faq;
+use App\Models\Gallery;
+use App\Models\MushafRequest;
+use App\Models\Setting;
+use App\Models\Testimonial;
+use App\Models\Video;
+use App\Services\LandingSectionRegistry;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -28,7 +58,7 @@ require __DIR__.'/public-certificate.php';
 // Root route - Landing page (accessible untuk semua user)
 Route::get('/', function () {
     // Get settings for landing page
-    $settings = \App\Models\Setting::where('is_public', true)
+    $settings = Setting::where('is_public', true)
         ->where('is_active', true)
         ->whereIn('group', ['landing', 'contact', 'social', 'general', 'gallery', 'faq', 'testimonial', 'video'])
         ->pluck('value', 'key');
@@ -46,7 +76,7 @@ Route::get('/', function () {
     if ($settings->get('landing_map_enabled', true)) {
         // ✅ Show MushafRequest with status 'completed' using APPROVED quantities
         // This ensures consistency with admin page
-        $mapData = \App\Models\MushafRequest::where('status', 'completed')
+        $mapData = MushafRequest::where('status', 'completed')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->select('id', 'nama_lembaga', 'provinsi', 'kota_kabupaten', 'latitude', 'longitude', 'status',
@@ -78,7 +108,7 @@ Route::get('/', function () {
     // Only calculate statistics if enabled in settings
     if ($settings->get('landing_stats_enabled', true)) {
         // Stat provinsi/kota/lembaga tetap dari mushaf_requests completed agar representasi sebaran lembaga
-        $requestsAgg = \App\Models\MushafRequest::where('status', 'completed')
+        $requestsAgg = MushafRequest::where('status', 'completed')
             ->selectRaw('
                 COUNT(DISTINCT provinsi) as provinces,
                 COUNT(DISTINCT kota_kabupaten) as cities,
@@ -87,7 +117,7 @@ Route::get('/', function () {
             ->first();
 
         // Total mushaf tersalurkan dari pengiriman status diterima
-        $distributed = \Illuminate\Support\Facades\DB::table('pengiriman')
+        $distributed = DB::table('pengiriman')
             ->join('status_pengiriman', 'pengiriman.status_id', '=', 'status_pengiriman.id')
             ->where('status_pengiriman.slug', 'diterima')
             ->sum('pengiriman.jumlah_quran');
@@ -101,22 +131,22 @@ Route::get('/', function () {
     }
 
     // Get content from database
-    $testimonials = \App\Models\Testimonial::active()->ordered()->get();
-    $galleries = \App\Models\Gallery::active()->ordered()->get();
-    $videos = \App\Models\Video::active()->ordered()->get();
-    $faqs = \App\Models\Faq::active()->ordered()->get();
+    $testimonials = Testimonial::active()->ordered()->get();
+    $galleries = Gallery::active()->ordered()->get();
+    $videos = Video::active()->ordered()->get();
+    $faqs = Faq::active()->ordered()->get();
 
     // Build section order with fallback to defaults
-    $sectionOrderValue = \App\Models\Setting::get('landing_section_order');
+    $sectionOrderValue = Setting::get('landing_section_order');
     $sectionOrder = [];
     if (! empty($sectionOrderValue)) {
         $decoded = json_decode($sectionOrderValue, true);
         if (is_array($decoded)) {
-            $sectionOrder = \App\Services\LandingSectionRegistry::validate($decoded);
+            $sectionOrder = LandingSectionRegistry::validate($decoded);
         }
     }
     if (empty($sectionOrder)) {
-        $sectionOrder = \App\Services\LandingSectionRegistry::getDefaultOrder();
+        $sectionOrder = LandingSectionRegistry::getDefaultOrder();
     }
 
     return Inertia::render('Landing', [
@@ -143,17 +173,17 @@ Route::middleware(['throttle:tracking-public', 'rate-limit-handler'])->group(fun
 
 // 📖 Public Mushaf Request Routes (enhanced rate limiting)
 Route::middleware(['throttle:mushaf-request', 'rate-limit-handler'])->group(function () {
-    Route::get('/mushaf-request', [App\Http\Controllers\Public\MushafRequestController::class, 'index'])->name('mushaf-request');
-    Route::post('/mushaf-request', [App\Http\Controllers\Public\MushafRequestController::class, 'store'])->name('mushaf-request.store');
-    Route::get('/mushaf-request/success/{no_request}', [App\Http\Controllers\Public\MushafRequestController::class, 'success'])->name('mushaf-request.success');
-    Route::post('/mushaf-request/check-status', [App\Http\Controllers\Public\MushafRequestController::class, 'checkStatus'])->name('mushaf-request.check-status');
+    Route::get('/mushaf-request', [MushafRequestController::class, 'index'])->name('mushaf-request');
+    Route::post('/mushaf-request', [MushafRequestController::class, 'store'])->name('mushaf-request.store');
+    Route::get('/mushaf-request/success/{no_request}', [MushafRequestController::class, 'success'])->name('mushaf-request.success');
+    Route::post('/mushaf-request/check-status', [MushafRequestController::class, 'checkStatus'])->name('mushaf-request.check-status');
 });
 
 // 📋 Public Mushaf Tracking Routes (enhanced rate limiting)
 Route::middleware(['throttle:tracking-public', 'rate-limit-handler'])->group(function () {
-    Route::get('/mushaf-tracking', [App\Http\Controllers\Public\MushafTrackingController::class, 'index'])->name('mushaf-tracking');
-    Route::get('/mushaf-tracking/{no_request}', [App\Http\Controllers\Public\MushafTrackingController::class, 'track'])->name('mushaf-tracking.show');
-    Route::post('/mushaf-tracking/check', [App\Http\Controllers\Public\MushafTrackingController::class, 'apiCheck'])->name('mushaf-tracking.check');
+    Route::get('/mushaf-tracking', [MushafTrackingController::class, 'index'])->name('mushaf-tracking');
+    Route::get('/mushaf-tracking/{no_request}', [MushafTrackingController::class, 'track'])->name('mushaf-tracking.show');
+    Route::post('/mushaf-tracking/check', [MushafTrackingController::class, 'apiCheck'])->name('mushaf-tracking.check');
 });
 
 // 📄 Legal Pages Routes (dengan rate limiting)
@@ -170,14 +200,14 @@ Route::prefix('api/tracking')->name('api.tracking.')->middleware(['throttle:trac
 
 // 🗺️ Wilayah Indonesia API Routes (enhanced rate limiting)
 Route::prefix('api/wilayah')->name('api.wilayah.')->middleware(['throttle:wilayah-public', 'rate-limit-handler'])->group(function () {
-    Route::get('/provinces', [App\Http\Controllers\Api\WilayahController::class, 'provinces'])->name('provinces');
-    Route::get('/regencies/{provinceId}', [App\Http\Controllers\Api\WilayahController::class, 'regencies'])->name('regencies');
-    Route::get('/districts/{regencyId}', [App\Http\Controllers\Api\WilayahController::class, 'districts'])->name('districts');
-    Route::get('/villages/{districtId}', [App\Http\Controllers\Api\WilayahController::class, 'villages'])->name('villages');
+    Route::get('/provinces', [WilayahController::class, 'provinces'])->name('provinces');
+    Route::get('/regencies/{provinceId}', [WilayahController::class, 'regencies'])->name('regencies');
+    Route::get('/districts/{regencyId}', [WilayahController::class, 'districts'])->name('districts');
+    Route::get('/villages/{districtId}', [WilayahController::class, 'villages'])->name('villages');
 });
 
 // Admin only cache management (outside public rate limit group)
-Route::post('api/wilayah/clear-cache', [App\Http\Controllers\Api\WilayahController::class, 'clearCache'])
+Route::post('api/wilayah/clear-cache', [WilayahController::class, 'clearCache'])
     ->middleware(['auth', 'permission:system.monitor'])
     ->name('api.wilayah.clear-cache');
 
@@ -265,19 +295,19 @@ Route::middleware(['auth'])->group(function () {
                 ->name('donatur.template');
 
             // Wakaf Items Management - Nested under donatur
-            Route::get('donatur/{donatur}/wakaf-items', [\App\Http\Controllers\Admin\WakafItemsController::class, 'index'])
+            Route::get('donatur/{donatur}/wakaf-items', [WakafItemsController::class, 'index'])
                 ->name('donatur.wakaf-items.index');
-            Route::post('donatur/{donatur}/wakaf-items', [\App\Http\Controllers\Admin\WakafItemsController::class, 'store'])
+            Route::post('donatur/{donatur}/wakaf-items', [WakafItemsController::class, 'store'])
                 ->name('donatur.wakaf-items.store')
                 ->middleware('permission:donatur.update');
             // Bulk operations must come BEFORE {wakafItem} routes to avoid conflicts
-            Route::delete('donatur/{donatur}/wakaf-items/bulk-destroy', [\App\Http\Controllers\Admin\WakafItemsController::class, 'bulkDestroy'])
+            Route::delete('donatur/{donatur}/wakaf-items/bulk-destroy', [WakafItemsController::class, 'bulkDestroy'])
                 ->name('donatur.wakaf-items.bulk-destroy')
                 ->middleware(['permission:donatur.update']);
-            Route::patch('donatur/{donatur}/wakaf-items/{wakafItem}', [\App\Http\Controllers\Admin\WakafItemsController::class, 'update'])
+            Route::patch('donatur/{donatur}/wakaf-items/{wakafItem}', [WakafItemsController::class, 'update'])
                 ->name('donatur.wakaf-items.update')
                 ->middleware('permission:donatur.update');
-            Route::delete('donatur/{donatur}/wakaf-items/{wakafItem}', [\App\Http\Controllers\Admin\WakafItemsController::class, 'destroy'])
+            Route::delete('donatur/{donatur}/wakaf-items/{wakafItem}', [WakafItemsController::class, 'destroy'])
                 ->name('donatur.wakaf-items.destroy')
                 ->middleware('permission:donatur.update');
         });
@@ -332,43 +362,43 @@ Route::middleware(['auth'])->group(function () {
         })->name('qr.scanner');
 
         // 📱 QR Code Management
-        Route::post('qr/generate/{pengiriman}', [App\Http\Controllers\Admin\QRCodeController::class, 'generate'])
+        Route::post('qr/generate/{pengiriman}', [QRCodeController::class, 'generate'])
             ->middleware('permission:qr.generate|warehouse.qr.generate')
             ->name('qr.generate');
-        Route::get('qr/display/{pengiriman}', [App\Http\Controllers\Admin\QRCodeController::class, 'display'])
+        Route::get('qr/display/{pengiriman}', [QRCodeController::class, 'display'])
             ->middleware('permission:qr.generate|warehouse.qr.generate')
             ->name('qr.display');
-        Route::get('qr/download/{pengiriman}', [App\Http\Controllers\Admin\QRCodeController::class, 'download'])
+        Route::get('qr/download/{pengiriman}', [QRCodeController::class, 'download'])
             ->middleware('permission:qr.generate|warehouse.qr.generate')
             ->name('qr.download');
-        Route::post('qr/bulk-generate', [App\Http\Controllers\Admin\QRCodeController::class, 'bulkGenerate'])
+        Route::post('qr/bulk-generate', [QRCodeController::class, 'bulkGenerate'])
             ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
             ->name('qr.bulk-generate');
-        Route::post('qr/verify', [App\Http\Controllers\Admin\QRCodeController::class, 'verifyQRDataAPI'])
+        Route::post('qr/verify', [QRCodeController::class, 'verifyQRDataAPI'])
             ->middleware('permission:qr.verify|warehouse.qr.verify')
             ->name('qr.verify');
 
         // 🖨️ Thermal Print Routes - Custom 78×100mm Labels
         Route::prefix('thermal-print')->name('thermal-print.')->middleware(['permission:qr.generate|warehouse.qr.generate'])->group(function () {
-            Route::get('/single/{pengiriman}', [App\Http\Controllers\Admin\ThermalPrintController::class, 'printSingle'])
+            Route::get('/single/{pengiriman}', [ThermalPrintController::class, 'printSingle'])
                 ->middleware(['permission:qr.generate|warehouse.qr.generate|warehouse.qr.bulk_generate'])
                 ->name('single');
-            Route::get('/bulk', [App\Http\Controllers\Admin\ThermalPrintController::class, 'bulkIndex'])
+            Route::get('/bulk', [ThermalPrintController::class, 'bulkIndex'])
                 ->middleware(['permission:warehouse.qr.bulk_generate'])
                 ->name('bulk.index');
-            Route::post('/bulk', [App\Http\Controllers\Admin\ThermalPrintController::class, 'printBulk'])
+            Route::post('/bulk', [ThermalPrintController::class, 'printBulk'])
                 ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
                 ->name('bulk');
-            Route::get('/preview', [App\Http\Controllers\Admin\ThermalPrintController::class, 'preview'])
+            Route::get('/preview', [ThermalPrintController::class, 'preview'])
                 ->middleware(['auth'])
                 ->name('preview');
 
             // Box Label Routes
-            Route::get('/box/{packingBox}', [App\Http\Controllers\Admin\ThermalPrintController::class, 'printBox'])
+            Route::get('/box/{packingBox}', [ThermalPrintController::class, 'printBox'])
                 ->name('box');
-            Route::get('/box/preview', [App\Http\Controllers\Admin\ThermalPrintController::class, 'previewBox'])
+            Route::get('/box/preview', [ThermalPrintController::class, 'previewBox'])
                 ->name('box.preview');
-            Route::post('/box/bulk', [App\Http\Controllers\Admin\ThermalPrintController::class, 'printBoxBulk'])
+            Route::post('/box/bulk', [ThermalPrintController::class, 'printBoxBulk'])
                 ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
                 ->name('box.bulk');
         });
@@ -395,19 +425,19 @@ Route::middleware(['auth'])->group(function () {
                 ->name('notification.read');
 
             // Packing Process
-            Route::get('/packing', [App\Http\Controllers\Warehouse\PackingController::class, 'index'])
+            Route::get('/packing', [PackingController::class, 'index'])
                 ->middleware('permission:warehouse.packing.view')
                 ->name('packing.index');
-            Route::post('/packing/scan', [App\Http\Controllers\Warehouse\PackingController::class, 'scanItem'])
+            Route::post('/packing/scan', [PackingController::class, 'scanItem'])
                 ->middleware('permission:warehouse.packing.scan')
                 ->name('packing.scan');
-            Route::post('/packing/scan-confirm', [App\Http\Controllers\Warehouse\PackingController::class, 'processWithJenisConfirmation'])
+            Route::post('/packing/scan-confirm', [PackingController::class, 'processWithJenisConfirmation'])
                 ->middleware('permission:warehouse.packing.scan')
                 ->name('packing.scan-confirm');
-            Route::post('/packing/box/{box}/seal', [App\Http\Controllers\Warehouse\PackingController::class, 'sealBox'])
+            Route::post('/packing/box/{box}/seal', [PackingController::class, 'sealBox'])
                 ->middleware('permission:warehouse.packing.seal|warehouse.boxes.seal')
                 ->name('packing.seal-box');
-            Route::get('/packing/history', [App\Http\Controllers\Warehouse\PackingController::class, 'history'])
+            Route::get('/packing/history', [PackingController::class, 'history'])
                 ->middleware('permission:warehouse.packing.view')
                 ->name('packing.history');
 
@@ -439,99 +469,99 @@ Route::middleware(['auth'])->group(function () {
                 ->name('boxes-ready-for-seal');
 
             // Performance
-            Route::get('/performance', [App\Http\Controllers\Warehouse\PerformanceController::class, 'index'])
+            Route::get('/performance', [PerformanceController::class, 'index'])
                 ->middleware('permission:warehouse.performance.view')
                 ->name('performance');
 
             // Box Scanner Routes
-            Route::get('/box-scanner', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'index'])
+            Route::get('/box-scanner', [BoxScannerController::class, 'index'])
                 ->name('box-scanner')
                 ->middleware('permission:warehouse.boxes.view');
 
-            Route::post('/box-scanner/scan', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'scanBox'])
+            Route::post('/box-scanner/scan', [BoxScannerController::class, 'scanBox'])
                 ->name('box-scanner.scan')
                 ->middleware('permission:warehouse.qr.scan|warehouse.boxes.view');
 
-            Route::post('/box-scanner/update-status', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'updateStatus'])
+            Route::post('/box-scanner/update-status', [BoxScannerController::class, 'updateStatus'])
                 ->name('box-scanner.update-status')
                 ->middleware('permission:warehouse.box.update_any');
 
-            Route::post('/box-scanner/set-mushaf-address', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'setMushafRequestAddress'])
+            Route::post('/box-scanner/set-mushaf-address', [BoxScannerController::class, 'setMushafRequestAddress'])
                 ->name('box-scanner.set-mushaf-address')
                 ->middleware('permission:warehouse.box.update_any');
 
             // Bulk Operations Routes
-            Route::post('/box-scanner/bulk-update-status', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'bulkUpdateStatus'])
+            Route::post('/box-scanner/bulk-update-status', [BoxScannerController::class, 'bulkUpdateStatus'])
                 ->name('box-scanner.bulk-update-status')
                 ->middleware('permission:warehouse.box.update_any');
 
-            Route::post('/box-scanner/bulk-box-operation', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'bulkBoxOperation'])
+            Route::post('/box-scanner/bulk-box-operation', [BoxScannerController::class, 'bulkBoxOperation'])
                 ->name('box-scanner.bulk-box-operation')
                 ->middleware('permission:warehouse.box.update_any');
 
             // Job Progress Monitoring Routes
-            Route::get('/job-progress/{job_id}', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'getJobProgress'])
+            Route::get('/job-progress/{job_id}', [BoxScannerController::class, 'getJobProgress'])
                 ->name('job-progress')
                 ->middleware('permission:warehouse.tasks.view');
 
-            Route::get('/job-history', [App\Http\Controllers\Warehouse\BoxScannerController::class, 'getJobHistory'])
+            Route::get('/job-history', [BoxScannerController::class, 'getJobHistory'])
                 ->name('job-history')
                 ->middleware('permission:warehouse.tasks.view');
 
             // Job Monitor Dashboard
-            Route::get('/job-monitor', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'index'])
+            Route::get('/job-monitor', [JobMonitorController::class, 'index'])
                 ->name('job-monitor')
                 ->middleware('permission:warehouse.tasks.view');
 
-            Route::post('/job-monitor/progress', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'getProgress'])
+            Route::post('/job-monitor/progress', [JobMonitorController::class, 'getProgress'])
                 ->name('job-monitor.progress')
                 ->middleware('permission:warehouse.tasks.view');
 
-            Route::post('/job-monitor/cancel', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'cancelJob'])
+            Route::post('/job-monitor/cancel', [JobMonitorController::class, 'cancelJob'])
                 ->name('job-monitor.cancel')
                 ->middleware('permission:warehouse.tasks.update');
 
-            Route::post('/job-monitor/retry', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'retryJob'])
+            Route::post('/job-monitor/retry', [JobMonitorController::class, 'retryJob'])
                 ->name('job-monitor.retry')
                 ->middleware('permission:warehouse.tasks.update');
 
-            Route::get('/job-monitor/details/{job_id}', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'getJobDetails'])
+            Route::get('/job-monitor/details/{job_id}', [JobMonitorController::class, 'getJobDetails'])
                 ->name('job-monitor.details')
                 ->middleware('permission:warehouse.tasks.view');
 
-            Route::get('/job-monitor/stats', [App\Http\Controllers\Warehouse\JobMonitorController::class, 'getStats'])
+            Route::get('/job-monitor/stats', [JobMonitorController::class, 'getStats'])
                 ->name('job-monitor.stats')
                 ->middleware('permission:warehouse.tasks.view');
         });
 
         // 👨‍💼 Supervisor Monitoring Routes (Permission-based access)
         Route::prefix('supervisor')->name('supervisor.')->middleware(['permission:supervisor.warehouse.monitor'])->group(function () {
-            Route::get('/warehouse-monitor', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'index'])
+            Route::get('/warehouse-monitor', [WarehouseMonitorController::class, 'index'])
                 ->middleware('permission:supervisor.dashboard|supervisor.warehouse.monitor')
                 ->name('warehouse-monitor');
-            Route::get('/warehouse-monitor/data', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'getData'])
+            Route::get('/warehouse-monitor/data', [WarehouseMonitorController::class, 'getData'])
                 ->middleware('permission:supervisor.dashboard|supervisor.warehouse.monitor')
                 ->name('warehouse-monitor.data');
-            Route::get('/warehouse-monitor/performance', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'getPerformanceData'])
+            Route::get('/warehouse-monitor/performance', [WarehouseMonitorController::class, 'getPerformanceData'])
                 ->middleware('permission:supervisor.performance.view|supervisor.dashboard')
                 ->name('warehouse-monitor.performance');
-            Route::post('/warehouse-monitor/export', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'exportPerformanceData'])
+            Route::post('/warehouse-monitor/export', [WarehouseMonitorController::class, 'exportPerformanceData'])
                 ->middleware('permission:supervisor.performance.reports')
                 ->name('warehouse-monitor.export');
-            Route::post('/redistribute/{task}', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'redistributeTask'])
+            Route::post('/redistribute/{task}', [WarehouseMonitorController::class, 'redistributeTask'])
                 ->middleware('permission:supervisor.warehouse.redistribute')
                 ->name('redistribute');
-            Route::get('/performance-report', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'performanceReport'])
+            Route::get('/performance-report', [WarehouseMonitorController::class, 'performanceReport'])
                 ->middleware('permission:supervisor.performance.reports')
                 ->name('performance-report');
-            Route::post('/export-performance', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'exportPerformanceData'])
+            Route::post('/export-performance', [WarehouseMonitorController::class, 'exportPerformanceData'])
                 ->middleware('permission:supervisor.performance.reports')
                 ->name('export-performance');
-            Route::delete('/warehouse-monitor/task/{task}/delete', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'deleteTask'])
+            Route::delete('/warehouse-monitor/task/{task}/delete', [WarehouseMonitorController::class, 'deleteTask'])
                 ->middleware('permission:supervisor.warehouse.assign')
                 ->name('warehouse-monitor.delete-task');
             // NEW SYSTEM: Target-only assignment
-            Route::post('/assign-target', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'assignTargetToUser'])
+            Route::post('/assign-target', [WarehouseMonitorController::class, 'assignTargetToUser'])
                 ->middleware('permission:supervisor.warehouse.assign')
                 ->name('assign-target');
 
@@ -540,10 +570,10 @@ Route::middleware(['auth'])->group(function () {
                 return redirect()->route('admin.supervisor.warehouse-monitor')
                     ->with('info', 'Manual assignment telah diganti dengan sistem target assignment.');
             })->name('manual-assignment');
-            Route::post('/assign-items', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'assignItems'])
+            Route::post('/assign-items', [WarehouseMonitorController::class, 'assignItems'])
                 ->middleware('permission:supervisor.warehouse.assign')
                 ->name('assign-items');
-            Route::post('/unassign-items', [App\Http\Controllers\Supervisor\WarehouseMonitorController::class, 'unassignItems'])
+            Route::post('/unassign-items', [WarehouseMonitorController::class, 'unassignItems'])
                 ->middleware('permission:supervisor.warehouse.assign')
                 ->name('unassign-items');
         });
@@ -554,8 +584,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('pengiriman.status-info-alt');
 
         // 📖 Mushaf Request Management
+        // parameter 'mushafRequest' disamakan dengan nama route param di bawah &
+        // argumen authorizeResource() di controller; tanpa ini route show memakai
+        // default {mushaf_request} sehingga policy gagal dan semua role kena 403.
         Route::resource('mushaf-requests', App\Http\Controllers\Admin\MushafRequestController::class)
             ->only(['index', 'show'])
+            ->parameters(['mushaf-requests' => 'mushafRequest'])
             ->middleware(['permission:mushaf-requests.read']);
         Route::patch('mushaf-requests/{mushafRequest}/status', [App\Http\Controllers\Admin\MushafRequestController::class, 'updateStatus'])
             ->middleware('permission:mushaf-requests.update|mushaf-requests.approve|mushaf-requests.reject')
@@ -596,61 +630,61 @@ Route::middleware(['auth'])->group(function () {
 
         // 📄 Certificate Management (On-Demand Token-Based)
         Route::prefix('certificates')->name('certificates.')->group(function () {
-            Route::get('/', [App\Http\Controllers\Admin\CertificateController::class, 'index'])
+            Route::get('/', [CertificateController::class, 'index'])
                 ->middleware('permission:certificates.read')
                 ->name('index');
-            Route::post('/generate/batch/{wakafBatch}', [App\Http\Controllers\Admin\CertificateController::class, 'generateForBatch'])
+            Route::post('/generate/batch/{wakafBatch}', [CertificateController::class, 'generateForBatch'])
                 ->middleware('permission:certificates.create')
                 ->name('generate-for-batch');
-            Route::post('/regenerate/batch/{wakafBatch}', [App\Http\Controllers\Admin\CertificateController::class, 'regenerateForBatch'])
+            Route::post('/regenerate/batch/{wakafBatch}', [CertificateController::class, 'regenerateForBatch'])
                 ->middleware('permission:certificates.create')
                 ->name('regenerate-for-batch');
 
             // New batch certificate with multiple wakif
-            Route::post('/generate-batch-certificate/{wakafBatch}', [App\Http\Controllers\Admin\CertificateController::class, 'generateBatchCertificate'])
+            Route::post('/generate-batch-certificate/{wakafBatch}', [CertificateController::class, 'generateBatchCertificate'])
                 ->middleware('permission:certificates.create')
                 ->name('generate-batch-certificate');
-            Route::get('/batches-ready-for-certificate', [App\Http\Controllers\Admin\CertificateController::class, 'getBatchesReadyForCertificate'])
+            Route::get('/batches-ready-for-certificate', [CertificateController::class, 'getBatchesReadyForCertificate'])
                 ->middleware('permission:certificates.read')
                 ->name('batches-ready-for-certificate');
 
             // Bulk and consolidated certificate generation (background jobs)
-            Route::post('/generate-bulk', [App\Http\Controllers\Admin\CertificateController::class, 'generateBulkCertificates'])
+            Route::post('/generate-bulk', [CertificateController::class, 'generateBulkCertificates'])
                 ->middleware('permission:certificates.generate')
                 ->name('generate-bulk');
-            Route::post('/generate-consolidated', [App\Http\Controllers\Admin\CertificateController::class, 'generateConsolidatedCertificates'])
+            Route::post('/generate-consolidated', [CertificateController::class, 'generateConsolidatedCertificates'])
                 ->middleware('permission:certificates.generate')
                 ->name('generate-consolidated');
 
             // On-demand download and preview
-            Route::get('/download/{id}', [App\Http\Controllers\Admin\CertificateController::class, 'download'])
+            Route::get('/download/{id}', [CertificateController::class, 'download'])
                 ->middleware('permission:certificates.download')
                 ->name('download')
                 ->where('id', '[0-9]+');
-            Route::get('/preview/{id}', [App\Http\Controllers\Admin\CertificateController::class, 'preview'])
+            Route::get('/preview/{id}', [CertificateController::class, 'preview'])
                 ->middleware('permission:certificates.download')
                 ->name('preview')
                 ->where('id', '[0-9]+');
-            Route::get('/view/{sertifikat}', [App\Http\Controllers\Admin\CertificateController::class, 'view'])
+            Route::get('/view/{sertifikat}', [CertificateController::class, 'view'])
                 ->middleware('permission:certificates.download')
                 ->name('view');
 
             // Token generation for public sharing
-            Route::post('/generate-token/{id}', [App\Http\Controllers\Admin\CertificateController::class, 'generateToken'])
+            Route::post('/generate-token/{id}', [CertificateController::class, 'generateToken'])
                 ->middleware('permission:certificates.generate')
                 ->name('generate-token')
                 ->where('id', '[0-9]+');
 
             // Management
-            Route::get('/show/{id}', [App\Http\Controllers\Admin\CertificateController::class, 'show'])
+            Route::get('/show/{id}', [CertificateController::class, 'show'])
                 ->middleware('permission:certificates.read')
                 ->name('show')
                 ->where('id', '[0-9]+');
-            Route::delete('/{id}', [App\Http\Controllers\Admin\CertificateController::class, 'destroy'])
+            Route::delete('/{id}', [CertificateController::class, 'destroy'])
                 ->middleware('permission:certificates.delete')
                 ->name('destroy')
                 ->where('id', '[0-9]+');
-            Route::patch('/{id}/mark-sent', [App\Http\Controllers\Admin\CertificateController::class, 'markAsSent'])
+            Route::patch('/{id}/mark-sent', [CertificateController::class, 'markAsSent'])
                 ->middleware('permission:certificates.update')
                 ->name('mark-sent')
                 ->where('id', '[0-9]+');
@@ -658,80 +692,80 @@ Route::middleware(['auth'])->group(function () {
 
         // 🎨 Certificate Template Management
         Route::prefix('certificate-templates')->name('certificate-templates.')->group(function () {
-            Route::get('/', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'index'])
+            Route::get('/', [CertificateTemplateController::class, 'index'])
                 ->middleware('permission:templates.read')
                 ->name('index');
-            Route::get('/create', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'create'])
+            Route::get('/create', [CertificateTemplateController::class, 'create'])
                 ->middleware('permission:templates.create')
                 ->name('create');
-            Route::post('/', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'store'])
+            Route::post('/', [CertificateTemplateController::class, 'store'])
                 ->middleware('permission:templates.create')
                 ->name('store');
-            Route::get('/{certificateTemplate}', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'show'])
+            Route::get('/{certificateTemplate}', [CertificateTemplateController::class, 'show'])
                 ->middleware('permission:templates.read')
                 ->name('show');
-            Route::get('/{certificateTemplate}/edit', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'edit'])
+            Route::get('/{certificateTemplate}/edit', [CertificateTemplateController::class, 'edit'])
                 ->middleware('permission:templates.update')
                 ->name('edit');
-            Route::put('/{certificateTemplate}', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'update'])
+            Route::put('/{certificateTemplate}', [CertificateTemplateController::class, 'update'])
                 ->middleware('permission:templates.update')
                 ->name('update');
-            Route::delete('/{certificateTemplate}', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'destroy'])
+            Route::delete('/{certificateTemplate}', [CertificateTemplateController::class, 'destroy'])
                 ->middleware('permission:templates.delete')
                 ->name('destroy');
-            Route::get('/{certificateTemplate}/preview', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'preview'])
+            Route::get('/{certificateTemplate}/preview', [CertificateTemplateController::class, 'preview'])
                 ->middleware('permission:templates.read')
                 ->name('preview');
-            Route::get('/{certificateTemplate}/preview-sample', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'previewWithSampleData'])
+            Route::get('/{certificateTemplate}/preview-sample', [CertificateTemplateController::class, 'previewWithSampleData'])
                 ->middleware('permission:templates.read')
                 ->name('preview-sample');
-            Route::get('/{certificateTemplate}/download', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'download'])
+            Route::get('/{certificateTemplate}/download', [CertificateTemplateController::class, 'download'])
                 ->middleware('permission:templates.read')
                 ->name('download');
-            Route::patch('/{certificateTemplate}/set-default', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'setDefault'])
+            Route::patch('/{certificateTemplate}/set-default', [CertificateTemplateController::class, 'setDefault'])
                 ->middleware('permission:templates.set-default')
                 ->name('set-default');
-            Route::patch('/{certificateTemplate}/toggle-status', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'toggleStatus'])
+            Route::patch('/{certificateTemplate}/toggle-status', [CertificateTemplateController::class, 'toggleStatus'])
                 ->middleware('permission:templates.toggle')
                 ->name('toggle-status');
-            Route::post('/{certificateTemplate}/update-field-position', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'updateFieldPosition'])
+            Route::post('/{certificateTemplate}/update-field-position', [CertificateTemplateController::class, 'updateFieldPosition'])
                 ->middleware('permission:templates.update')
                 ->name('update-field-position');
-            Route::post('/{certificateTemplate}/update-all-positions', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'updateAllPositions'])
+            Route::post('/{certificateTemplate}/update-all-positions', [CertificateTemplateController::class, 'updateAllPositions'])
                 ->middleware('permission:templates.update')
                 ->name('update-all-positions');
             // TAMBAHAN: Route untuk generate certificate dari template
-            Route::post('/{certificateTemplate}/generate-certificate', [App\Http\Controllers\Admin\CertificateTemplateController::class, 'generateCertificate'])
+            Route::post('/{certificateTemplate}/generate-certificate', [CertificateTemplateController::class, 'generateCertificate'])
                 ->middleware('permission:templates.update')
                 ->name('generate-certificate');
         });
 
         // 📦 Box Tracking Management
         Route::prefix('box-tracking')->name('box-tracking.')->middleware('permission:warehouse.boxes.view')->group(function () {
-            Route::get('/', [App\Http\Controllers\Admin\BoxTrackingController::class, 'index'])->name('index');
-            Route::get('/{box}', [App\Http\Controllers\Admin\BoxTrackingController::class, 'show'])->name('show');
-            Route::post('/search', [App\Http\Controllers\Admin\BoxTrackingController::class, 'searchByCode'])->name('search');
-            Route::get('/analytics/data', [App\Http\Controllers\Admin\BoxTrackingController::class, 'analytics'])->name('analytics');
+            Route::get('/', [BoxTrackingController::class, 'index'])->name('index');
+            Route::get('/{box}', [BoxTrackingController::class, 'show'])->name('show');
+            Route::post('/search', [BoxTrackingController::class, 'searchByCode'])->name('search');
+            Route::get('/analytics/data', [BoxTrackingController::class, 'analytics'])->name('analytics');
         });
 
         // 📦 Box Bulk Update Operations (Phase 2)
         Route::prefix('box-bulk')->name('box-bulk.')->middleware('permission:shipments.update')->group(function () {
-            Route::post('/preview', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'preview'])->name('preview');
-            Route::post('/update-status', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'bulkUpdateStatus'])->name('update-status');
-            Route::post('/update-address', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'bulkUpdateAddress'])->name('update-address');
-            Route::post('/update-both', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'bulkUpdateBoth'])->name('update-both');
-            Route::get('/statuses', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'getAvailableStatuses'])->name('statuses');
-            Route::get('/history', [App\Http\Controllers\Admin\BoxBulkUpdateController::class, 'getBulkUpdateHistory'])->name('history');
+            Route::post('/preview', [BoxBulkUpdateController::class, 'preview'])->name('preview');
+            Route::post('/update-status', [BoxBulkUpdateController::class, 'bulkUpdateStatus'])->name('update-status');
+            Route::post('/update-address', [BoxBulkUpdateController::class, 'bulkUpdateAddress'])->name('update-address');
+            Route::post('/update-both', [BoxBulkUpdateController::class, 'bulkUpdateBoth'])->name('update-both');
+            Route::get('/statuses', [BoxBulkUpdateController::class, 'getAvailableStatuses'])->name('statuses');
+            Route::get('/history', [BoxBulkUpdateController::class, 'getBulkUpdateHistory'])->name('history');
         });
 
         // 📊 Bulk Operations Analytics & Reporting (Phase 4)
         Route::prefix('bulk-operations')->name('bulk-operations.')->middleware('permission:system.monitor')->group(function () {
-            Route::get('/dashboard', [App\Http\Controllers\Admin\BulkOperationsAnalyticsController::class, 'dashboard'])->name('dashboard');
-            Route::get('/analytics', [App\Http\Controllers\Admin\BulkOperationsAnalyticsController::class, 'analytics'])->name('analytics');
-            Route::get('/box-history', [App\Http\Controllers\Admin\BulkOperationsAnalyticsController::class, 'boxHistory'])->name('box-history');
-            Route::get('/export-report', [App\Http\Controllers\Admin\BulkOperationsAnalyticsController::class, 'exportReport'])
+            Route::get('/dashboard', [BulkOperationsAnalyticsController::class, 'dashboard'])->name('dashboard');
+            Route::get('/analytics', [BulkOperationsAnalyticsController::class, 'analytics'])->name('analytics');
+            Route::get('/box-history', [BulkOperationsAnalyticsController::class, 'boxHistory'])->name('box-history');
+            Route::get('/export-report', [BulkOperationsAnalyticsController::class, 'exportReport'])
                 ->name('export-report');
-            Route::get('/realtime-stats', [App\Http\Controllers\Admin\BulkOperationsAnalyticsController::class, 'realtimeStats'])->name('realtime-stats');
+            Route::get('/realtime-stats', [BulkOperationsAnalyticsController::class, 'realtimeStats'])->name('realtime-stats');
         });
 
         // 📊 Performance Monitoring (Super Admin Only)
@@ -746,13 +780,13 @@ Route::middleware(['auth'])->group(function () {
 
         // 🔍 Query Optimization Dashboard (Super Admin Only)
         Route::prefix('query-optimization')->name('query-optimization.')->middleware('permission:system.monitor')->group(function () {
-            Route::get('/', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'dashboard'])->name('dashboard');
-            Route::post('/real-time', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'realTimeAnalysis'])->name('real-time');
-            Route::get('/n-plus-one', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'nPlusOneDetection'])->name('n-plus-one');
-            Route::get('/index-recommendations', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'indexRecommendations'])->name('index-recommendations');
-            Route::post('/generate-migration', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'generateIndexMigration'])->name('generate-migration');
-            Route::post('/analyze-query', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'analyzeQuery'])->name('analyze-query');
-            Route::get('/performance-trends', [App\Http\Controllers\Admin\QueryOptimizationController::class, 'performanceTrends'])->name('performance-trends');
+            Route::get('/', [QueryOptimizationController::class, 'dashboard'])->name('dashboard');
+            Route::post('/real-time', [QueryOptimizationController::class, 'realTimeAnalysis'])->name('real-time');
+            Route::get('/n-plus-one', [QueryOptimizationController::class, 'nPlusOneDetection'])->name('n-plus-one');
+            Route::get('/index-recommendations', [QueryOptimizationController::class, 'indexRecommendations'])->name('index-recommendations');
+            Route::post('/generate-migration', [QueryOptimizationController::class, 'generateIndexMigration'])->name('generate-migration');
+            Route::post('/analyze-query', [QueryOptimizationController::class, 'analyzeQuery'])->name('analyze-query');
+            Route::get('/performance-trends', [QueryOptimizationController::class, 'performanceTrends'])->name('performance-trends');
         });
 
         // 📊 Comprehensive Monitoring System (Super Admin Only)
@@ -760,28 +794,28 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('permission:system.monitor')
             ->group(function () {
                 // Main monitoring dashboard
-                Route::get('/', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'index'])->name('dashboard');
+                Route::get('/', [MonitoringDashboardController::class, 'index'])->name('dashboard');
 
                 // Real-time metrics API
-                Route::get('/api/metrics', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'realTimeMetrics'])->name('api.metrics');
-                Route::get('/api/historical', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'historicalMetrics'])->name('api.historical');
-                Route::get('/api/health', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'healthCheck'])->name('api.health');
-                Route::post('/api/collect', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'collectMetrics'])->name('api.collect');
+                Route::get('/api/metrics', [MonitoringDashboardController::class, 'realTimeMetrics'])->name('api.metrics');
+                Route::get('/api/historical', [MonitoringDashboardController::class, 'historicalMetrics'])->name('api.historical');
+                Route::get('/api/health', [MonitoringDashboardController::class, 'healthCheck'])->name('api.health');
+                Route::post('/api/collect', [MonitoringDashboardController::class, 'collectMetrics'])->name('api.collect');
 
                 // Performance benchmarks
-                Route::get('/benchmarks', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'benchmarks'])->name('benchmarks');
-                Route::post('/benchmarks/run', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'runBenchmarks'])->name('benchmarks.run');
-                Route::post('/benchmarks/baselines', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'setBaselines'])->name('benchmarks.baselines');
+                Route::get('/benchmarks', [MonitoringDashboardController::class, 'benchmarks'])->name('benchmarks');
+                Route::post('/benchmarks/run', [MonitoringDashboardController::class, 'runBenchmarks'])->name('benchmarks.run');
+                Route::post('/benchmarks/baselines', [MonitoringDashboardController::class, 'setBaselines'])->name('benchmarks.baselines');
 
                 // Alert management
-                Route::get('/alerts', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'alerts'])->name('alerts');
-                Route::post('/alerts/clear', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'clearAlerts'])->name('alerts.clear');
+                Route::get('/alerts', [MonitoringDashboardController::class, 'alerts'])->name('alerts');
+                Route::post('/alerts/clear', [MonitoringDashboardController::class, 'clearAlerts'])->name('alerts.clear');
 
                 // Reports and recommendations
-                Route::get('/reports', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'reports'])->name('reports');
-                Route::get('/reports/generate', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'generateReport'])
+                Route::get('/reports', [MonitoringDashboardController::class, 'reports'])->name('reports');
+                Route::get('/reports/generate', [MonitoringDashboardController::class, 'generateReport'])
                     ->name('reports.generate');
-                Route::get('/recommendations', [App\Http\Controllers\Admin\MonitoringDashboardController::class, 'recommendations'])->name('recommendations');
+                Route::get('/recommendations', [MonitoringDashboardController::class, 'recommendations'])->name('recommendations');
             });
 
         // 🔧 Settings Management - REMOVED
@@ -847,29 +881,29 @@ Route::middleware(['auth'])->group(function () {
         // Content Management - Testimonials, Gallery, FAQs
         // Galleries - Read access
         Route::middleware(['permission:settings.read'])->group(function () {
-            Route::get('galleries', [\App\Http\Controllers\Admin\GalleryController::class, 'index'])->name('galleries.index');
+            Route::get('galleries', [GalleryController::class, 'index'])->name('galleries.index');
         });
 
         // Galleries - Write access (must come before parameterized routes)
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('galleries/create', [\App\Http\Controllers\Admin\GalleryController::class, 'create'])->name('galleries.create');
-            Route::post('galleries', [\App\Http\Controllers\Admin\GalleryController::class, 'store'])->name('galleries.store');
-            Route::post('galleries/update-order', [\App\Http\Controllers\Admin\GalleryController::class, 'updateOrder'])->name('galleries.update-order');
-            Route::post('galleries/update-settings', [\App\Http\Controllers\Admin\GalleryController::class, 'updateSettings'])->name('galleries.update-settings');
+            Route::get('galleries/create', [GalleryController::class, 'create'])->name('galleries.create');
+            Route::post('galleries', [GalleryController::class, 'store'])->name('galleries.store');
+            Route::post('galleries/update-order', [GalleryController::class, 'updateOrder'])->name('galleries.update-order');
+            Route::post('galleries/update-settings', [GalleryController::class, 'updateSettings'])->name('galleries.update-settings');
         });
 
         // Galleries - Parameterized routes (must come after specific routes)
         Route::middleware(['permission:settings.read'])->group(function () {
-            Route::get('galleries/{gallery}', [\App\Http\Controllers\Admin\GalleryController::class, 'show'])->name('galleries.show');
+            Route::get('galleries/{gallery}', [GalleryController::class, 'show'])->name('galleries.show');
         });
 
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('galleries/{gallery}/edit', [\App\Http\Controllers\Admin\GalleryController::class, 'edit'])->name('galleries.edit');
-            Route::put('galleries/{gallery}', [\App\Http\Controllers\Admin\GalleryController::class, 'update'])->name('galleries.update');
-            Route::post('galleries/{gallery}/toggle-status', [\App\Http\Controllers\Admin\GalleryController::class, 'toggleStatus'])->name('galleries.toggle-status');
+            Route::get('galleries/{gallery}/edit', [GalleryController::class, 'edit'])->name('galleries.edit');
+            Route::put('galleries/{gallery}', [GalleryController::class, 'update'])->name('galleries.update');
+            Route::post('galleries/{gallery}/toggle-status', [GalleryController::class, 'toggleStatus'])->name('galleries.toggle-status');
         });
         Route::middleware(['permission:settings.delete'])->group(function () {
-            Route::delete('galleries/{gallery}', [\App\Http\Controllers\Admin\GalleryController::class, 'destroy'])->name('galleries.destroy');
+            Route::delete('galleries/{gallery}', [GalleryController::class, 'destroy'])->name('galleries.destroy');
         });
 
         // Videos - Read access
@@ -901,56 +935,56 @@ Route::middleware(['auth'])->group(function () {
 
         // Testimonials
         Route::middleware(['permission:settings.read'])->group(function () {
-            Route::get('testimonials', [\App\Http\Controllers\Admin\TestimonialController::class, 'index'])->name('testimonials.index');
-            Route::get('testimonials/{testimonial}', [\App\Http\Controllers\Admin\TestimonialController::class, 'show'])->name('testimonials.show');
+            Route::get('testimonials', [TestimonialController::class, 'index'])->name('testimonials.index');
+            Route::get('testimonials/{testimonial}', [TestimonialController::class, 'show'])->name('testimonials.show');
         });
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('testimonials/create', [\App\Http\Controllers\Admin\TestimonialController::class, 'create'])->name('testimonials.create');
-            Route::post('testimonials', [\App\Http\Controllers\Admin\TestimonialController::class, 'store'])->name('testimonials.store');
-            Route::post('testimonials/update-order', [\App\Http\Controllers\Admin\TestimonialController::class, 'updateOrder'])->name('testimonials.update-order');
-            Route::post('testimonials/update-settings', [\App\Http\Controllers\Admin\TestimonialController::class, 'updateSettings'])->name('testimonials.update-settings');
+            Route::get('testimonials/create', [TestimonialController::class, 'create'])->name('testimonials.create');
+            Route::post('testimonials', [TestimonialController::class, 'store'])->name('testimonials.store');
+            Route::post('testimonials/update-order', [TestimonialController::class, 'updateOrder'])->name('testimonials.update-order');
+            Route::post('testimonials/update-settings', [TestimonialController::class, 'updateSettings'])->name('testimonials.update-settings');
         });
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('testimonials/{testimonial}/edit', [\App\Http\Controllers\Admin\TestimonialController::class, 'edit'])->name('testimonials.edit');
-            Route::match(['put', 'patch'], 'testimonials/{testimonial}', [\App\Http\Controllers\Admin\TestimonialController::class, 'update'])->name('testimonials.update');
-            Route::post('testimonials/{testimonial}/toggle-status', [\App\Http\Controllers\Admin\TestimonialController::class, 'toggleStatus'])->name('testimonials.toggle-status');
+            Route::get('testimonials/{testimonial}/edit', [TestimonialController::class, 'edit'])->name('testimonials.edit');
+            Route::match(['put', 'patch'], 'testimonials/{testimonial}', [TestimonialController::class, 'update'])->name('testimonials.update');
+            Route::post('testimonials/{testimonial}/toggle-status', [TestimonialController::class, 'toggleStatus'])->name('testimonials.toggle-status');
         });
         Route::middleware(['permission:settings.delete'])->group(function () {
-            Route::delete('testimonials/{testimonial}', [\App\Http\Controllers\Admin\TestimonialController::class, 'destroy'])->name('testimonials.destroy');
+            Route::delete('testimonials/{testimonial}', [TestimonialController::class, 'destroy'])->name('testimonials.destroy');
         });
 
         // FAQs
         Route::middleware(['permission:settings.read'])->group(function () {
-            Route::get('faqs', [\App\Http\Controllers\Admin\FaqController::class, 'index'])->name('faqs.index');
-            Route::get('faqs/{faq}', [\App\Http\Controllers\Admin\FaqController::class, 'show'])->name('faqs.show');
+            Route::get('faqs', [FaqController::class, 'index'])->name('faqs.index');
+            Route::get('faqs/{faq}', [FaqController::class, 'show'])->name('faqs.show');
         });
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('faqs/create', [\App\Http\Controllers\Admin\FaqController::class, 'create'])->name('faqs.create');
-            Route::post('faqs', [\App\Http\Controllers\Admin\FaqController::class, 'store'])->name('faqs.store');
-            Route::post('faqs/update-order', [\App\Http\Controllers\Admin\FaqController::class, 'updateOrder'])->name('faqs.update-order');
-            Route::post('faqs/update-settings', [\App\Http\Controllers\Admin\FaqController::class, 'updateSettings'])->name('faqs.update-settings');
+            Route::get('faqs/create', [FaqController::class, 'create'])->name('faqs.create');
+            Route::post('faqs', [FaqController::class, 'store'])->name('faqs.store');
+            Route::post('faqs/update-order', [FaqController::class, 'updateOrder'])->name('faqs.update-order');
+            Route::post('faqs/update-settings', [FaqController::class, 'updateSettings'])->name('faqs.update-settings');
         });
         Route::middleware(['permission:settings.write'])->group(function () {
-            Route::get('faqs/{faq}/edit', [\App\Http\Controllers\Admin\FaqController::class, 'edit'])->name('faqs.edit');
-            Route::match(['put', 'patch'], 'faqs/{faq}', [\App\Http\Controllers\Admin\FaqController::class, 'update'])->name('faqs.update');
-            Route::post('faqs/{faq}/toggle-status', [\App\Http\Controllers\Admin\FaqController::class, 'toggleStatus'])->name('faqs.toggle-status');
+            Route::get('faqs/{faq}/edit', [FaqController::class, 'edit'])->name('faqs.edit');
+            Route::match(['put', 'patch'], 'faqs/{faq}', [FaqController::class, 'update'])->name('faqs.update');
+            Route::post('faqs/{faq}/toggle-status', [FaqController::class, 'toggleStatus'])->name('faqs.toggle-status');
         });
         Route::middleware(['permission:settings.delete'])->group(function () {
-            Route::delete('faqs/{faq}', [\App\Http\Controllers\Admin\FaqController::class, 'destroy'])->name('faqs.destroy');
+            Route::delete('faqs/{faq}', [FaqController::class, 'destroy'])->name('faqs.destroy');
         });
 
         // 🔧 Cache Management (Super Admin Only)
         Route::prefix('cache')->name('cache.')
             ->middleware('permission:system.monitor')->group(function () {
-                Route::get('/', [App\Http\Controllers\Admin\CacheController::class, 'index'])->name('index');
-                Route::post('/warm', [App\Http\Controllers\Admin\CacheController::class, 'warm'])->name('warm');
-                Route::post('/clear', [App\Http\Controllers\Admin\CacheController::class, 'clear'])->name('clear');
-                Route::get('/stats', [App\Http\Controllers\Admin\CacheController::class, 'stats'])->name('stats');
-                Route::get('/health', [App\Http\Controllers\Admin\CacheController::class, 'health'])->name('health');
-                Route::get('/test', [App\Http\Controllers\Admin\CacheController::class, 'test'])->name('test');
-                Route::get('/monitoring', [App\Http\Controllers\Admin\CacheController::class, 'monitoring'])->name('monitoring');
-                Route::post('/invalidate', [App\Http\Controllers\Admin\CacheController::class, 'invalidate'])->name('invalidate');
-                Route::get('/service/{service}/stats', [App\Http\Controllers\Admin\CacheController::class, 'serviceStats'])->name('service.stats');
+                Route::get('/', [CacheController::class, 'index'])->name('index');
+                Route::post('/warm', [CacheController::class, 'warm'])->name('warm');
+                Route::post('/clear', [CacheController::class, 'clear'])->name('clear');
+                Route::get('/stats', [CacheController::class, 'stats'])->name('stats');
+                Route::get('/health', [CacheController::class, 'health'])->name('health');
+                Route::get('/test', [CacheController::class, 'test'])->name('test');
+                Route::get('/monitoring', [CacheController::class, 'monitoring'])->name('monitoring');
+                Route::post('/invalidate', [CacheController::class, 'invalidate'])->name('invalidate');
+                Route::get('/service/{service}/stats', [CacheController::class, 'serviceStats'])->name('service.stats');
             });
     });
 
