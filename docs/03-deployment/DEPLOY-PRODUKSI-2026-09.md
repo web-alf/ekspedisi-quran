@@ -114,3 +114,110 @@ sudo ln -sfn /var/www/app/releases/<rilis-lama> /var/www/app/current.new \
 
 Migrasi **tidak** otomatis di-rollback. Bila perlu: restore
 `/var/www/app/backups/eq-pre-deploy-*.sql`.
+
+## ⚠️ KOREKSI PENTING (30 Sep 2026 malam): PRODUKSI SEHARI-HARI = DASH
+
+Dokumen di atas keliru menyebut `app.ekspedisiquran.com` sebagai produksi utama.
+
+**Fakta di host `ekspedisi-prod` (187.77.113.89) ada DUA aplikasi Laravel terpisah:**
+
+| Domain | Root nginx | Struktur | Peran |
+|---|---|---|---|
+| `dash.ekspedisiquran.com` | `/var/www/dash` | direktori langsung (bukan symlink releases) | **PRODUKSI SEHARI-HARI TIM** — dipakai update rutin |
+| `app.ekspedisiquran.com` | `/var/www/app/current` | symlink ke `releases/<timestamp>` | aplikasi terpisah/lama — **JANGAN disentuh** tanpa arahan eksplisit pemilik |
+
+Database juga terpisah: `db_ekspedisi_quran_dash` (dash) vs `db_ekspedisi_quran` (app).
+
+**Insiden 30 Sep 2026:** deploy keliru dilakukan ke `app` (3 rilis baru +
+migrasi), menganggap itu produksi. Tindakan pemulihan yang sudah dilakukan:
+`app` di-rollback ke rilis April `20260416072853`, dan fix hari ini
+(`209990f`..`29e1d87`) di-deploy ke **`dash`** dengan backup penuh
+(`/root/dash-full-backup-20260930.tar.gz` + `/root/dash-db-backup-20260930.sql`).
+
+**Prosedur deploy ke DASH (yang benar):**
+
+```bash
+# 1. Backup WAJIB (kode + DB)
+sudo tar -czf /root/dash-full-backup-$(date +%Y%m%d-%H%M%S).tar.gz \
+    -C /var/www --exclude=vendor dash
+U=$(grep -m1 ^DB_USERNAME /var/www/dash/.env | cut -d= -f2)
+P=$(grep -m1 ^DB_PASSWORD /var/www/dash/.env | cut -d= -f2-)
+sudo mysqldump --single-transaction -u"$U" -p"$P" db_ekspedisi_quran_dash \
+    > /root/dash-db-backup-$(date +%Y%m%d-%H%M%S).sql
+
+# 2. Clone repo terbaru ke dir sementara
+sudo rm -rf /tmp/eq-deploy && sudo git clone --depth 1 \
+    https://github.com/anggiadiputra/EQ.git /tmp/eq-deploy
+
+# 3. rsync kode ke dash (JANGAN sentuh .env, storage, vendor)
+sudo rsync -a --delete --exclude ".env" --exclude "storage/" \
+    --exclude "vendor/" --exclude ".git/" /tmp/eq-deploy/ /var/www/dash/
+
+# 4. Dependensi + migrasi + cache
+cd /var/www/dash
+sudo composer install --no-dev --optimize-autoloader --no-interaction
+sudo php artisan migrate --pretend --force   # review dulu
+sudo php artisan migrate --force
+sudo php artisan config:cache && sudo php artisan route:cache && sudo php artisan view:cache
+sudo chown -R www-data:www-data storage bootstrap/cache
+
+# 5. Reload PHP-FPM + verifikasi
+sudo systemctl reload php8.3-fpm
+curl -sk -o /dev/null -w %{http_code}n https://dash.ekspedisiquran.com/login
+sudo tail -20 /var/www/dash/storage/logs/laravel.log | grep -cE ERROR
+
+## KOREKSI PENTING (30 Sep 2026 malam): PRODUKSI SEHARI-HARI = DASH
+
+Dokumen ini sebagian keliru: `app.ekspedisiquran.com` BUKAN produksi utama.
+
+Fakta di host `ekspedisi-prod` (187.77.113.89): ada DUA aplikasi Laravel terpisah.
+
+| Domain | Root nginx | Struktur | Peran |
+|---|---|---|---|
+| `dash.ekspedisiquran.com` | `/var/www/dash` | direktori langsung (bukan symlink releases) | PRODUKSI SEHARI-HARI TIM - dipakai update rutin |
+| `app.ekspedisiquran.com` | `/var/www/app/current` | symlink ke `releases/<timestamp>` | aplikasi terpisah/lama - JANGAN disentuh tanpa arahan eksplisit pemilik |
+
+Database terpisah: `db_ekspedisi_quran_dash` (dash) vs `db_ekspedisi_quran` (app).
+
+Insiden 30 Sep 2026: deploy keliru ke `app` (3 rilis + migrasi) karena dokumen
+ini menunjuk target salah. Pemulihan: `app` di-rollback ke rilis April
+`20260416072853`; fix hari ini (`209990f`..`29e1d87`) di-deploy ke `dash`
+dengan backup penuh (`/root/dash-full-backup-20260930.tar.gz` +
+`/root/dash-db-backup-20260930.sql`).
+
+Prosedur deploy ke DASH (yang benar):
+
+```bash
+# 1. Backup WAJIB (kode + DB)
+sudo tar -czf /root/dash-full-backup-$(date +%Y%m%d-%H%M%S).tar.gz \
+    -C /var/www --exclude=vendor dash
+U=$(grep -m1 '^DB_USERNAME' /var/www/dash/.env | cut -d= -f2)
+P=$(grep -m1 '^DB_PASSWORD' /var/www/dash/.env | cut -d= -f2-)
+sudo mysqldump --single-transaction -u"$U" -p"$P" db_ekspedisi_quran_dash \
+    > /root/dash-db-backup-$(date +%Y%m%d-%H%M%S).sql
+
+# 2. Clone repo terbaru ke dir sementara
+sudo rm -rf /tmp/eq-deploy && sudo git clone --depth 1 \
+    https://github.com/anggiadiputra/EQ.git /tmp/eq-deploy
+
+# 3. rsync kode ke dash (JANGAN sentuh .env, storage, vendor)
+sudo rsync -a --delete --exclude ".env" --exclude "storage/" \
+    --exclude "vendor/" --exclude ".git/" /tmp/eq-deploy/ /var/www/dash/
+
+# 4. Dependensi + migrasi + cache
+cd /var/www/dash
+sudo composer install --no-dev --optimize-autoloader --no-interaction
+sudo php artisan migrate --pretend --force   # review dulu
+sudo php artisan migrate --force
+sudo php artisan config:cache && sudo php artisan route:cache && sudo php artisan view:cache
+sudo chown -R www-data:www-data storage bootstrap/cache
+
+# 5. Reload PHP-FPM + verifikasi
+sudo systemctl reload php8.3-fpm
+curl -sk -o /dev/null -w '%{http_code}\n' https://dash.ekspedisiquran.com/login
+sudo tail -20 /var/www/dash/storage/logs/laravel.log | grep -cE 'ERROR|CRITICAL'
+```
+
+Rollback dash: ekstrak arsip `dash-full-backup-*.tar.gz` + restore SQL dump.
+
+Sebelum deploy APA PUN: konfirmasi dulu ke pemilik bahwa target adalah `dash`, bukan `app`.
