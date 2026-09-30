@@ -204,7 +204,108 @@ class PackingAssignmentServiceTest extends TestCase
         $this->assertEquals($supervisor->id, $task->assigned_by);
     }
 
-    public function test_includes_carry_over_when_calculating_total_target()
+    public function test_caps_carry_over_at_the_configured_percentage(): void
+    {
+        // Yesterday left 30 undone. Base target 50, cap 20% = 10, so only 10 carries.
+        DailyPackingTask::create([
+            'user_id' => $this->user->id,
+            'tanggal_tugas' => today()->subDay(),
+            'total_target' => 100,
+            'total_selesai' => 70,
+            'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
+        ]);
+
+        $result = $this->service->assignDailyTaskToUserWithTarget($this->user, today(), 50);
+
+        expect($result['carry_over'])->toBe(10)
+            ->and($result['total_target'])->toBe(60);
+    }
+
+    public function test_carry_over_grows_with_the_base_target(): void
+    {
+        DailyPackingTask::create([
+            'user_id' => $this->user->id,
+            'tanggal_tugas' => today()->subDay(),
+            'total_target' => 1000,
+            'total_selesai' => 0,
+            'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
+        ]);
+
+        // 20% of 100 = 20, 20% of 500 = 100 -> target 180 then 600.
+        $small = $this->service->assignDailyTaskToUserWithTarget($this->user, today(), 100);
+
+        expect($small['carry_over'])->toBe(20)
+            ->and($small['total_target'])->toBe(120);
+    }
+
+    public function test_carry_over_is_unbounded_when_the_limit_is_100_or_more(): void
+    {
+        config(['packing.task_expiration.max_carryover_percent' => 100]);
+
+        DailyPackingTask::create([
+            'user_id' => $this->user->id,
+            'tanggal_tugas' => today()->subDay(),
+            'total_target' => 100,
+            'total_selesai' => 10,
+            'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
+        ]);
+
+        $result = $this->service->assignDailyTaskToUserWithTarget($this->user, today(), 50);
+
+        expect($result['carry_over'])->toBe(90)
+            ->and($result['total_target'])->toBe(140);
+    }
+
+    public function test_carry_over_is_zero_when_disabled(): void
+    {
+        config(['packing.task_expiration.allow_carryover' => false]);
+
+        DailyPackingTask::create([
+            'user_id' => $this->user->id,
+            'tanggal_tugas' => today()->subDay(),
+            'total_target' => 100,
+            'total_selesai' => 70,
+            'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
+        ]);
+
+        $result = $this->service->assignDailyTaskToUserWithTarget($this->user, today(), 50);
+
+        expect($result['carry_over'])->toBe(0)
+            ->and($result['total_target'])->toBe(50);
+    }
+
+    public function test_carry_over_does_not_compound_across_days(): void
+    {
+        // A team that packs nothing for three days must not climb 80 -> 160 -> 240.
+        // Each day: base 80 plus at most 20% (16) = 96, never more.
+        DailyPackingTask::create([
+            'user_id' => $this->user->id,
+            'tanggal_tugas' => today()->subDays(3),
+            'total_target' => 80,
+            'total_selesai' => 0,
+            'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
+        ]);
+
+        $day1 = $this->service->assignDailyTaskToUserWithTarget($this->user, today()->subDays(2), 80, true);
+        $day2 = $this->service->assignDailyTaskToUserWithTarget($this->user, today()->subDay(), 80, true);
+        $day3 = $this->service->assignDailyTaskToUserWithTarget($this->user, today(), 80, true);
+
+        expect($day1['carry_over'])->toBe(16)
+            ->and($day2['carry_over'])->toBe(16)
+            ->and($day3['carry_over'])->toBe(16);
+
+        // Every task stays at base + cap instead of compounding.
+        foreach ([$day1, $day2, $day3] as $day) {
+            expect($day['total_target'])->toBe(96);
+        }
+    }
+
+    public function test_includes_carry_over_when_calculating_total_target(): void
     {
         // Create yesterday's incomplete task
         $yesterdayTask = DailyPackingTask::create([
@@ -218,20 +319,20 @@ class PackingAssignmentServiceTest extends TestCase
         // Expire yesterday's task (normally done by cron)
         $yesterdayTask->update(['status' => DailyPackingTask::STATUS_EXPIRED]);
 
-        // Assign today's task
+        // Assign today's task. 30 was left undone, but the cap for a base target
+        // of 50 is 20% = 10, so the carry over is bounded.
         $result = $this->service->assignDailyTaskToUserWithTarget(
             $this->user,
             today(),
             50
         );
 
-        // Total target should be 50 (new) + 30 (carry over from yesterday)
-        $this->assertEquals(80, $result['total_target']);
-        $this->assertEquals(30, $result['carry_over']);
+        $this->assertEquals(60, $result['total_target']);
+        $this->assertEquals(10, $result['carry_over']);
         $this->assertEquals(50, $result['custom_target']);
     }
 
-    public function test_can_update_task_and_preserve_carry_over()
+    public function test_can_update_task_and_preserve_carry_over(): void
     {
         // Create yesterday's incomplete task
         DailyPackingTask::create([
@@ -240,18 +341,20 @@ class PackingAssignmentServiceTest extends TestCase
             'total_target' => 100,
             'total_selesai' => 70,
             'status' => DailyPackingTask::STATUS_EXPIRED,
+            'assignment_method' => 'target_only',
         ]);
 
-        // Assign today's task (with carry over)
+        // Assign today's task (carry over capped to 10 for a base target of 50)
         $firstResult = $this->service->assignDailyTaskToUserWithTarget(
             $this->user,
             today(),
             50
         );
 
-        $this->assertEquals(80, $firstResult['total_target']); // 50 + 30 carry over
+        $this->assertEquals(60, $firstResult['total_target']); // 50 + capped 10
 
-        // Update task
+        // Update task. The stored carry over is reused, not recalculated,
+        // so 75 + 10 = 85.
         $updateResult = $this->service->assignDailyTaskToUserWithTarget(
             $this->user,
             today(),
@@ -259,10 +362,9 @@ class PackingAssignmentServiceTest extends TestCase
             true
         );
 
-        // New total should be 75 + 30 carry over = 105
-        $this->assertEquals(105, $updateResult['new_target']);
+        $this->assertEquals(85, $updateResult['new_target']);
         $this->assertEquals(75, $updateResult['new_base_target']);
-        $this->assertEquals(30, $updateResult['carry_over']);
+        $this->assertEquals(10, $updateResult['carry_over']);
     }
 
     public function test_returns_correct_status_based_on_operation()

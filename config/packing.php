@@ -101,12 +101,21 @@ return [
 
         /**
          * Carry over incomplete items to next day
+         *
+         * false = target harian selalu flat, sisa kemarin diabaikan
          */
         'allow_carryover' => true,
 
         /**
          * Maximum carryover percentage (0-100%)
-         * Example: 20 means max 20% of target can be carried over
+         *
+         * Batas sisa kemarin yang boleh ditambahkan ke target hari ini,
+         * dihitung dari target hari ini itu sendiri (bukan dari target kemarin).
+         * Contoh: target 80, batas 20% -> carry-over maksimal 16 -> target 96.
+         *
+         * Ini pengaman agar target tidak menumpuk tanpa henti ketika tim
+         * beberapa hari tidak menghasilkan apa pun (80 -> 160 -> 240 -> 320).
+         * Nilai 100 atau lebih berarti tanpa batas (perilaku lama).
          */
         'max_carryover_percent' => 20,
     ],

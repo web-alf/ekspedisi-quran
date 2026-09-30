@@ -6,7 +6,6 @@ use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
 use App\Models\PackingNotification;
 use App\Models\Pengiriman;
-use App\Models\StatusPengiriman;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use Carbon\Carbon;
@@ -17,6 +16,7 @@ class PackingAssignmentService
 {
     /**
      * Default daily target
+     *
      * @deprecated Use config('packing.default_daily_target') instead
      */
     const DEFAULT_DAILY_TARGET = 80;
@@ -97,11 +97,12 @@ class PackingAssignmentService
                 ];
             }
 
-            // Calculate carry over from yesterday
-            $carryOver = $this->calculateCarryOver($user, $date);
+            // Calculate carry over from yesterday (bounded by max_carryover_percent)
+            $baseTarget = config('packing.default_daily_target', self::DEFAULT_DAILY_TARGET);
+            $carryOver = $this->calculateCarryOver($user, $date, (int) $baseTarget);
 
             // Calculate today's target
-            $dailyTarget = config('packing.default_daily_target', self::DEFAULT_DAILY_TARGET) + $carryOver;
+            $dailyTarget = $baseTarget + $carryOver;
 
             // Create new task with TARGET ONLY (no specific assignments)
             $task = DailyPackingTask::create([
@@ -165,8 +166,8 @@ class PackingAssignmentService
                 throw new \Exception('Task sudah ada untuk user ini pada tanggal tersebut');
             }
 
-            // Calculate carry over from yesterday
-            $carryOver = $this->calculateCarryOver($user, $date);
+            // Calculate carry over from yesterday (bounded by max_carryover_percent)
+            $carryOver = $this->calculateCarryOver($user, $date, (int) $customTarget);
 
             // Use custom target plus carry over
             $totalTarget = $customTarget + $carryOver;
@@ -272,10 +273,14 @@ class PackingAssignmentService
     }
 
     /**
-     * Calculate carry over from previous days
+     * Calculate carry over from previous days, bounded by max_carryover_percent.
      */
-    private function calculateCarryOver(User $user, Carbon $date)
+    private function calculateCarryOver(User $user, Carbon $date, int $baseTarget): int
     {
+        if (! config('packing.task_expiration.allow_carryover', true)) {
+            return 0;
+        }
+
         $yesterday = $date->copy()->subDay();
 
         $yesterdayTask = DailyPackingTask::where('user_id', $user->id)
@@ -288,10 +293,31 @@ class PackingAssignmentService
 
         // If yesterday's task is not completed
         if (! $yesterdayTask->is_completed) {
-            return $yesterdayTask->remaining;
+            return $this->capCarryOver($yesterdayTask->remaining, $baseTarget);
         }
 
         return 0;
+    }
+
+    /**
+     * Bound the carry over to a percentage of today's own target.
+     *
+     * Carrying the whole remainder forward means a zero-output day compounds:
+     * the target climbs 80 -> 160 -> 240 -> 320 and stops being a target anyone
+     * can work towards. `max_carryover_percent` exists to stop that; a value of
+     * 100 (or more) disables the bound.
+     */
+    private function capCarryOver(int $remaining, int $baseTarget): int
+    {
+        $percent = (int) config('packing.task_expiration.max_carryover_percent', 100);
+
+        if ($percent >= 100) {
+            return max(0, $remaining);
+        }
+
+        $cap = (int) floor($baseTarget * $percent / 100);
+
+        return max(0, min($remaining, max(0, $cap)));
     }
 
     /**

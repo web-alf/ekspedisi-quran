@@ -148,7 +148,8 @@ class PackingTaskExpirationTest extends TestCase
         $assignment = app(PackingAssignmentService::class);
         $result = $assignment->assignDailyTaskToUserWithTarget($user, today(), 50);
 
-        expect($result['carry_over'])->toBe(30)
-            ->and($result['total_target'])->toBe(80);
+        // 30 was left undone; the cap for a base target of 50 is 20% = 10.
+        expect($result['carry_over'])->toBe(10)
+            ->and($result['total_target'])->toBe(60);
     }
 }
