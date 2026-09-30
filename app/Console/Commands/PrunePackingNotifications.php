@@ -13,8 +13,7 @@ class PrunePackingNotifications extends Command
      * @var string
      */
     protected $signature = 'packing:prune-notifications
-                            {--days=30 : Umur minimum (hari) sebelum notifikasi boleh dihapus}
-                            {--include-unread : Ikut hapus notifikasi yang belum dibaca}
+                            {--days=30 : Umur minimum (hari) untuk notifikasi yang sudah dibaca}
                             {--dry-run : Tampilkan jumlah yang akan dihapus tanpa menghapus}';
 
     /**
@@ -22,7 +21,7 @@ class PrunePackingNotifications extends Command
      *
      * @var string
      */
-    protected $description = 'Hapus notifikasi packing lama supaya lonceng tidak menumpuk';
+    protected $description = 'Hapus notifikasi packing yang sudah tidak berguna supaya lonceng tidak menumpuk';
 
     /**
      * Execute the console command.
@@ -32,32 +31,46 @@ class PrunePackingNotifications extends Command
         $days = max(1, (int) $this->option('days'));
         $cutoff = now()->subDays($days);
 
-        $query = PackingNotification::query()->where('created_at', '<', $cutoff);
+        // Notifikasi yang menempel pada tugas hari yang SUDAH LEWAT tidak lagi
+        // bisa ditindaklanjuti: pengingat "progress jam 3 sore" untuk kemarin
+        // tidak ada gunanya dilihat hari ini. Aturan ini tidak memandang status
+        // baca — kalau menunggu dibaca, lonceng akan menumpuk selamanya karena
+        // satu pengingat per checkpoint per user per hari.
+        $obsolete = PackingNotification::query()
+            ->whereHas('dailyPackingTask', fn ($q) => $q->whereDate('tanggal_tugas', '<', today()));
 
-        // Notifikasi yang belum dibaca sengaja dipertahankan: menghapusnya berarti
-        // staf kehilangan informasi yang belum sempat mereka lihat. Pakai
-        // --include-unread bila memang ingin membersihkan seluruhnya.
-        if (! $this->option('include-unread')) {
-            $query->where('is_read', true);
-        }
+        // Jaring pengaman untuk notifikasi yatim (tugasnya sudah dihapus) atau
+        // yang sudah dibaca tapi lama menumpuk. Yang belum dibaca dan tidak
+        // punya tugas sengaja dipertahankan: mungkin belum sempat dilihat.
+        $staleRead = PackingNotification::query()
+            ->where('created_at', '<', $cutoff)
+            ->whereDoesntHave('dailyPackingTask')
+            ->where('is_read', true);
 
-        $count = $query->count();
+        $obsoleteCount = $obsolete->count();
+        $staleCount = $staleRead->count();
+        $total = $obsoleteCount + $staleCount;
 
-        if ($count === 0) {
-            $this->info("Tidak ada notifikasi lebih tua dari {$days} hari yang perlu dihapus.");
+        if ($total === 0) {
+            $this->info('Tidak ada notifikasi yang perlu dihapus.');
 
             return Command::SUCCESS;
         }
 
         if ($this->option('dry-run')) {
-            $this->info("[DRY RUN] {$count} notifikasi akan dihapus (lebih tua dari {$days} hari).");
+            $this->info("[DRY RUN] {$total} notifikasi akan dihapus "
+                ."({$obsoleteCount} dari tugas hari yang sudah lewat, "
+                ."{$staleCount} sudah dibaca & lebih tua dari {$days} hari).");
 
             return Command::SUCCESS;
         }
 
-        $query->delete();
+        $obsolete->delete();
+        $staleRead->delete();
 
-        $this->info("Menghapus {$count} notifikasi lebih tua dari {$days} hari.");
+        $this->info("Menghapus {$total} notifikasi "
+            ."({$obsoleteCount} dari tugas hari yang sudah lewat, "
+            ."{$staleCount} sudah dibaca & lebih tua dari {$days} hari).");
 
         return Command::SUCCESS;
     }
