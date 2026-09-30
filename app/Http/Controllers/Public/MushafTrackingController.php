@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\MushafRequest;
+use App\Models\Setting;
+use App\Models\StatusPengiriman;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -15,7 +17,7 @@ class MushafTrackingController extends Controller
     public function index()
     {
         // Get settings for consistent layout
-        $settings = \App\Models\Setting::where('is_public', true)
+        $settings = Setting::where('is_public', true)
             ->where('is_active', true)
             ->whereIn('group', ['landing', 'contact', 'social', 'general'])
             ->pluck('value', 'key');
@@ -38,7 +40,7 @@ class MushafTrackingController extends Controller
 
         if (! $mushafRequest) {
             // Get settings for consistent layout
-            $settings = \App\Models\Setting::where('is_public', true)
+            $settings = Setting::where('is_public', true)
                 ->where('is_active', true)
                 ->whereIn('group', ['landing', 'contact', 'social', 'general'])
                 ->pluck('value', 'key');
@@ -86,18 +88,24 @@ class MushafTrackingController extends Controller
                 'total' => $mushafRequest->total_mushaf,
             ],
             'approved' => [
-                'mushaf_a5' => $mushafRequest->jumlah_mushaf_a5_approved ?? $mushafRequest->jumlah_mushaf_a5,
-                'mushaf_a6' => $mushafRequest->jumlah_mushaf_a6_approved ?? $mushafRequest->jumlah_mushaf_a6,
-                'iqra' => $mushafRequest->jumlah_iqra_approved ?? $mushafRequest->jumlah_iqra,
-                'total' => $mushafRequest->total_mushaf_approved,
+                'mushaf_a5' => $mushafRequest->approved_breakdown['a5'],
+                'mushaf_a6' => $mushafRequest->approved_breakdown['a6'],
+                'iqra' => $mushafRequest->approved_breakdown['iqra'],
+                'total' => $mushafRequest->approved_breakdown['total'],
             ],
             'has_change' => $mushafRequest->has_quantity_change,
             'change_percentage' => $mushafRequest->quantity_change_percentage,
             'catatan_perubahan' => $mushafRequest->catatan_perubahan_jumlah,
         ];
 
+        // Tahap pengiriman (packing → diterima). Data ini diambil dari pengiriman
+        // yang tertaut, bukan dari kolom status permintaan: permintaan mushaf tidak
+        // punya tahap packing/pengiriman sendiri, sehingga tanpa ini halaman publik
+        // tidak pernah menampilkan kemajuan setelah "Sudah Diproses".
+        $shippingStages = $this->buildShippingStages($mushafRequest);
+
         // Get settings for consistent layout
-        $settings = \App\Models\Setting::where('is_public', true)
+        $settings = Setting::where('is_public', true)
             ->where('is_active', true)
             ->whereIn('group', ['landing', 'contact', 'social', 'general'])
             ->pluck('value', 'key');
@@ -106,9 +114,52 @@ class MushafTrackingController extends Controller
             'mushafRequest' => $mushafRequest,
             'no_request' => $noRequest,
             'statusHistory' => $statusHistory,
+            'shippingStages' => $shippingStages,
             'quantityComparison' => $quantityComparison,
             'settings' => $settings,
         ]);
+    }
+
+    /**
+     * Susun tahap pengiriman yang sudah dilalui permintaan mushaf.
+     *
+     * Permintaan mushaf tidak memiliki kolom status packing/pengiriman sendiri;
+     * kemajuannya hanya terlihat dari status pengiriman yang tertaut. Urutan
+     * tahap diambil dari kolom `urutan` pada master status, sehingga konsisten
+     * dengan Status Pengiriman di panel admin.
+     *
+     * @return array<int, array{slug: string, label: string, reached: bool, is_current: bool, at: string|null}>
+     */
+    private function buildShippingStages(MushafRequest $mushafRequest): array
+    {
+        $pengiriman = $mushafRequest->pengiriman;
+
+        if (! $pengiriman) {
+            return [];
+        }
+
+        $steps = StatusPengiriman::query()
+            ->whereIn('slug', ['packing', 'selesai-packing', 'pengiriman', 'diterima'])
+            ->orderBy('urutan')
+            ->get();
+
+        $current = $pengiriman->status;
+
+        if (! $current) {
+            return [];
+        }
+
+        $isReached = fn (StatusPengiriman $step): bool => $step->urutan <= $current->urutan;
+
+        return $steps->map(fn (StatusPengiriman $step): array => [
+            'slug' => $step->slug,
+            'label' => $step->nama,
+            'reached' => $isReached($step),
+            'is_current' => $step->slug === $current->slug,
+            'at' => $step->slug === $current->slug
+                ? optional($pengiriman->updated_at)->translatedFormat('d F Y')
+                : null,
+        ])->values()->all();
     }
 
     /**

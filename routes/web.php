@@ -85,11 +85,7 @@ Route::get('/', function () {
                 'kategori_lembaga')
             ->get()
             ->map(function ($item) {
-                // Use APPROVED quantities (fallback to requested if not set)
-                $approvedMushaf = $item->jumlah_mushaf_approved ?? $item->jumlah_mushaf;
-                $approvedIqra = $item->jumlah_iqra_approved ?? $item->jumlah_iqra;
-                $total = $approvedMushaf + $approvedIqra;
-
+                // Pakai accessor model: satu rumus untuk seluruh aplikasi
                 return [
                     'id' => $item->id,
                     'nama_lembaga' => $item->nama_lembaga,
@@ -98,7 +94,7 @@ Route::get('/', function () {
                     'lat' => (float) $item->latitude,
                     'lng' => (float) $item->longitude,
                     'status' => 'completed',
-                    'jumlah_mushaf' => $total,
+                    'jumlah_mushaf' => $item->approved_breakdown['total'],
                     'kategori' => $item->kategori_lembaga,
                     'nama_penerima' => $item->nama_lembaga,
                 ];

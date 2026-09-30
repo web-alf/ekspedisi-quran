@@ -22,6 +22,9 @@
   let selectedUser = filters.user_id || '';
   let startDate = filters.start_date || '';
   let endDate = filters.end_date || '';
+  // Filter "hanya yang sudah selesai packing" — kebutuhan tim: daftar Al-Qur'an
+  // yang benar-benar sudah masuk kerdus & tersegel, siap distribusi.
+  let hanyaSelesaiPacking = filters.selesai_packing === true || filters.selesai_packing === '1';
   let searchTimeout;
 
   // Current date for max date attribute
@@ -46,11 +49,22 @@
     if (selectedUser) params.user_id = selectedUser;
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
-    
+    if (hanyaSelesaiPacking) params.selesai_packing = 1;
+
     router.get('/admin/box-tracking', params, {
       preserveState: true,
       preserveScroll: true
     });
+  }
+
+  function toggleSelesaiPacking() {
+    hanyaSelesaiPacking = !hanyaSelesaiPacking;
+    applyFilters();
+  }
+
+  // Kerdus tersegel = selesai packing. Dipakai untuk menandai baris di daftar.
+  function isSelesaiPacking(box) {
+    return box.status === 'sealed';
   }
 
   function resetFilters() {
@@ -60,6 +74,7 @@
     selectedUser = '';
     startDate = '';
     endDate = '';
+    hanyaSelesaiPacking = false;
     router.get('/admin/box-tracking');
   }
 
@@ -222,13 +237,49 @@
     </div>
 
     <!-- Reset Button -->
-    <div class="flex justify-end">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <button
+        type="button"
+        on:click={toggleSelesaiPacking}
+        class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border
+          {hanyaSelesaiPacking
+            ? 'bg-green-600 border-green-600 text-white hover:bg-green-700'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}"
+      >
+        <span class="inline-block h-2 w-2 rounded-full {hanyaSelesaiPacking ? 'bg-white' : 'bg-gray-300'}"></span>
+        Hanya Selesai Packing
+        <span class="ml-1 px-2 py-0.5 rounded-full text-xs {hanyaSelesaiPacking ? 'bg-white/20' : 'bg-gray-100'}">{stats.sealed_boxes || 0}</span>
+      </button>
       <button
         on:click={resetFilters}
         class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
       >
         Reset Filter
       </button>
+    </div>
+  </div>
+
+  <!-- Ringkasan Selesai Packing (satuan) -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-5 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900">Total Al-Qur'an Selesai Packing</h3>
+        <p class="text-xs text-gray-500 mt-1">Kerdus yang sudah tersegel dan siap distribusi</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-8 gap-y-3">
+        <div>
+          <div class="text-xs text-gray-500">Pcs</div>
+          <div class="text-xl font-bold text-gray-900">{stats.sealed_pcs || 0}</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Doz</div>
+          <div class="text-xl font-bold text-gray-900">{stats.sealed_satuan?.doz ?? 0}</div>
+        </div>
+        <div class="pl-4 border-l border-gray-200">
+          <div class="text-xs text-gray-500">Total</div>
+          <div class="text-xl font-bold text-green-600">{stats.sealed_satuan?.label || '0 pcs'}</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -247,6 +298,8 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis Quran</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Isi (Satuan)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Kerdus</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seal Code</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
@@ -276,6 +329,23 @@
                     <span class="text-sm text-gray-600">{box.terisi}/{box.kapasitas}</span>
                   </div>
                   <div class="text-xs text-gray-500">{box.progress_percentage}%</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <!-- Satuan dihitung dari jumlah keping (dikirim server) -->
+                  <div class="text-sm font-medium text-gray-900">{box.satuan?.label || '-'}</div>
+                  <div class="text-xs text-gray-500">dari {box.satuan_kapasitas?.label || box.kapasitas} / kerdus</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  {#if box.qr_code_base64}
+                    <img
+                      src={box.qr_code_base64}
+                      alt="QR {box.kode_kerdus}"
+                      title="QR kerdus {box.kode_kerdus} — siap dipindai"
+                      class="h-16 w-16 border border-gray-200 rounded bg-white p-1"
+                    />
+                  {:else}
+                    <span class="text-xs text-gray-400">QR belum dibuat</span>
+                  {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {box.user_name}

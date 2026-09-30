@@ -69,12 +69,41 @@
 
   // Form for editing approved quantities
   let quantityForm = {
-    jumlah_mushaf_approved: mushafRequest.jumlah_mushaf_approved || mushafRequest.jumlah_mushaf,
-    jumlah_mushaf_a5_approved: mushafRequest.jumlah_mushaf_a5_approved || mushafRequest.jumlah_mushaf_a5,
-    jumlah_mushaf_a6_approved: mushafRequest.jumlah_mushaf_a6_approved || mushafRequest.jumlah_mushaf_a6,
-    jumlah_iqra_approved: mushafRequest.jumlah_iqra_approved || mushafRequest.jumlah_iqra,
+    jumlah_mushaf_a5_approved: 0,
+    jumlah_mushaf_a6_approved: 0,
+    jumlah_iqra_approved: 0,
     catatan_perubahan_jumlah: mushafRequest.catatan_perubahan_jumlah || ''
   };
+
+  // Satu sumber angka "disetujui" untuk seluruh halaman ini: `approved_breakdown`
+  // dari model (A5 + A6 + IQRA). Sebelumnya tiap blok memakai rumusnya sendiri
+  // (`jumlah_mushaf_approved ?? jumlah_mushaf`), sehingga angka yang tampil
+  // berbeda-beda setelah jumlah diedit.
+  function approvedOf(request) {
+    return request?.approved_breakdown || {
+      a5: 0, a6: 0, iqra: 0, mushaf: 0, total: 0,
+      a5_requested: request?.jumlah_mushaf_a5 || 0,
+      a6_requested: request?.jumlah_mushaf_a6 || 0,
+      iqra_requested: request?.jumlah_iqra || 0,
+      total_requested: (request?.jumlah_mushaf || 0) + (request?.jumlah_iqra || 0)
+    };
+  }
+
+  // Penanda "jumlah disetujui sudah pernah ditetapkan" hanya bisa dibaca dari
+  // kolom nullable `jumlah_mushaf_approved`: kolom pecahannya NOT NULL default 0,
+  // jadi 0 tidak bisa dibedakan dari "belum diisi".
+  function hasApprovedQuantities(request) {
+    return request?.jumlah_mushaf_approved !== null && request?.jumlah_mushaf_approved !== undefined;
+  }
+
+  const num = (value) => Number(value) || 0;
+
+  // Input type="number" mengikat string; server memvalidasi sebagai integer.
+  // Normalisasi di sini agar nilai kosong/desimal tidak mengirim payload aneh.
+  const toInt = (value) => Math.max(0, Math.trunc(Number(value) || 0));
+
+  $: approved = approvedOf(mushafRequest);
+  $: hasApproved = hasApprovedQuantities(mushafRequest);
   
   const statusForm = useForm({
     status: mushafRequest.status,
@@ -173,12 +202,13 @@
   }
 
   function openEditQuantityModal() {
-    // Reset form dengan data saat ini
+    // Reset form dengan data saat ini. Bila jumlah disetujui belum pernah
+    // ditetapkan, isi dari jumlah yang DIAJUKAN sebagai titik awal — tapi begitu
+    // disimpan, angkanya menjadi angka disetujui yang sebenarnya.
     quantityForm = {
-      jumlah_mushaf_approved: mushafRequest.jumlah_mushaf_approved || mushafRequest.jumlah_mushaf,
-      jumlah_mushaf_a5_approved: mushafRequest.jumlah_mushaf_a5_approved || mushafRequest.jumlah_mushaf_a5,
-      jumlah_mushaf_a6_approved: mushafRequest.jumlah_mushaf_a6_approved || mushafRequest.jumlah_mushaf_a6,
-      jumlah_iqra_approved: mushafRequest.jumlah_iqra_approved || mushafRequest.jumlah_iqra,
+      jumlah_mushaf_a5_approved: hasApproved ? approved.a5 : num(mushafRequest.jumlah_mushaf_a5),
+      jumlah_mushaf_a6_approved: hasApproved ? approved.a6 : num(mushafRequest.jumlah_mushaf_a6),
+      jumlah_iqra_approved: hasApproved ? approved.iqra : num(mushafRequest.jumlah_iqra),
       catatan_perubahan_jumlah: mushafRequest.catatan_perubahan_jumlah || ''
     };
     showEditQuantityModal = true;
@@ -190,9 +220,19 @@
 
   function handleUpdateQuantities() {
     isLoading = true;
-    router.patch(`/admin/mushaf-requests/${mushafRequest.id}/quantities`, quantityForm, {
+    router.patch(`/admin/mushaf-requests/${mushafRequest.id}/quantities`, {
+      jumlah_mushaf_a5_approved: toInt(quantityForm.jumlah_mushaf_a5_approved),
+      jumlah_mushaf_a6_approved: toInt(quantityForm.jumlah_mushaf_a6_approved),
+      jumlah_iqra_approved: toInt(quantityForm.jumlah_iqra_approved),
+      catatan_perubahan_jumlah: quantityForm.catatan_perubahan_jumlah
+    }, {
       preserveScroll: true,
-      onSuccess: () => {
+      onSuccess: (page) => {
+        // Pakai data segar dari server agar angka yang tampil langsung sama
+        // dengan yang tersimpan (tidak menunggu reload manual).
+        if (page?.props?.mushafRequest) {
+          mushafRequest = page.props.mushafRequest;
+        }
         showEditQuantityModal = false;
         isLoading = false;
       },
@@ -289,12 +329,14 @@
     });
   }
 
-  // Calculate total approved
-  $: totalApproved = (quantityForm.jumlah_mushaf_a5_approved || 0) +
-                     (quantityForm.jumlah_mushaf_a6_approved || 0) +
-                     (quantityForm.jumlah_iqra_approved || 0);
+  // Total perbandingan di modal. Dipakai `toInt` (bukan `||`) karena input
+  // number menghasilkan string: "0" itu truthy di JS sehingga `|| 0` akan
+  // meneruskan string kosong/aneh apa adanya.
+  $: totalApproved = toInt(quantityForm.jumlah_mushaf_a5_approved) +
+                     toInt(quantityForm.jumlah_mushaf_a6_approved) +
+                     toInt(quantityForm.jumlah_iqra_approved);
 
-  $: totalRequested = mushafRequest.jumlah_mushaf + mushafRequest.jumlah_iqra;
+  $: totalRequested = approved.total_requested;
   
   function handleStatusUpdate() {
     // Validate that status is actually changing
@@ -522,7 +564,7 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900">Detail Permintaan</h3>
-            {#if mushafRequest.status === 'approved' || mushafRequest.status === 'reviewed'}
+            {#if canUpdate}
               <button
                 on:click={openEditQuantityModal}
                 class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
@@ -535,24 +577,20 @@
           </div>
           <dl class="space-y-4">
             <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-500">Jumlah Mushaf</dt>
-              <dd class="text-sm text-gray-900 font-semibold">{mushafRequest.jumlah_mushaf_approved ?? mushafRequest.jumlah_mushaf}</dd>
+              <dt class="text-sm font-medium text-gray-500">Jumlah Diajukan</dt>
+              <dd class="text-sm text-gray-900 font-semibold">{mushafRequest.jumlah_mushaf} mushaf + {mushafRequest.jumlah_iqra} IQRA</dd>
             </div>
-            {#if (mushafRequest.jumlah_mushaf_a5_approved ?? mushafRequest.jumlah_mushaf_a5 ?? 0) > 0}
-              <div class="flex justify-between">
-                <dt class="text-sm font-medium text-gray-500">Jumlah Mushaf A5</dt>
-                <dd class="text-sm text-gray-900 font-semibold">{mushafRequest.jumlah_mushaf_a5_approved ?? mushafRequest.jumlah_mushaf_a5}</dd>
-              </div>
-            {/if}
-            {#if (mushafRequest.jumlah_mushaf_a6_approved ?? mushafRequest.jumlah_mushaf_a6 ?? 0) > 0}
-              <div class="flex justify-between">
-                <dt class="text-sm font-medium text-gray-500">Jumlah Mushaf A6</dt>
-                <dd class="text-sm text-gray-900 font-semibold">{mushafRequest.jumlah_mushaf_a6_approved ?? mushafRequest.jumlah_mushaf_a6}</dd>
-              </div>
-            {/if}
+            <div class="flex justify-between">
+              <dt class="text-sm font-medium text-gray-500">Jumlah Mushaf A5</dt>
+              <dd class="text-sm text-gray-900 font-semibold">{approved.a5}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-sm font-medium text-gray-500">Jumlah Mushaf A6</dt>
+              <dd class="text-sm text-gray-900 font-semibold">{approved.a6}</dd>
+            </div>
             <div class="flex justify-between">
               <dt class="text-sm font-medium text-gray-500">Jumlah IQRA</dt>
-              <dd class="text-sm text-gray-900 font-semibold">{mushafRequest.jumlah_iqra_approved ?? mushafRequest.jumlah_iqra}</dd>
+              <dd class="text-sm text-gray-900 font-semibold">{approved.iqra}</dd>
             </div>
             <div class="flex justify-between items-start">
               <dt class="text-sm font-medium text-gray-500">Jenis Mushaf</dt>
@@ -560,8 +598,13 @@
             </div>
             <div class="pt-4 border-t border-gray-100">
               <div class="flex justify-between items-center">
-                <dt class="text-sm font-medium text-gray-700">Total Disetujui</dt>
-                <dd class="text-lg font-bold text-blue-600">{(mushafRequest.jumlah_mushaf_approved ?? mushafRequest.jumlah_mushaf) + (mushafRequest.jumlah_iqra_approved ?? mushafRequest.jumlah_iqra)}</dd>
+                <dt class="text-sm font-medium text-gray-700">
+                  Total Disetujui
+                  {#if !hasApproved}
+                    <span class="block text-xs font-normal text-gray-500">Belum diubah — masih sama dengan jumlah diajukan</span>
+                  {/if}
+                </dt>
+                <dd class="text-lg font-bold text-blue-600">{approved.total}</dd>
               </div>
             </div>
           </dl>
@@ -717,7 +760,7 @@
           </div>
           <div>
             <dt class="text-sm font-medium text-gray-500">Wakif</dt>
-            <dd class="mt-1 text-sm text-gray-900">{mushafRequest.pengiriman.wakif?.nama_wakif || '-'}</dd>
+            <dd class="mt-1 text-sm text-gray-900">{mushafRequest.pengiriman.wakafItem?.wakif_name || mushafRequest.pengiriman.donatur?.nama_donatur || '-'}</dd>
           </div>
           <div>
             <dt class="text-sm font-medium text-gray-500">Jenis Al-Quran</dt>
@@ -846,18 +889,18 @@
               <div>
                 <p class="text-xs font-medium text-gray-500 mb-2">Yang Diajukan</p>
                 <div class="space-y-1">
-                  <p class="text-sm text-gray-700">A5: <span class="font-semibold">{mushafRequest.jumlah_mushaf_a5}</span></p>
-                  <p class="text-sm text-gray-700">A6: <span class="font-semibold">{mushafRequest.jumlah_mushaf_a6}</span></p>
-                  <p class="text-sm text-gray-700">IQRA: <span class="font-semibold">{mushafRequest.jumlah_iqra}</span></p>
+                  <p class="text-sm text-gray-700">A5: <span class="font-semibold">{approved.a5_requested}</span></p>
+                  <p class="text-sm text-gray-700">A6: <span class="font-semibold">{approved.a6_requested}</span></p>
+                  <p class="text-sm text-gray-700">IQRA: <span class="font-semibold">{approved.iqra_requested}</span></p>
                   <p class="text-sm font-bold text-gray-900 pt-2 border-t">Total: {totalRequested}</p>
                 </div>
               </div>
               <div>
                 <p class="text-xs font-medium text-gray-500 mb-2">Yang Disetujui</p>
                 <div class="space-y-1">
-                  <p class="text-sm text-blue-700">A5: <span class="font-semibold">{quantityForm.jumlah_mushaf_a5_approved || 0}</span></p>
-                  <p class="text-sm text-blue-700">A6: <span class="font-semibold">{quantityForm.jumlah_mushaf_a6_approved || 0}</span></p>
-                  <p class="text-sm text-blue-700">IQRA: <span class="font-semibold">{quantityForm.jumlah_iqra_approved || 0}</span></p>
+                  <p class="text-sm text-blue-700">A5: <span class="font-semibold">{toInt(quantityForm.jumlah_mushaf_a5_approved)}</span></p>
+                  <p class="text-sm text-blue-700">A6: <span class="font-semibold">{toInt(quantityForm.jumlah_mushaf_a6_approved)}</span></p>
+                  <p class="text-sm text-blue-700">IQRA: <span class="font-semibold">{toInt(quantityForm.jumlah_iqra_approved)}</span></p>
                   <p class="text-sm font-bold text-blue-900 pt-2 border-t">Total: {totalApproved}</p>
                 </div>
               </div>
@@ -867,7 +910,9 @@
                 <p class="text-xs text-yellow-800">
                   <strong>Perbedaan:</strong>
                   {totalApproved > totalRequested ? '+' : ''}{totalApproved - totalRequested}
-                  ({Math.abs(((totalApproved - totalRequested) / totalRequested) * 100).toFixed(1)}%)
+                  {#if totalRequested > 0}
+                    ({Math.abs(((totalApproved - totalRequested) / totalRequested) * 100).toFixed(1)}%)
+                  {/if}
                 </p>
               </div>
             {/if}

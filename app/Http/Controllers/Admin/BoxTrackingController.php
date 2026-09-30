@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\User;
+use App\Support\BoxUnits;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -51,6 +52,13 @@ class BoxTrackingController extends Controller
             $query->where('status', $request->status);
         }
 
+        // Filter khusus: hanya kerdus yang SUDAH SELESAI PACKING (tersegel).
+        // Dipakai halaman "Daftar Quran Selesai Packing" — daftar mushaf yang
+        // benar-benar sudah masuk kerdus dan siap distribusi.
+        if ($request->boolean('selesai_packing')) {
+            $query->where('status', PackingBox::STATUS_SEALED);
+        }
+
         // Filter by jenis quran
         if ($request->jenis_quran_id) {
             $query->where('jenis_quran_id', $request->jenis_quran_id);
@@ -91,6 +99,13 @@ class BoxTrackingController extends Controller
                 'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
                 'created_at' => $box->created_at->format('d/m/Y H:i'),
                 'item_count' => $box->packingItems->count(),
+                // Satuan isi kerdus (pcs / doz / lusin) — diturunkan dari jumlah
+                // keping, tidak ada angka yang perlu diisi manual.
+                'satuan' => BoxUnits::breakdown((int) $box->jumlah_terisi),
+                'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas),
+                // QR kerdus sudah dipakai gudang untuk operasi massal; ditampilkan
+                // di daftar supaya bisa langsung dipindai tanpa membuka detail.
+                'qr_code_base64' => $box->getBoxQRBase64(),
             ];
         });
 
@@ -108,11 +123,15 @@ class BoxTrackingController extends Controller
             'full_boxes' => PackingBox::where('status', 'full')->count(),
             'sealed_boxes' => PackingBox::where('status', 'sealed')->count(),
             'total_items_packed' => PackingBox::sum('jumlah_terisi'),
+            // Ringkasan "selesai packing" dalam satuan: halaman ini dipakai gudang
+            // untuk menghitung isi gudang, dan mereka menghitung dalam doz.
+            'sealed_pcs' => (int) PackingBox::where('status', PackingBox::STATUS_SEALED)->sum('jumlah_terisi'),
         ];
+        $stats['sealed_satuan'] = BoxUnits::breakdown($stats['sealed_pcs']);
 
         return Inertia::render('Admin/BoxTracking/Index', [
             'boxes' => $boxesData,
-            'filters' => $request->only(['search', 'status', 'jenis_quran_id', 'user_id', 'start_date', 'end_date']),
+            'filters' => $request->only(['search', 'status', 'jenis_quran_id', 'user_id', 'start_date', 'end_date', 'selesai_packing']),
             'jenisQuranList' => $jenisQuranList,
             'warehouseUsers' => $warehouseUsers,
             'stats' => $stats,

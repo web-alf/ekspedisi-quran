@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Exports\MushafRequestExport;
+use App\Exports\MushafRequestTemplateExport;
 use App\Http\Controllers\Controller;
+use App\Imports\MushafRequestImport;
 use App\Models\Donatur;
+use App\Models\JenisQuran;
 use App\Models\MushafRequest;
 use App\Models\Pengiriman;
+use App\Models\StatusPengiriman;
 use App\Services\Cache\DashboardCacheService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -76,13 +80,11 @@ class MushafRequestController extends Controller
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->select('id', 'nama_lembaga', 'provinsi', 'kota_kabupaten', 'latitude', 'longitude', 'status',
-                'jumlah_mushaf', 'jumlah_iqra', 'jumlah_mushaf_approved', 'jumlah_iqra_approved', 'kategori_lembaga')
+                'jumlah_mushaf', 'jumlah_iqra', 'jumlah_mushaf_a5', 'jumlah_mushaf_a6',
+                'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved', 'jumlah_mushaf_a6_approved', 'jumlah_iqra_approved', 'kategori_lembaga')
             ->get()
             ->map(function ($item) {
-                // Use approved quantities with fallback to requested
-                $approvedMushaf = $item->jumlah_mushaf_approved ?? $item->jumlah_mushaf;
-                $approvedIqra = $item->jumlah_iqra_approved ?? $item->jumlah_iqra;
-
+                // Pakai accessor model: satu rumus untuk seluruh aplikasi
                 return [
                     'id' => $item->id,
                     'nama_lembaga' => $item->nama_lembaga,
@@ -91,7 +93,7 @@ class MushafRequestController extends Controller
                     'lat' => (float) $item->latitude,
                     'lng' => (float) $item->longitude,
                     'status' => $item->status,
-                    'jumlah_mushaf' => $approvedMushaf + $approvedIqra,
+                    'jumlah_mushaf' => $item->approved_breakdown['total'],
                     'kategori' => $item->kategori_lembaga,
                     'nama_penerima' => $item->nama_lembaga, // Add for marker grouping
                 ];
@@ -223,10 +225,15 @@ class MushafRequestController extends Controller
             return back()->withErrors(['error' => 'Hanya permintaan yang disetujui yang bisa diproses']);
         }
 
-        // ✅ VALIDATION: Check if approved quantities are set when mushaf was edited
-        if ($mushafRequest->has_quantity_change && is_null($mushafRequest->jumlah_mushaf_approved)) {
+        // Jumlah yang akan dikirim dibaca dari `approved_breakdown`, yang otomatis
+        // memakai jumlah pengajuan selama jumlah disetujui belum pernah ditetapkan.
+        // Penjaga lama berbunyi `has_quantity_change && is_null(jumlah_mushaf_approved)`
+        // dan selalu bernilai benar — kolom pecahan `*_approved` NOT NULL default 0
+        // membuat has_quantity_change selalu true — sehingga SELURUH permintaan
+        // ditolak diproses ke pengiriman.
+        if ($mushafRequest->approved_breakdown['total'] < 1) {
             return back()->withErrors([
-                'error' => 'Jumlah mushaf yang disetujui belum ditentukan. Silakan edit jumlah mushaf terlebih dahulu.',
+                'error' => 'Jumlah mushaf yang disetujui masih 0, tidak ada yang bisa dikirim. Silakan edit jumlah mushaf terlebih dahulu.',
             ]);
         }
 
@@ -238,18 +245,26 @@ class MushafRequestController extends Controller
         try {
             \DB::beginTransaction();
 
-            // ✅ FIX: Use APPROVED quantities, fallback to requested if not edited
-            $approvedMushaf = $mushafRequest->jumlah_mushaf_approved ?? $mushafRequest->jumlah_mushaf;
-            $approvedIqra = $mushafRequest->jumlah_iqra_approved ?? $mushafRequest->jumlah_iqra;
-            $totalApproved = $approvedMushaf + $approvedIqra;
+            // ✅ FIX: Pakai satu sumber angka (approved_breakdown) agar jumlah yang
+            // masuk ke pengiriman sama dengan yang tampil di halaman detail/daftar.
+            $approved = $mushafRequest->approved_breakdown;
+            $approvedMushaf = $approved['mushaf'];
+            $approvedIqra = $approved['iqra'];
+            $totalApproved = $approved['total'];
 
-            // Determine jenis_quran_id based on APPROVED breakdown
-            $approvedA5 = $mushafRequest->jumlah_mushaf_a5_approved ?? $mushafRequest->jumlah_mushaf_a5;
-            $approvedA6 = $mushafRequest->jumlah_mushaf_a6_approved ?? $mushafRequest->jumlah_mushaf_a6;
+            $approvedA6 = $approved['a6'];
+            $approvedA5 = $approved['a5'];
 
-            $jenisQuranId = 1; // Default A5
+            // Tentukan jenis_quran_id dari pecahan yang DISETUJUI.
+            // Dulu nilainya di-hardcode 1 (A5) / 2 (A6). Nomor itu hanya kebetulan
+            // benar di satu database: id bergantung pada isi tabel `jenis_quran`,
+            // dan di database yang di-seed ulang ID-nya bisa berbeda — akibatnya
+            // proses ke pengiriman gagal dengan foreign key constraint violation.
+            $jenisQuranId = JenisQuran::where('kode_jenis', 'A5')->value('id')
+                ?? JenisQuran::orderBy('id')->value('id');
+
             if ($approvedA6 > 0 && $approvedA6 >= $approvedA5) {
-                $jenisQuranId = 2; // A6 dominan
+                $jenisQuranId = JenisQuran::where('kode_jenis', 'A6')->value('id') ?? $jenisQuranId;
             }
 
             // FIXED: Find existing pengiriman without address and assign mushaf request to it
@@ -264,7 +279,7 @@ class MushafRequestController extends Controller
 
             // Double-check setelah lock diperoleh: request lain mungkin sudah mengklaim
             // pengiriman ini dan mengisi alamat di sela-sela pemilihan baris tadi.
-            if ($pengiriman && !empty($pengiriman->fresh(['alamat_tujuan', 'nama_penerima'])->alamat_tujuan)) {
+            if ($pengiriman && ! empty($pengiriman->fresh(['alamat_tujuan', 'nama_penerima'])->alamat_tujuan)) {
                 $pengiriman = null;
             }
 
@@ -282,7 +297,7 @@ class MushafRequestController extends Controller
                     'jenis_quran_id' => $jenisQuranId,
                     'jumlah_quran' => $totalApproved, // ✅ FIX: Use approved quantity
                     'tanggal_wakaf' => $request->tanggal_wakaf,
-                    'status_id' => \App\Models\StatusPengiriman::getDefaultStatusId(),
+                    'status_id' => StatusPengiriman::getDefaultStatusId(),
                     'alamat_tujuan' => $mushafRequest->alamat_lengkap,
                     'nama_penerima' => $mushafRequest->nama_pengurus_1,
                     'nama_lembaga' => $mushafRequest->nama_lembaga,
@@ -452,7 +467,7 @@ class MushafRequestController extends Controller
         ]);
 
         try {
-            $import = new \App\Imports\MushafRequestImport;
+            $import = new MushafRequestImport;
             Excel::import($import, $request->file('file'));
 
             $results = $import->getResults();
@@ -486,7 +501,7 @@ class MushafRequestController extends Controller
         try {
             $filename = 'mushaf-request-import-template-'.now()->format('Y-m-d').'.xlsx';
 
-            return Excel::download(new \App\Exports\MushafRequestTemplateExport, $filename);
+            return Excel::download(new MushafRequestTemplateExport, $filename);
 
         } catch (\Exception $e) {
             return back()->with('error', 'Error saat download template: '.$e->getMessage());
@@ -501,7 +516,6 @@ class MushafRequestController extends Controller
         $this->authorize('update', $mushafRequest);
 
         $request->validate([
-            'jumlah_mushaf_approved' => 'nullable|integer|min:0',
             'jumlah_mushaf_a5_approved' => 'nullable|integer|min:0',
             'jumlah_mushaf_a6_approved' => 'nullable|integer|min:0',
             'jumlah_iqra_approved' => 'nullable|integer|min:0',
@@ -511,9 +525,12 @@ class MushafRequestController extends Controller
         try {
             $originalTotal = $mushafRequest->total_mushaf;
 
-            // Update quantities
+            // Kolom `jumlah_mushaf_approved` TIDAK diambil dari request: nilainya
+            // dijaga model (hook `saving`) sebagai penjumlahan A5 + A6 + IQRA.
+            // Sebelumnya kolom ini diisi apa adanya dari payload frontend yang
+            // berisi total pengajuan, sehingga nilai yang tampil tidak pernah
+            // berubah walau pecahannya diedit.
             $mushafRequest->update($request->only([
-                'jumlah_mushaf_approved',
                 'jumlah_mushaf_a5_approved',
                 'jumlah_mushaf_a6_approved',
                 'jumlah_iqra_approved',

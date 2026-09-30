@@ -5,6 +5,7 @@
   export let no_request;
   export const statusHistory = [];
   export let quantityComparison = null;
+  export let shippingStages = [];
   export const auth = {};
   export const errors = {};
   export const flash = {};
@@ -276,6 +277,41 @@
                 </h2>
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <div class="space-y-6">
+                    <!-- Tahap Pengiriman: Packing → Selesai Packing → Pengiriman → Diterima -->
+                    {#if shippingStages.length > 0}
+                      <div>
+                        <h4 class="text-sm font-medium text-gray-500 mb-4">Tahap Pengiriman</h4>
+                        <div class="space-y-3">
+                          {#each shippingStages as stage, i}
+                            <div class="flex items-start space-x-3">
+                              <div class="flex flex-col items-center">
+                                <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+                                  {stage.reached ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-400'}">
+                                  {stage.reached ? '✓' : i + 1}
+                                </div>
+                                {#if i < shippingStages.length - 1}
+                                  <div class="w-0.5 h-6 {shippingStages[i + 1].reached ? 'bg-[#eb3434]' : 'bg-gray-200'}"></div>
+                                {/if}
+                              </div>
+                              <div class="flex-1 min-w-0 pt-1">
+                                <div class="flex items-center space-x-2">
+                                  <span class="{stage.reached ? 'font-semibold text-gray-900' : 'text-gray-400'}">{stage.label}</span>
+                                  {#if stage.is_current}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">Saat ini</span>
+                                  {/if}
+                                </div>
+                                {#if stage.at}
+                                  <p class="text-xs text-gray-500">{stage.at}</p>
+                                {/if}
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      </div>
+
+                      <div class="border-t border-gray-200 pt-6"></div>
+                    {/if}
+
                     <!-- Current Status -->
                     <div class="flex items-start space-x-4 relative">
                       <div class="flex-shrink-0 w-12 h-12 bg-[#eb3434] rounded-full flex items-center justify-center shadow-lg">

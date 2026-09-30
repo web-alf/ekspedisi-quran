@@ -544,6 +544,7 @@ class PengirimanController extends Controller
             'nama_penerima' => ['nullable', 'string', 'max:255'],
             'no_hp_penerima' => ['nullable', 'string', 'max:20'],
             'nama_lembaga' => ['nullable', 'string', 'max:255'],
+            'mushaf_request_id' => ['nullable', 'integer', 'exists:mushaf_requests,id'],
         ]);
 
         try {
@@ -554,6 +555,25 @@ class PengirimanController extends Controller
                     'no_hp_penerima' => $request->no_hp_penerima,
                     'nama_lembaga' => $request->nama_lembaga,
                 ]);
+
+            // Tautkan permintaan mushaf terpilih ke pengiriman yang baru di-set
+            // alamatnya. Tanpa tautan ini, `PengirimanObserver` tidak akan pernah
+            // menemukan permintaannya saat pengiriman berstatus 'diterima', sehingga
+            // permintaan tidak pernah selesai dan tidak muncul di peta distribusi.
+            if ($request->filled('mushaf_request_id')) {
+                $mushafRequest = MushafRequest::find($request->mushaf_request_id);
+
+                if ($mushafRequest && $mushafRequest->status === 'approved') {
+                    $pengirimanId = Pengiriman::whereIn('id', $request->pengiriman_ids)
+                        ->orderBy('id')
+                        ->value('id');
+
+                    Pengiriman::whereIn('id', $request->pengiriman_ids)
+                        ->update(['mushaf_request_id' => $mushafRequest->id]);
+
+                    $mushafRequest->markAsProcessed($pengirimanId, auth()->id());
+                }
+            }
 
             return back()->with('success', "{$updated} pengiriman berhasil diset alamat tujuannya.");
 

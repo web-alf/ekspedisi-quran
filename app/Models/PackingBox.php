@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Cache\StatusPengirimanCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -251,13 +252,47 @@ class PackingBox extends Model
                 'seal_code' => $this->generateSealCode(),
             ]);
 
+            // Setelah tersegel, isi kerdus bukan lagi "sedang dipacking".
+            // Sebelum ini tidak ada satu pun kode yang menulis status
+            // 'selesai-packing' — akibatnya stok "Siap Distribusi" di Monitor
+            // Gudang selalu 0 dan tahap pengiriman di halaman publik tidak pernah
+            // bergerak sampai admin mengubah statusnya manual satu per satu.
+            $this->advancePackedShipmentsToReady();
+
             // Activate next box
             $task = $this->dailyPackingTask;
-            $nextBox = $task->getNextBox();
+            $nextBox = $task?->getNextBox();
             if ($nextBox) {
                 $nextBox->update(['status' => self::STATUS_FILLING]);
             }
         }, 3); // Retry up to 3 times for deadlock
+    }
+
+    /**
+     * Naikkan status pengiriman isi kerdus dari 'packing' ke 'selesai-packing'.
+     *
+     * Hanya pengiriman yang masih berstatus 'packing' yang disentuh: pengiriman
+     * yang sudah lebih jauh (mis. sudah dikirim) tidak boleh mundur, dan
+     * pengiriman yang belum masuk packing tidak ikut terpengaruh.
+     */
+    protected function advancePackedShipmentsToReady(): void
+    {
+        $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
+        $readyStatusId = StatusPengirimanCache::getIdBySlug('selesai-packing');
+
+        if (! $packingStatusId || ! $readyStatusId) {
+            return;
+        }
+
+        $pengirimanIds = $this->packingItems()
+            ->whereHas('pengiriman', fn ($query) => $query->where('status_id', $packingStatusId))
+            ->pluck('pengiriman_id')
+            ->unique()
+            ->values();
+
+        foreach ($pengirimanIds as $pengirimanId) {
+            Pengiriman::whereKey($pengirimanId)->update(['status_id' => $readyStatusId]);
+        }
     }
 
     /**

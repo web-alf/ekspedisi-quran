@@ -278,12 +278,15 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::DASHBOARD_VIEW->value,
             PermissionEnum::DASHBOARD_ANALYTICS->value,
 
-            // Donatur (tanpa delete)
-            PermissionEnum::DONATUR_CREATE->value,
-            PermissionEnum::DONATUR_READ->value,
-            PermissionEnum::DONATUR_UPDATE->value,
-            PermissionEnum::DONATUR_IMPORT->value,
-            PermissionEnum::DONATUR_EXPORT->value,
+            // Donatur — SENGAJA TIDAK DIBERIKAN kepada manager.
+            // Halaman "Kelola Donatur" diminta dihilangkan untuk role manager supaya
+            // manajer fokus pada alur permintaan → pengiriman, bukan mengelola data
+            // donatur (wilayah customer-service). Karena AdminLayout memfilter menu
+            // berdasarkan izin ini, mencabutnya sekaligus menghilangkan menunya dan
+            // membuat akses langsung ke URL-nya ditolak.
+            // Aman: daftar donatur yang dipakai halaman Pengiriman diambil langsung
+            // di controller (tidak lewat izin donatur.*), dan seluruh route
+            // pengiriman dijaga izin shipments.*.
 
             // Shipments (tanpa delete)
             PermissionEnum::SHIPMENTS_CREATE->value,

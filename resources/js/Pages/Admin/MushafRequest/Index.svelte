@@ -55,6 +55,20 @@
   $: if (!filters.status) filters.status = '';
   $: if (!filters.start_date) filters.start_date = '';
   $: if (!filters.end_date) filters.end_date = '';
+
+  // Angka "disetujui" diambil dari accessor model (`approved_breakdown`) supaya
+  // daftar dan halaman detail tidak pernah menampilkan angka yang berbeda.
+  // Fallback hanya untuk jaga-jaga bila prop tidak lengkap.
+  const approvedBreakdown = (request) => request?.approved_breakdown || {
+    mushaf: request?.jumlah_mushaf || 0,
+    iqra: request?.jumlah_iqra || 0,
+    total: (request?.jumlah_mushaf || 0) + (request?.jumlah_iqra || 0),
+    a5: request?.jumlah_mushaf_a5 || 0,
+    a6: request?.jumlah_mushaf_a6 || 0
+  };
+
+  const approvedTotal = (request) => approvedBreakdown(request).mushaf;
+  const approvedIqra = (request) => approvedBreakdown(request).iqra;
   
   let search = filters.search || '';
   let statusFilter = filters.status || '';
@@ -591,8 +605,8 @@
         
         if (categoryStats[mainCategory]) {
           categoryStats[mainCategory].count++;
-          categoryStats[mainCategory].totalMushaf += request.jumlah_mushaf || 0;
-          categoryStats[mainCategory].totalIqra += request.jumlah_iqra || 0;
+          categoryStats[mainCategory].totalMushaf += approvedTotal(request);
+          categoryStats[mainCategory].totalIqra += approvedIqra(request);
         } else {
           // Handle uncategorized
           if (!categoryStats['Tidak Dikategorikan']) {
@@ -604,8 +618,8 @@
             };
           }
           categoryStats['Tidak Dikategorikan'].count++;
-          categoryStats['Tidak Dikategorikan'].totalMushaf += request.jumlah_mushaf || 0;
-          categoryStats['Tidak Dikategorikan'].totalIqra += request.jumlah_iqra || 0;
+          categoryStats['Tidak Dikategorikan'].totalMushaf += approvedTotal(request);
+          categoryStats['Tidak Dikategorikan'].totalIqra += approvedIqra(request);
         }
       });
     }
@@ -623,7 +637,7 @@
       if (request.status !== 'completed') {
         return total;
       }
-      return total + (request.jumlah_mushaf || 0) + (request.jumlah_iqra || 0);
+      return total + approvedTotal(request) + approvedIqra(request);
     }, 0);
   }
 
@@ -1020,11 +1034,11 @@
                       </div>
                       <div class="text-xs text-gray-500 mt-1">No. Request: {request.no_request}</div>
                       <div class="text-xs text-gray-500 flex gap-2">
-                        <span>Mushaf: {request.jumlah_mushaf}</span>
-                        {#if request.jumlah_mushaf_a5 > 0}<span>A5: {request.jumlah_mushaf_a5}</span>{/if}
-                        {#if request.jumlah_mushaf_a6 > 0}<span>A6: {request.jumlah_mushaf_a6}</span>{/if}
-                        <span>IQRA: {request.jumlah_iqra}</span>
-                        <span class="font-medium">Total: {request.jumlah_mushaf + request.jumlah_iqra}</span>
+                        <span>Mushaf: {request.approved_breakdown?.mushaf ?? request.jumlah_mushaf}</span>
+                        {#if (request.approved_breakdown?.a5 ?? request.jumlah_mushaf_a5) > 0}<span>A5: {request.approved_breakdown?.a5 ?? request.jumlah_mushaf_a5}</span>{/if}
+                        {#if (request.approved_breakdown?.a6 ?? request.jumlah_mushaf_a6) > 0}<span>A6: {request.approved_breakdown?.a6 ?? request.jumlah_mushaf_a6}</span>{/if}
+                        <span>IQRA: {request.approved_breakdown?.iqra ?? request.jumlah_iqra}</span>
+                        <span class="font-medium">Total: {request.approved_breakdown?.total ?? (request.jumlah_mushaf + request.jumlah_iqra)}</span>
                       </div>
                     </div>
                   </td>

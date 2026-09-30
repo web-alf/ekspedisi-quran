@@ -22,7 +22,9 @@ class DailyPackingTaskFactory extends Factory
             'total_selesai' => 0,
             'sisa_kemarin' => 0,
             'status' => DailyPackingTask::STATUS_ASSIGNED,
-            'assignment_method' => 'auto',
+            // Kolomnya ENUM('flat','target_only','mixed_box_based'); nilai 'auto'
+            // akan ditolak MySQL dengan "Data truncated for column".
+            'assignment_method' => 'target_only',
             'box_breakdown' => [],
             'has_shared_boxes' => false,
             'total_boxes_assigned' => 0,

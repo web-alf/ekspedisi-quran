@@ -13,18 +13,17 @@ class MapController extends Controller
     public function getMapData()
     {
         // Get completed mushaf requests with coordinates
-        // ✅ FIX: Use approved quantities with fallback to requested
+        // ✅ FIX: Pakai satu rumus (accessor model) — kolom pecahan & penanda wajib
+        // ikut di-select karena accessor menghitung dari kolom tersebut.
         $mapData = MushafRequest::where('status', 'completed')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->select('id', 'nama_lembaga', 'provinsi', 'kota_kabupaten', 'latitude', 'longitude',
-                'jumlah_mushaf', 'jumlah_iqra', 'jumlah_mushaf_approved', 'jumlah_iqra_approved')
+                'jumlah_mushaf', 'jumlah_mushaf_a5', 'jumlah_mushaf_a6', 'jumlah_iqra',
+                'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved', 'jumlah_mushaf_a6_approved', 'jumlah_iqra_approved')
             ->get()
             ->map(function ($item) {
-                // Use approved quantities with fallback to requested
-                $approvedMushaf = $item->jumlah_mushaf_approved ?? $item->jumlah_mushaf;
-                $approvedIqra = $item->jumlah_iqra_approved ?? $item->jumlah_iqra;
-
+                // Pakai accessor model: satu rumus untuk seluruh aplikasi
                 return [
                     'id' => $item->id,
                     'nama_lembaga' => $item->nama_lembaga,
@@ -33,7 +32,7 @@ class MapController extends Controller
                     'lat' => (float) $item->latitude,
                     'lng' => (float) $item->longitude,
                     'status' => 'completed',
-                    'jumlah_mushaf' => $approvedMushaf + $approvedIqra,
+                    'jumlah_mushaf' => $item->approved_breakdown['total'],
                 ];
             });
 

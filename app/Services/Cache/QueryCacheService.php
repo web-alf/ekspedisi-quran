@@ -250,7 +250,10 @@ class QueryCacheService extends BaseCacheService
     public function getPendingMushafRequestStats(): array
     {
         return $this->remember('pending_mushaf_requests_stats', function () {
-            // ✅ FIX: Use APPROVED quantities with fallback to requested
+            // ✅ FIX: Persentase & rata-rata memakai rumus yang sama dengan accessor
+            // model (COALESCE pada kolom nullable penanda, bukan pada pecahannya),
+            // dan pecahannya dikosongkan bila penanda NULL supaya angka tidak
+            // tercampur antara "disetujui 0" dan "belum ditetapkan".
             $stats = MushafRequest::where('status', 'pending')
                 ->selectRaw('
                     COUNT(*) as total_pending,
@@ -274,7 +277,9 @@ class QueryCacheService extends BaseCacheService
                     ->orderBy('created_at', 'desc')
                     ->limit(5)
                     ->get([
-                        'id', 'no_request', 'nama_lembaga', 'jumlah_mushaf', 'jumlah_mushaf_approved',
+                        'id', 'no_request', 'nama_lembaga',
+                        'jumlah_mushaf', 'jumlah_mushaf_a5', 'jumlah_mushaf_a6',
+                        'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved', 'jumlah_mushaf_a6_approved',
                         'jumlah_iqra', 'jumlah_iqra_approved', 'created_at',
                     ])
                     ->toArray(),

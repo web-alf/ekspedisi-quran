@@ -254,15 +254,17 @@ class DashboardCacheService extends BaseCacheService
         }
 
         // Recent mushaf requests - ✅ FIX: Use approved quantities with fallback
-        $recentRequests = MushafRequest::select('id', 'no_request', 'nama_lembaga', 'jumlah_mushaf', 'jumlah_mushaf_approved', 'jumlah_iqra', 'jumlah_iqra_approved', 'status', 'created_at')
+        $recentRequests = MushafRequest::select('id', 'no_request', 'nama_lembaga', 'jumlah_mushaf',
+            'jumlah_mushaf_a5', 'jumlah_mushaf_a6', 'jumlah_mushaf_approved',
+            'jumlah_mushaf_a5_approved', 'jumlah_mushaf_a6_approved',
+            'jumlah_iqra', 'jumlah_iqra_approved', 'status', 'created_at')
             ->orderBy('created_at', 'desc')
             ->limit(3)
             ->get();
 
         foreach ($recentRequests as $request) {
-            // Use approved quantities with fallback to requested
-            $totalMushaf = ($request->jumlah_mushaf_approved ?? $request->jumlah_mushaf) +
-                          ($request->jumlah_iqra_approved ?? $request->jumlah_iqra);
+            // Pakai accessor model: satu rumus untuk seluruh aplikasi
+            $totalMushaf = $request->approved_breakdown['total'];
 
             $activities[] = [
                 'id' => 'request_'.$request->id,

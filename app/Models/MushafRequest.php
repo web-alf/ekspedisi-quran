@@ -102,6 +102,15 @@ class MushafRequest extends Model
     ];
 
     /**
+     * Accessor terhitung yang selalu dikirim ke frontend.
+     *
+     * `approved_breakdown` adalah SATU-SATUNYA sumber angka "disetujui" di UI —
+     * dipakai halaman detail, daftar, modal edit, dan proses ke pengiriman —
+     * supaya seluruh tampilan tidak lagi menampilkan angka yang berbeda-beda.
+     */
+    protected $appends = ['approved_breakdown'];
+
+    /**
      * Boot method untuk auto-generate no_request
      */
     protected static function boot()
@@ -116,6 +125,21 @@ class MushafRequest extends Model
             // Auto-generate alamat_lengkap jika fields detail diisi
             if (empty($model->alamat_lengkap)) {
                 $model->alamat_lengkap = $model->generateAlamatLengkap();
+            }
+        });
+
+        // Jaga agar kolom `jumlah_mushaf_approved` tidak pernah menyimpang dari
+        // pecahannya (A5 + A6 + IQRA). Kolom ini juga berfungsi sebagai penanda
+        // "jumlah disetujui sudah pernah ditetapkan" — lihat has_approved_quantities.
+        static::saving(function ($model) {
+            if ($model->isDirty([
+                'jumlah_mushaf_a5_approved',
+                'jumlah_mushaf_a6_approved',
+                'jumlah_iqra_approved',
+            ])) {
+                $model->jumlah_mushaf_approved = (int) $model->jumlah_mushaf_a5_approved
+                    + (int) $model->jumlah_mushaf_a6_approved
+                    + (int) $model->jumlah_iqra_approved;
             }
         });
 
@@ -156,7 +180,7 @@ class MushafRequest extends Model
         $tahun = (int) date('Y');
 
         // Ambil nomor berikutnya secara atomic dari sequence table
-        $nextNumber = \App\Models\NoRequestSequence::getNextNumber($tahun);
+        $nextNumber = NoRequestSequence::getNextNumber($tahun);
 
         return "REQ-{$tahun}-".str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
     }
@@ -227,9 +251,7 @@ class MushafRequest extends Model
      */
     public function getTotalMushafApprovedAttribute()
     {
-        return ($this->jumlah_mushaf_a5_approved ?? $this->jumlah_mushaf_a5)
-            + ($this->jumlah_mushaf_a6_approved ?? $this->jumlah_mushaf_a6)
-            + ($this->jumlah_iqra_approved ?? $this->jumlah_iqra);
+        return $this->approved_breakdown['total'];
     }
 
     /**
@@ -237,16 +259,77 @@ class MushafRequest extends Model
      */
     public function getTotalMushafQuranApprovedAttribute()
     {
-        return ($this->jumlah_mushaf_a5_approved ?? $this->jumlah_mushaf_a5)
-            + ($this->jumlah_mushaf_a6_approved ?? $this->jumlah_mushaf_a6);
+        return $this->approved_breakdown['mushaf'];
+    }
+
+    /**
+     * Angka "disetujui" dalam satu bentuk tunggal untuk seluruh UI.
+     *
+     * Sebelumnya setiap tampilan memakai rumusnya sendiri
+     * (`jumlah_mushaf_approved ?? jumlah_mushaf` di satu tempat,
+     * `total_mushaf_approved` di tempat lain), sehingga satu permintaan bisa
+     * menampilkan beberapa angka berbeda setelah jumlahnya diedit.
+     *
+     * Sumber kebenarannya adalah pecahan A5 + A6 + IQRA. Kolom lama
+     * `jumlah_mushaf_approved` hanya dipakai sebagai penanda apakah angka
+     * disetujui sudah pernah ditetapkan (lihat has_approved_quantities), dan
+     * sudah dijaga agar selalu sama dengan penjumlahan pecahan tersebut.
+     *
+     * @return array{mushaf: int, iqra: int, total: int, a5: int, a6: int, a5_requested: int, a6_requested: int, iqra_requested: int, total_requested: int}
+     */
+    public function getApprovedBreakdownAttribute(): array
+    {
+        $a5Requested = (int) $this->jumlah_mushaf_a5;
+        $a6Requested = (int) $this->jumlah_mushaf_a6;
+        $iqraRequested = (int) $this->jumlah_iqra;
+
+        // Selama jumlah disetujui belum pernah ditetapkan, yang ditampilkan adalah
+        // jumlah yang DIAJUKAN. Data produksi menunjukkan hampir semua permintaan
+        // ada dalam keadaan ini; tanpa fallback, seluruh tampilan akan berubah
+        // menjadi 0 dan tim kehilangan angka yang selama ini mereka lihat.
+        $a5 = $this->has_approved_quantities ? (int) $this->jumlah_mushaf_a5_approved : $a5Requested;
+        $a6 = $this->has_approved_quantities ? (int) $this->jumlah_mushaf_a6_approved : $a6Requested;
+        $iqra = $this->has_approved_quantities ? (int) $this->jumlah_iqra_approved : $iqraRequested;
+
+        return [
+            'mushaf' => $a5 + $a6,
+            'iqra' => $iqra,
+            'total' => $a5 + $a6 + $iqra,
+            'a5' => $a5,
+            'a6' => $a6,
+            'a5_requested' => $a5Requested,
+            'a6_requested' => $a6Requested,
+            'iqra_requested' => $iqraRequested,
+            'total_requested' => $a5Requested + $a6Requested + $iqraRequested,
+        ];
+    }
+
+    /**
+     * Apakah jumlah yang disetujui sudah pernah ditetapkan tim?
+     *
+     * Kolom `jumlah_mushaf_approved` (nullable) dipakai sebagai penanda; kolom
+     * pecahannya NOT NULL default 0 sehingga tidak bisa dipakai untuk membedakan
+     * "belum diisi" dari "disetujui 0".
+     */
+    public function getHasApprovedQuantitiesAttribute(): bool
+    {
+        return ! is_null($this->jumlah_mushaf_approved);
     }
 
     /**
      * Check apakah ada perubahan jumlah antara yang diajukan dan disetujui
+     *
+     * Hanya bermakna setelah jumlah disetujui ditetapkan; sebelum itu selalu
+     * false agar penjaga proses ke pengiriman tidak memblokir permintaan yang
+     * jumlahnya memang belum pernah disesuaikan.
      */
     public function getHasQuantityChangeAttribute()
     {
-        return $this->total_mushaf_approved !== $this->total_mushaf;
+        if (! $this->has_approved_quantities) {
+            return false;
+        }
+
+        return $this->approved_breakdown['total'] !== $this->total_mushaf;
     }
 
     /**
@@ -258,7 +341,7 @@ class MushafRequest extends Model
             return 0;
         }
 
-        $difference = $this->total_mushaf_approved - $this->total_mushaf;
+        $difference = $this->approved_breakdown['total'] - $this->total_mushaf;
 
         return round(($difference / $this->total_mushaf) * 100, 2);
     }
