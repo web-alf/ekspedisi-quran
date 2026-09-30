@@ -17,9 +17,20 @@ Schedule::command('packing:expire-tasks')->dailyAt('23:59')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/packing-expire.log'));
 
-Schedule::command('packing:check-progress')->hourly()->between('08:00', '17:00')
+// Batas akhir jendela HARUS '17:59', bukan '17:00'.
+// between('08:00', '17:00') hanya mencakup sampai 17:00:00.000, sementara cron
+// memanggil schedule:run beberapa ratus milidetik SETELAH batas menit itu —
+// jadi run pukul 17:00 selalu dilewati dan checkpoint 5pm (level critical,
+// target 80%) tidak pernah dikirim. Terbukti di produksi: log berhenti di 16:00
+// dan hanya checkpoint 10am/12pm/3pm yang pernah terbuat.
+Schedule::command('packing:check-progress')->hourly()->between('08:00', '17:59')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/packing-progress.log'));
+
+// Rapikan notifikasi packing lama supaya lonceng tidak menumpuk.
+Schedule::command('packing:prune-notifications')->dailyAt('23:45')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/packing-prune.log'));
 
 // Performance commands will be auto-discovered by Laravel
 
