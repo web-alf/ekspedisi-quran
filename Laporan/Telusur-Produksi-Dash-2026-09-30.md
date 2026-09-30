@@ -12,7 +12,7 @@ Audit `/var/www/dash` (produksi harian tim) setelah insiden symlink
 | Backfill 96 tugas lama → `expired` | **SELESAI** (transaksional) |
 | `packing:expire-tasks` | kini terdaftar & jalan (`exit 0`) |
 | `performance:check-budgets` | frontend tidak lagi melanggar |
-| Bug carry-over tak terbatas | **BELUM diperbaiki** — butuh keputusan pemilik |
+| Bug carry-over tak terbatas | **SUDAH DIPERBAIKI** — batas 20% diterapkan & ter-deploy |
 
 ## 1. Infrastruktur & deploy: sehat
 
@@ -68,7 +68,7 @@ yang salah ukur ini yang gagal (`severity: critical` → exit 1).
 **Perbaikan:** `App\Support\BuildManifest` → chunk terbesar **721,6 KB** ✅,
 bundle entry **146,4 KB** ✅. Terverifikasi di produksi.
 
-## 4. Bug C — carry-over TIDAK TERBATAS (BELUM DIPERBAIKI)
+## 4. Bug C — carry-over TIDAK TERBATAS (SUDAH DIPERBAIKI, batas 20%)
 
 Akar inflasi target harian yang sesungguhnya. `config/packing.php` menyatakan:
 
@@ -104,26 +104,61 @@ Hari ini `sisa_kemarin` = **5.760** total (240/user). **Proyeksi 1 Okt =
 lama; mekanismenya tetap tanpa batas. Yang benar-benar menyetop inflasi adalah
 **menerapkan `max_carryover_percent`** yang sudah tertulis di config.
 
+### Perbaikan (commit `65aef2d`)
+
+`calculateCarryOver()` kini menerima base target hari ini dan memotong sisa
+kemarin lewat `capCarryOver()`: batas = `floor(base × 20 / 100)`.
+
+| Skenario | Tanpa batas | Dengan batas |
+|---|---|---|
+| sisa kemarin 30, base 50 | carry 30 → target 80 | carry **10** → target **60** |
+| sisa kemarin 240, base 80 | carry 240 → target 320 | carry **16** → target **96** |
+| 3 hari berturut 0% | 80 → 160 → 240 → 320 | 96 → 96 → 96 |
+
+Nilai `max_carryover_percent` ≥ 100 mengembalikan perilaku lama (tanpa batas)
+bagi yang membutuhkannya, dan `allow_carryover => false` kini benar-benar
+mematikan carry-over. Kedua jalur (auto assignment dan assign-by-target manual)
+ikut berlaku; jalur update memakai `sisa_kemarin` tersimpan sehingga batas tidak
+dihitung dua kali.
+
 Konteks: modul packing di dash **belum dipakai** (0 kerdus, 0 item, 0 scan,
 `total_selesai > 0` = 0). Jadi bug ini belum melukai operasional — tapi target
 sudah ~4x lipat sebelum gudang memakai sistemnya.
 
 ## 5. Uji & verifikasi
 
-- 12 test baru: `tests/Unit/Support/BuildManifestTest.php` (5),
-  `tests/Feature/Console/PackingTaskExpirationTest.php` (7) — semua lulus.
-- 22 test terkait lulus (termasuk `PackingAssignmentServiceTest`).
+- 17 test baru/terkait lulus: 5 satuan manifest, 7 kedaluwarsa tugas,
+  5 batas carry-over (7 lulus penuh di `PackingAssignmentServiceTest`).
 - **Bukti test menggigit:** kode metrik lama dipasang kembali → melaporkan
-  `3419.400390625`, **persis sama** dengan produksi.
+  `3419.400390625`, **persis sama** dengan produksi. Kode carry-over lama
+  dipasang kembali → **5 test batas gagal**.
+- Regresi suite penuh: baseline 76 gagal/386 lulus vs sesudah 77/390 —
+  satu-satunya kegagalan tambahan (`PackingConcurrencyTest`) terbukti **flaky**,
+  gagal juga saat perubahan saya distash.
 - `vendor/bin/pint --dirty` passed.
-- Commit `e77b01a`, sudah di-push ke GitHub dan ter-deploy.
+- Commit `e77b01a`, `6a3e9ad`, `65aef2d` — di-push dan ter-deploy ke dash.
 
-## 6. Sisa keputusan untuk pemilik
+## 6. Verifikasi langsung di produksi (pasca-deploy)
 
-1. **Bug C** — terapkan `max_carryover_percent` 20% (sesuai config yang sudah
-   ada), matikan carry-over, atau biarkan. Ini keputusan kebijakan operasional.
-2. **`docs/CLAUDE.md:190`** menyebut `packing:daily-assignment` "DISABLED",
+Diuji di dalam transaksi (rollback), pada DB dash sungguhan:
+
+```
+sisa kemarin = 1000, base target = 80
+carry_over   = 16   (tanpa batas: 1000)
+total_target = 96   (tanpa batas: 1080)
+data uji tersisa: 0
+```
+
+Data produksi utuh: 15.552 donatur, 26.099 pengiriman, 40 user, 120 tugas
+(96 expired + 24 hari ini), 0 kerdus, 480 notifikasi. Nol error setelah deploy.
+
+## 7. Sisa keputusan untuk pemilik
+
+1. **`docs/CLAUDE.md:190`** menyebut `packing:daily-assignment` "DISABLED",
    padahal aktif dan dijadwalkan 06:00 (terbukti 24 tugas/hari). Patch diblokir
    pengaman berkas instruksi agen — butuh persetujuan.
-3. **480 notifikasi** belum ada yang dibaca (`is_read` = 0). Perlu pembersihan
+2. **480 notifikasi** belum ada yang dibaca (`is_read` = 0). Perlu pembersihan
    sebelum modul dipakai.
+3. **24 tugas 30 Sep** masih bertarget 240 (dibuat sebelum batas berlaku).
+   Tugas 1 Okt ke atas otomatis 96. Bila ingin 30 Sep ikut dinormalkan,
+   perlu penyesuaian manual.

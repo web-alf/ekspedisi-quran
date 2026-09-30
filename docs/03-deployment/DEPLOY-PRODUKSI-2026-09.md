@@ -163,15 +163,17 @@ sudo composer check-platform-reqs --no-dev     # semua harus "success"
 sudo -u www-data HOME=/tmp php artisan migrate --pretend --force   # review dulu
 sudo -u www-data HOME=/tmp php artisan migrate --force
 
-# PENTING: jalankan cache sebagai www-data, BUKAN root.
-# rsync --delete menghapus bootstrap/cache/*.php; bila regenerasinya dijalankan
-# sebagai root, file jadi milik root dan gagal dengan
+# PENTING (1): rsync dijalankan sebagai root, jadi bootstrap/cache jadi milik root.
+# Kembalikan kepemilikan SEBELUM menjalankan cache, atau config:cache gagal dengan
 # "file_put_contents(...): Failed to open stream: Permission denied".
+sudo chown -R www-data:www-data /var/www/dash/storage /var/www/dash/bootstrap/cache
+
+# PENTING (2): jalankan cache sebagai www-data, BUKAN root — kalau tidak, file
+# cache jadi milik root dan request berikutnya gagal menulis.
 sudo -u www-data HOME=/tmp php artisan optimize:clear
 sudo -u www-data HOME=/tmp php artisan config:cache
 sudo -u www-data HOME=/tmp php artisan route:cache
 sudo -u www-data HOME=/tmp php artisan view:cache
-sudo chown -R www-data:www-data storage bootstrap/cache
 
 # 4b. WAJIB: pastikan symlink storage ada (jaring pengaman bila exclude luput).
 sudo test -L /var/www/dash/public/storage || sudo ln -sfn ../storage/app/public /var/www/dash/public/storage
