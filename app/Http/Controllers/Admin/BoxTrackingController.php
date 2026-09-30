@@ -105,7 +105,7 @@ class BoxTrackingController extends Controller
                 'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas),
                 // QR kerdus sudah dipakai gudang untuk operasi massal; ditampilkan
                 // di daftar supaya bisa langsung dipindai tanpa membuka detail.
-                'qr_code_base64' => $box->getBoxQRBase64(),
+                'qr_code_base64' => $this->safeBoxQr($box),
             ];
         });
 
@@ -139,6 +139,29 @@ class BoxTrackingController extends Controller
     }
 
     /**
+     * Ambil QR kerdus tanpa membuat halaman daftar ikut gagal.
+     *
+     * Pembuatan QR PNG bergantung pada ekstensi PHP; di server yang tidak punya
+     * `imagick` (hanya `gd`) library-nya melempar RuntimeException. Sebelum ini
+     * kegagalan itu hanya muncul saat mencetak label, tapi sejak kolom QR
+     * ditampilkan di daftar, satu kerdus bisa membuat SELURUH halaman 500.
+     * Karena itu kegagalan QR tidak boleh menjatuhkan halaman.
+     */
+    private function safeBoxQr(PackingBox $box): ?string
+    {
+        try {
+            return $box->getBoxQRBase64();
+        } catch (\Throwable $e) {
+            logger()->error('Gagal membuat QR kerdus', [
+                'kode_kerdus' => $box->kode_kerdus,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
      * Show detailed box content
      */
     public function show(PackingBox $box)
@@ -161,7 +184,7 @@ class BoxTrackingController extends Controller
                 'status_info' => $statusInfo,
                 'user_name' => $box->dailyPackingTask->user->name ?? 'N/A',
                 'task_date' => $box->dailyPackingTask->tanggal_tugas->format('d/m/Y') ?? 'N/A',
-                'qr_code_base64' => $box->getBoxQRBase64(),
+                'qr_code_base64' => $this->safeBoxQr($box),
                 'qr_data' => $box->getBoxQRData(),
                 'item_count' => $box->packingItems->count(),
             ]),

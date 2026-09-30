@@ -9,6 +9,7 @@ use App\Support\BoxUnits;
 use Database\Seeders\JenisQuranSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -148,6 +149,28 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             );
 
         expect($sealed->kode_kerdus)->not->toBe($filling->kode_kerdus);
+    });
+
+    it('tetap menampilkan halaman walau QR kerdus gagal dibuat', function () {
+        // Server produksi hanya punya ekstensi `gd`, tidak `imagick`, sehingga
+        // QrCode::format('png') melempar RuntimeException (library-nya mengunci
+        // PNG ke ImagickImageBackEnd). Satu kerdus yang QR-nya gagal tidak boleh
+        // menjatuhkan seluruh halaman daftar.
+        makeBox([
+            'status' => PackingBox::STATUS_SEALED,
+            'jumlah_terisi' => 12,
+        ]);
+
+        QrCode::shouldReceive('format')
+            ->andThrow(new RuntimeException('You need to install the imagick extension'));
+
+        $this->actingAs(managerUser())
+            ->get('/admin/box-tracking')
+            ->assertSuccessful()
+            ->assertInertia(fn ($page) => $page
+                ->where('boxes.data.0.qr_code_base64', null)
+                ->where('boxes.data.0.satuan.label', '1 doz')
+            );
     });
 
     it('menghitung total satuan hanya dari kerdus tersegel', function () {
