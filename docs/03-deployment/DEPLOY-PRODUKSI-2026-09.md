@@ -23,27 +23,39 @@ di host `ekspedisi-prod` (vps-187.77.113.89).
 
 ## Jebakan yang sudah menelan korban
 
-1. **`composer install` biasa GAGAL di server.** `composer.lock` memakai Symfony v8
-   (`symfony/clock v8.1.0`, `symfony/string v8.1.2`, `symfony/translation`),
-   yang menuntut **PHP >= 8.4.1**, sedangkan server PHP 8.3.6. `composer.json`
-   sendiri hanya bilang `"php": "^8.2"` — jadi lock dan json tidak sinkron.
-   Pakai:
-   ```bash
-   composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
-   ```
-   Kode ini **terbukti jalan** di PHP 8.3 (`php artisan --version` → Laravel 12.68.0,
-   semua halaman 200). Tapi ini utang teknis: **produksi akan pecah pada rilis
-   berikutnya begitu ada paket yang benar-benar memakai API PHP 8.4.** Perbaikannya:
-   jalankan `composer update` dengan PHP 8.3 + `composer.json` `config.platform.php=8.3`
-   supaya lock turun ke Symfony v7, lalu commit lock itu.
-2. **Migrasi di produksi tertinggal jauh.** Rilis April → status migrasi berhenti di
+1. **`composer install` (sudah DIPERBAIKI 30 Sep 2026, jangan diakali lagi).**
+   Dulu `composer.lock` ter-resolve ke Symfony v8 (`symfony/clock v8.1.0`,
+   `symfony/string v8.1.2`, `symfony/translation`, `css-selector`,
+   `event-dispatcher`) yang menuntut **PHP >= 8.4.1**, sedangkan server PHP 8.3.6
+   dan Ubuntu 24.04 tidak menyediakan paket php8.4. Install hanya bisa jalan
+   dengan `--ignore-platform-reqs` — yang **tidak** melewati
+   `vendor/composer/platform_check.php`.
+
+   Penyebabnya: `laravel/framework` hanya mendukung `symfony/* ^7.2.0`, tapi
+   constraint paket turunan bergaya `^6.4|^7.0|^8.0` sehingga Composer memilih v8.
+
+   Perbaikan permanen (sudah diterapkan, commit `f573138`):
+   - `composer.json` → `config.platform.php = "8.3.6"`
+   - `composer update symfony/clock symfony/css-selector symfony/event-dispatcher
+     symfony/string symfony/translation --with-all-dependencies` → kelimanya turun v7.4
+   - `laravel/framework` dinaikkan ke v12.69.3 (menutup CVE-2026-102279)
+
+   Hasil: `composer install` **sukses tanpa flag apa pun** dan
+   `php vendor/composer/platform_check.php` hanya menuntut `PHP_VERSION_ID >= 80300`.
+   **Jangan hapus `config.platform.php`** — kalau dihapus, resolusi berikutnya
+   bisa memilih paket PHP 8.4 lagi dan produksi pecah.
+2. **Migrasi di produksi bisa tertinggal jauh.** Rilis April → status migrasi berhenti di
    `2026_04_15`. Artinya `2026_09_02_000001_create_no_request_sequences_table`
    (dibuat 2 September) belum pernah jalan sampai deploy 30 Sep. Ingat cek
    `php artisan migrate:status` sebelum menganggap "cuma migrasi saya yang pending".
 3. **`php artisan tinker` gagal** kalau HOME tidak writable (`Writing to directory
    /var/www/.config/psysh is not allowed`). Jalankan dengan `sudo -u www-data HOME=/tmp`.
-4. **`--ignore-platform-reqs` tidak melewati `vendor/composer/platform_check.php`.**
-   Kode yang benar-benar butuh PHP 8.4 akan fatal di runtime.
+4. **QR PNG butuh ekstensi `imagick`.** `simplesoftwareio/simple-qrcode` mengunci
+   format PNG ke `ImagickImageBackEnd` (tidak bisa di-config). Server ini dulu hanya
+   punya `gd`, sehingga pembuatan QR melempar `You need to install the imagick
+   extension`. `php8.3-imagick` sudah dipasang 30 Sep 2026 — **kalau server
+   di-provisioning ulang, pasang ini lagi**, kalau tidak tombol cetak label dan
+   kolom QR kerdus akan gagal.
 
 ## Prosedur deploy (terbukti 30 Sep 2026)
 
@@ -63,9 +75,11 @@ sudo -u www-data HOME=/tmp ln -sfn /var/www/app/storage   $PWD/storage
 sudo -u www-data HOME=/tmp ln -sfn $PWD/storage/app/public $PWD/public/storage
 sudo -u www-data HOME=/tmp mkdir -p bootstrap/cache storage/framework/{views,sessions,cache}
 
-# 4. Dependensi (lihat jebakan #1)
+# 4. Dependensi — sudah aman di PHP 8.3 (config.platform.php terkunci).
+#    Bila ada yang menuntut PHP 8.4 lagi, JANGAN pakai --ignore-platform-reqs:
+#    turunkan paketnya, karena flag itu tidak melewati platform_check.php.
 sudo -u www-data HOME=/tmp composer install --no-dev --no-interaction --prefer-dist \
-    --optimize-autoloader --ignore-platform-reqs
+    --optimize-autoloader
 
 # 5. Cek & jalankan migrasi
 sudo -u www-data HOME=/tmp php artisan migrate --pretend --force   # review dulu
