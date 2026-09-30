@@ -3,6 +3,7 @@
 namespace App\Console\Commands\Performance;
 
 use App\Models\Pengiriman;
+use App\Support\BuildManifest;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +67,8 @@ class CheckBudgetsCommand extends Command
                 'warehouse_max_time' => $strict ? 100 : 200, // ms
             ],
             'frontend_budgets' => [
-                'bundle_size_max' => $strict ? 500 : 1000, // KB
+                'bundle_size_max' => $strict ? 500 : 1000, // KB - largest single chunk
+                'entry_size_max' => $strict ? 500 : 1000, // KB - all entry bundles combined
                 'first_contentful_paint' => $strict ? 1.5 : 2.5, // seconds
                 'largest_contentful_paint' => $strict ? 2.5 : 4.0, // seconds
                 'cumulative_layout_shift' => $strict ? 0.1 : 0.25,
@@ -268,27 +270,24 @@ class CheckBudgetsCommand extends Command
     {
         $this->info('Checking frontend performance budgets...');
 
-        // Check bundle size
-        $buildManifest = public_path('build/manifest.json');
-        if (file_exists($buildManifest)) {
-            $manifest = json_decode(file_get_contents($buildManifest), true);
+        // Check bundle size.
+        // The manifest lists every asset (JS, CSS, and the per-page dynamic
+        // chunks), so summing them all measures the whole build rather than a
+        // bundle. Compare the largest single chunk, and separately gate the
+        // entry bundles loaded on first paint.
+        $sizes = BuildManifest::frontendSizes(public_path('build/manifest.json'));
 
-            $totalSize = 0;
-            foreach ($manifest as $file => $details) {
-                if (isset($details['file'])) {
-                    $filePath = public_path('build/'.$details['file']);
-                    if (file_exists($filePath)) {
-                        $totalSize += filesize($filePath);
-                    }
-                }
-            }
-
-            $bundleSizeKB = $totalSize / 1024;
-
+        if ($sizes['largest_chunk'] !== '') {
             $this->checkBudget(
                 'frontend_budgets.bundle_size_max',
-                $bundleSizeKB,
-                'Bundle size'
+                $sizes['largest_chunk_kb'],
+                'Largest chunk ('.basename($sizes['largest_chunk']).')'
+            );
+
+            $this->checkBudget(
+                'frontend_budgets.entry_size_max',
+                $sizes['entry_total_kb'],
+                'Entry bundles total'
             );
         }
 
