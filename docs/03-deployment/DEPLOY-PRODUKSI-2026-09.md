@@ -149,22 +149,45 @@ sudo mysqldump --single-transaction -u"$U" -p"$P" db_ekspedisi_quran_dash \
 sudo rm -rf /tmp/eq-deploy && sudo git clone --depth 1 \
     https://github.com/anggiadiputra/EQ.git /tmp/eq-deploy
 
-# 3. rsync kode ke dash (JANGAN sentuh .env, storage, vendor)
+# 3. rsync kode ke dash (JANGAN sentuh .env, storage, vendor, public/storage)
+#    --delete akan MENGHAPUS public/storage (symlink tidak ada di repo) sehingga
+#    SELURUH gambar yang diunggah jadi 404. Wajib dikecualikan.
 sudo rsync -a --delete --exclude ".env" --exclude "storage/" \
-    --exclude "vendor/" --exclude ".git/" /tmp/eq-deploy/ /var/www/dash/
+    --exclude "vendor/" --exclude ".git/" --exclude "public/storage" \
+    /tmp/eq-deploy/ /var/www/dash/
 
 # 4. Dependensi + migrasi + cache
 cd /var/www/dash
 sudo composer install --no-dev --optimize-autoloader --no-interaction
-sudo php artisan migrate --pretend --force   # review dulu
-sudo php artisan migrate --force
-sudo php artisan config:cache && sudo php artisan route:cache && sudo php artisan view:cache
+sudo composer check-platform-reqs --no-dev     # semua harus "success"
+sudo -u www-data HOME=/tmp php artisan migrate --pretend --force   # review dulu
+sudo -u www-data HOME=/tmp php artisan migrate --force
+
+# PENTING: jalankan cache sebagai www-data, BUKAN root.
+# rsync --delete menghapus bootstrap/cache/*.php; bila regenerasinya dijalankan
+# sebagai root, file jadi milik root dan gagal dengan
+# "file_put_contents(...): Failed to open stream: Permission denied".
+sudo -u www-data HOME=/tmp php artisan optimize:clear
+sudo -u www-data HOME=/tmp php artisan config:cache
+sudo -u www-data HOME=/tmp php artisan route:cache
+sudo -u www-data HOME=/tmp php artisan view:cache
 sudo chown -R www-data:www-data storage bootstrap/cache
+
+# 4b. WAJIB: pastikan symlink storage ada (jaring pengaman bila exclude luput).
+sudo test -L /var/www/dash/public/storage || sudo ln -sfn ../storage/app/public /var/www/dash/public/storage
+sudo chown -h www-data:www-data /var/www/dash/public/storage
 
 # 5. Reload PHP-FPM + verifikasi
 sudo systemctl reload php8.3-fpm
-curl -sk -o /dev/null -w %{http_code}n https://dash.ekspedisiquran.com/login
-sudo tail -20 /var/www/dash/storage/logs/laravel.log | grep -cE ERROR
+curl -sk -o /dev/null -w '%{http_code}\n' https://dash.ekspedisiquran.com/login
+# Verifikasi aset nyata lewat HTTP (bukan hanya halaman login)
+F=$(sudo ls /var/www/dash/storage/app/public/settings | head -1)
+curl -sk -o /dev/null -w "%{http_code}\n" "https://dash.ekspedisiquran.com/storage/settings/$F"
+sudo tail -20 /var/www/dash/storage/logs/laravel.log | grep -cE 'ERROR|CRITICAL'
+
+# 6. Bersihkan sisa deploy
+sudo rm -rf /tmp/eq-deploy
+```
 
 ## Insiden 30 Sep 2026: symlink `public/storage` hilang → semua gambar 404
 
