@@ -157,6 +157,45 @@ php artisan storage:link     # Create storage symlink
 - Comprehensive documentation available in `docs/` directory
 - Development scripts available in `scripts/` directory for maintenance tasks
 
+## Batas Visibilitas Role Manager (Pengiriman)
+
+Role `manager` hanya menangani pengiriman yang SUDAH selesai dikerjakan gudang:
+
+| Slug | Label |
+|------|-------|
+| `selesai-packing` | Selesai Packing |
+| `pengiriman` | Proses Pengiriman |
+| `diterima` | Diterima Penerima |
+
+Tahap awal (`pemesanan`, `produksi`, `kedatangan`, `packing`) tidak boleh terlihat
+oleh manager — itu ranah gudang/kustomer servis.
+
+**Aturan ini berlaku di server, bukan sekadar tampilan.** Menyembunyikan tabel saja
+tidak cukup: manager masih bisa membuka `/admin/pengiriman/{id}`, memakai `?search=`,
+menebak `?status=`, atau memanggil endpoint JSON per-resi. Semua jalur berikut sudah
+dijaga dan JANGAN dilepas saat menambah fitur baru:
+
+- `index` — daftar, pencarian, penomoran baris, paginasi
+- kartu statistik — angka tahap awal tidak dihitung sama sekali, supaya jumlah yang
+  disembunyikan pun tidak bocor
+- dropdown filter status
+- `show` & `edit` — 403 untuk tahap awal
+- `getPengirimanStatusInfo` — 404 (resi mudah ditebak: `EQ-YYYY-XXXXX`)
+- `bulkUpdateStatus` & `bulkSetAlamat` — walau ID dikirim langsung dari luar tampilan
+- `generateQRPage` — memuat daftar pengiriman yang sama
+- aktivitas "pengiriman terbaru" di dashboard, termasuk yang datang dari
+  `DashboardCacheService` (dipanggil lebih dulu, sebelum jalur fallback)
+
+**Satu sumber kebenaran:** `app/Support/PengirimanStageVisibility` + daftar tahap di
+`config/pengiriman.php`. Mengubah kebijakan cukup lewat config, tanpa menyentuh kode.
+
+**Gagal-tertutup:** bila daftar tahap kosong atau rusak, manager tidak melihat apa pun
+— bukan sebaliknya. Jangan mengubah `restricts()` agar daftar kosong berarti "tanpa
+batasan"; itu justru membuka seluruh data saat salah konfigurasi.
+
+Konteks pembatasan dikirim ke frontend sebagai prop `stageVisibility`
+(`{restricted, slugs}`) agar kartu statistik menyesuaikan diri.
+
 ## Warehouse Packing System
 
 ### Overview
