@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
+use App\Models\Pengiriman;
 use App\Models\User;
 use App\Support\BoxUnits;
 use Carbon\Carbon;
@@ -189,6 +190,27 @@ class BoxTrackingController extends Controller
     }
 
     /**
+     * Ambil QR per-eks (Quran/Iqra) tanpa menjatuhkan halaman detail kerdus.
+     *
+     * Satu kerdus berisi sampai 160 eks (Iqra), jadi pembuatan QR per baris
+     * jauh lebih rawan gagal daripada QR kerdus. Satu kegagalan tidak boleh
+     * membuat seluruh daftar isi kerdus hilang.
+     */
+    private function safeResiQr(Pengiriman $pengiriman): ?string
+    {
+        try {
+            return $pengiriman->getResiQRBase64();
+        } catch (\Throwable $e) {
+            logger()->error('Gagal membuat QR per-eks', [
+                'no_resi' => $pengiriman->no_resi,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
      * Show detailed box content
      */
     public function show(PackingBox $box)
@@ -205,6 +227,27 @@ class BoxTrackingController extends Controller
         $contentSummary = $box->getContentSummary();
         $statusInfo = $box->getStatusInfo();
 
+        // Setiap eks di dalam kerdus adalah satu baris Pengiriman dengan QR-nya
+        // sendiri (Quran A5/A6 dan Iqra terpisah), dan QR itu yang dipindai
+        // untuk tracking. Daftar item di sini jadi tempat melihat QR tiap eks
+        // tanpa harus membuka satu per satu halaman pengiriman.
+        $items = $contentSummary['items']->map(function ($item) use ($box) {
+            $pengiriman = $box->packingItems
+                ->firstWhere('id', $item['id'])
+                ?->pengiriman;
+
+            if (! $pengiriman) {
+                return $item;
+            }
+
+            return array_merge($item, [
+                'kode_jenis' => $pengiriman->kode_jenis,
+                'jenis_quran' => $pengiriman->jenisQuran->nama_jenis ?? null,
+                'resi_qr_base64' => $this->safeResiQr($pengiriman),
+                'tracking_url' => $pengiriman->tracking_url,
+            ]);
+        });
+
         return Inertia::render('Admin/BoxTracking/Show', [
             'box' => array_merge($contentSummary['box_info'], [
                 'id' => $box->id,
@@ -215,7 +258,7 @@ class BoxTrackingController extends Controller
                 'qr_data' => $box->getBoxQRData(),
                 'item_count' => $box->packingItems->count(),
             ]),
-            'items' => $contentSummary['items'],
+            'items' => $items,
             'jenis_quran' => $contentSummary['jenis_quran'],
         ]);
     }

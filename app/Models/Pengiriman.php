@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class Pengiriman extends Model
 {
@@ -366,5 +367,36 @@ class Pengiriman extends Model
             'url' => $this->tracking_url,
             'timestamp' => now()->timestamp,
         ];
+    }
+
+    /**
+     * QR ringkas untuk ditampilkan di daftar kerdus / label.
+     *
+     * Isinya SENGAJA hanya no_resi — sama persis dengan QR yang sudah dicetak
+     * dan dipindai gudang (lihat QRCodeController::buildQRData). Membuat format
+     * kedua akan menghasilkan dua QR berbeda untuk satu barang yang sama, dan
+     * pemindai yang sudah ada tidak akan mengenali yang baru.
+     *
+     * Dipakai untuk Quran (A5/A6) maupun Iqra: keduanya baris Pengiriman dengan
+     * jenis_quran_id sendiri, jadi QR-nya memang terpisah dan tautan tracking-nya
+     * mengarah ke resi masing-masing.
+     */
+    public function getResiQRBase64(): string
+    {
+        $image = QrCode::format('png')
+            ->size(200)
+            ->margin(1)
+            ->errorCorrection('L')
+            ->generate((string) $this->no_resi);
+
+        return 'data:image/png;base64,'.base64_encode($image);
+    }
+
+    /**
+     * Kode jenis untuk pembeda ringkas di daftar (A5 / A6 / IQRO).
+     */
+    public function getKodeJenisAttribute(): ?string
+    {
+        return $this->jenisQuran->kode_jenis ?? null;
     }
 }

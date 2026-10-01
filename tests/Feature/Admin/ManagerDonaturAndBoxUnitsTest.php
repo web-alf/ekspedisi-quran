@@ -135,7 +135,11 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
 
     it('menyertakan satuan dan QR pada daftar kerdus', function () {
         // Kerdus A5 berkapasitas 20: 20 keping = tepat 1 doz (kerdus penuh).
+        // Jenis dipatok eksplisit: PackingBoxFactory memilih jenis secara acak,
+        // sehingga tanpa ini tes kadang memakai A6 (kapasitas 40) dan gagal
+        // walaupun kodenya benar.
         $box = makeBox([
+            'jenis_quran_id' => JenisQuran::where('kode_jenis', 'A5')->value('id'),
             'status' => PackingBox::STATUS_FILLING,
             'jumlah_terisi' => 20,
             'kapasitas' => 20,

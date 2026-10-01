@@ -153,6 +153,8 @@
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urutan</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No. Resi</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Eks</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donatur</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakif</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Packed</th>
@@ -168,6 +170,32 @@
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                       <div class="text-sm font-medium text-gray-900">{item.no_resi}</div>
+                      {#if item.tracking_url}
+                        <a
+                          href={item.tracking_url}
+                          target="_blank"
+                          rel="noopener"
+                          class="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                        >Lacak</a>
+                      {/if}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        {item.kode_jenis || '-'}
+                      </span>
+                      <div class="text-xs text-gray-500 mt-1">{item.jenis_quran || ''}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      {#if item.resi_qr_base64}
+                        <img
+                          src={item.resi_qr_base64}
+                          alt="QR {item.no_resi}"
+                          title="QR eks {item.no_resi} — {item.kode_jenis}"
+                          class="h-16 w-16 border border-gray-200 rounded bg-white p-1"
+                        />
+                      {:else}
+                        <span class="text-xs text-gray-400">QR belum dibuat</span>
+                      {/if}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                       <div class="text-sm text-gray-900">{item.donatur}</div>
