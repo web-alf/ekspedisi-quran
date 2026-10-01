@@ -85,7 +85,7 @@
         requiredPermissions: ['donatur.read']
       },
       { 
-        label: 'Pengiriman', 
+        label: 'Pengemasan', 
         route: '/admin/pengiriman',
         requiredPermissions: ['shipments.read']
       },
@@ -446,7 +446,9 @@
       // Main menu items
       'Dashboard': 'chart-bar',
       'Kelola Donatur': 'users',
-      'Pengiriman': 'truck',
+      // Menu ini menangani pengemasan sampai pengiriman, dan pemilik sistem
+      // menyebutnya "Pengemasan" - ikon truck dipertahankan.
+      'Pengemasan': 'truck',
       'Sertifikat': 'academic-cap',
       'Permintaan Mushaf': 'book-open',
       'Manajemen Gudang': 'building-office-2',
