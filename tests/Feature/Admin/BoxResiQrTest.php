@@ -93,7 +93,7 @@ it('mengirim QR tersendiri untuk tiap eks di dalam kerdus', function () {
 
     expect($items)->toHaveCount(2)
         // Setiap eks punya QR sendiri...
-        ->and($items->every(fn ($i) => str_starts_with($i['resi_qr_base64'] ?? '', 'data:image/png;base64,')))->toBeTrue()
+        ->and($items->every(fn ($i) => str_starts_with($i['resi_qr_base64'] ?? '', 'data:image/svg+xml;base64,')))->toBeTrue()
         // ...dan QR itu tidak boleh sama, karena resinya berbeda.
         ->and($items->pluck('resi_qr_base64')->unique())->toHaveCount(2);
 
@@ -128,11 +128,12 @@ it('QR per-eks isinya no_resi, sama seperti QR yang sudah dipakai gudang', funct
 
     $base64 = $pengiriman->getResiQRBase64();
 
-    expect($base64)->toStartWith('data:image/png;base64,');
+    expect($base64)->toStartWith('data:image/svg+xml;base64,');
 
-    // Bandingkan dengan QR dari sumber yang sama (kode resi) — harus identik.
-    $pembanding = 'data:image/png;base64,'.base64_encode(
-        QrCode::format('png')
+    // Bandingkan dengan QR dari sumber yang sama (kode resi) — harus identik
+    // dengan format yang dipakai QRCodeController untuk QR per-resi.
+    $pembanding = 'data:image/svg+xml;base64,'.base64_encode(
+        QrCode::format('svg')
             ->size(200)->margin(1)->errorCorrection('L')
             ->generate('EQ-2026-00077')
     );
@@ -158,6 +159,37 @@ it('tetap menampilkan halaman walau QR satu eks gagal dibuat', function () {
         ->and($props['items'][0]['resi_qr_base64'])->toBeNull()
         // Data lain tetap ada walau QR-nya gagal.
         ->and($props['items'][0]['no_resi'])->not->toBeNull();
+});
+
+it('tetap cepat saat kerdus Iqra penuh 160 eks', function () {
+    // Kasus terberat: satu kerdus Iqra = 160 eks = 160 QR sekali render.
+    // PNG butuh ~9 detik di sini, jadi tes ini juga menjaga agar formatnya
+    // tidak dikembalikan ke PNG tanpa disadari.
+    $jenisIqro = JenisQuran::where('kode_jenis', 'IQRO')->first();
+    $donatur = Donatur::factory()->create();
+
+    $daftar = collect(range(1, 160))->map(fn ($i) => Pengiriman::factory()->create([
+        'donatur_id' => $donatur->id,
+        'jenis_quran_id' => $jenisIqro->id,
+    ]));
+
+    $box = kerdusDengan($daftar->all());
+
+    $mulai = microtime(true);
+
+    $props = $this->actingAs(qrManager())
+        ->get(route('admin.box-tracking.show', $box))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    $detik = microtime(true) - $mulai;
+
+    expect($props['items'])->toHaveCount(160)
+        ->and(collect($props['items'])->every(
+            fn ($i) => str_starts_with($i['resi_qr_base64'] ?? '', 'data:image/svg+xml;base64,')
+        ))->toBeTrue()
+        // Batas longgar: hanya untuk menangkap kemunduran besar (PNG ~9 detik).
+        ->and($detik)->toBeLessThan(6.0);
 });
 
 it('tidak membocorkan QR ke peran tanpa izin kerdus', function () {
