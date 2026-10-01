@@ -39,17 +39,24 @@ const boxDengan = (over = {}) => ({
     seal_code: 'SEAL-1',
     sealed_at: '30/09/2026 10:00',
     created_at: '30/09/2026 09:00',
-    satuan: { pcs: 24, doz: 2, lusin: 2, label: '2 doz' },
-    satuan_kapasitas: { pcs: 30, doz: 2.5, lusin: 2.5, label: '2,5 doz' },
+    satuan: { pcs: 20, doz: 1, pcs_per_doz: 20, label: '1 doz' },
+    satuan_kapasitas: { pcs: 20, doz: 1, pcs_per_doz: 20, label: '1 doz' },
+    satuan_keterangan: '1 doz = 20 pcs (A5)',
     qr_code_base64: QR_DATA_URL,
     ...over
 });
 
 const statsDengan = (over = {}) => ({
     total_boxes: 1, empty_boxes: 0, filling_boxes: 0, full_boxes: 0,
-    sealed_boxes: 1, total_items_packed: 24,
-    sealed_pcs: 24,
-    sealed_satuan: { pcs: 24, doz: 2, lusin: 2, label: '2 doz' },
+    sealed_boxes: 1, total_items_packed: 20,
+    sealed_pcs: 20,
+    sealed_per_jenis: [
+        {
+            jenis: 'Al-Quran Ukuran A5', kode_jenis: 'A5', jumlah_kerdus: 1,
+            satuan: { pcs: 20, doz: 1, pcs_per_doz: 20, label: '1 doz' },
+            keterangan: '1 doz = 20 pcs (A5)'
+        }
+    ],
     ...over
 });
 
@@ -77,19 +84,21 @@ describe('BoxTracking — satuan & QR', () => {
     it('menampilkan satuan isi kerdus dalam doz', () => {
         const { container } = renderHalaman();
 
-        // "2 doz" muncul di sel tabel DAN di kartu ringkasan — pastikan ada di sel tabel.
+        // Kerdus A5 penuh: 20 keping = 1 doz (bukan lusin, tapi kerdus penuh).
         const sel = [...container.querySelectorAll('tbody td')].map((td) => td.textContent.trim());
-        expect(sel.some((t) => t.startsWith('2 doz'))).toBe(true);
+        expect(sel.some((t) => t.startsWith('1 doz'))).toBe(true);
         expect(getByTextSafe('Isi (Satuan)')).toBeTruthy();
     });
 
-    it('menampilkan keping apa adanya bila tidak pas kelipatan doz', () => {
+    it('menampilkan keping apa adanya bila kerdus belum penuh', () => {
+        // 24 keping pada kerdus A5 (isi 20) belum penuh — disebut pcs, bukan
+        // "1,2 doz" yang bikin gudang salah hitung.
         const { getByText } = renderHalaman(boxDengan({
-            terisi: 20,
-            satuan: { pcs: 20, doz: 1.67, lusin: 1.67, label: '20 pcs' }
+            terisi: 24,
+            satuan: { pcs: 24, doz: 1.2, pcs_per_doz: 20, label: '24 pcs' }
         }));
 
-        expect(getByText('20 pcs')).toBeTruthy();
+        expect(getByText('24 pcs')).toBeTruthy();
     });
 
     it('memasang QR apa adanya tanpa menggandakan prefix data URL', () => {
@@ -103,18 +112,19 @@ describe('BoxTracking — satuan & QR', () => {
         expect(img.getAttribute('src').match(/data:image\/png;base64,/g)).toHaveLength(1);
     });
 
-    it('menampilkan kartu ringkasan total dalam pcs dan doz', () => {
+    it('menampilkan kartu ringkasan per jenis beserta keterangan isi doz', () => {
         const { getByText } = renderHalaman();
 
         expect(getByText("Total Al-Qur'an Selesai Packing")).toBeTruthy();
-        expect(getByText('Pcs')).toBeTruthy();
-        expect(getByText('Doz')).toBeTruthy();
         // Kartu ringkasan = elemen pembungkus terluar yang memuat judulnya.
         const teksKartu = [...document.querySelectorAll('div')]
             .filter((d) => d.textContent.includes("Total Al-Qur'an Selesai Packing"))
             .at(0).textContent;
-        expect(teksKartu).toContain('24');
-        expect(teksKartu).toContain('2 doz');
+        // Isi 1 doz berbeda tiap ukuran, jadi harus tertulis di kartunya.
+        expect(teksKartu).toContain('1 doz');
+        expect(teksKartu).toContain('A5');
+        expect(teksKartu).toContain('1 doz = 20 pcs (A5)');
+        expect(teksKartu).toContain('1 kerdus');
     });
 
     it('menampilkan tombol filter "Hanya Selesai Packing"', () => {

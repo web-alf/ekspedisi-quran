@@ -3,6 +3,7 @@
 use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
+use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\User;
 use App\Support\BoxUnits;
@@ -92,25 +93,52 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
         ));
     }
 
-    it('menghitung satuan pcs/doz dari jumlah keping', function () {
-        expect(BoxUnits::breakdown(24))->toMatchArray([
-            'pcs' => 24,
-            'doz' => 2.0,
-            'label' => '2 doz',
+    it('menghitung doz sebagai kerdus penuh, bukan lusin 12', function () {
+        // 1 doz = 1 kerdus penuh. Isinya beda per ukuran, jadi pembaginya wajib
+        // ikut jenis: A5=20, A6=40, IQRO=160.
+        expect(BoxUnits::breakdown(20, 20))->toMatchArray([
+            'pcs' => 20,
+            'doz' => 1.0,
+            'pcs_per_doz' => 20,
+            'label' => '1 doz',
         ]);
 
-        expect(BoxUnits::breakdown(12)['label'])->toBe('1 doz');
-        expect(BoxUnits::breakdown(30)['label'])->toBe('2,5 doz');
-        // 20 keping TIDAK dibulatkan jadi "1 doz" — isi kerdus harus terbaca apa adanya.
-        expect(BoxUnits::breakdown(20)['label'])->toBe('20 pcs');
-        expect(BoxUnits::breakdown(6)['label'])->toBe('6 pcs');
-        expect(BoxUnits::breakdown(0)['label'])->toBe('0 pcs');
+        expect(BoxUnits::breakdown(40, 40)['label'])->toBe('1 doz');
+        expect(BoxUnits::breakdown(160, 160)['label'])->toBe('1 doz');
+        expect(BoxUnits::breakdown(80, 40)['label'])->toBe('2 doz');
+        expect(BoxUnits::breakdown(320, 160)['label'])->toBe('2 doz');
+    });
+
+    it('menyebut keping apa adanya bila kerdus belum penuh', function () {
+        // 24 keping pada kerdus A5 (isi 20) bukan "1,2 doz" — gudang membaca
+        // "24 pcs" dan tahu tinggal 16 keping lagi untuk doz berikutnya.
+        expect(BoxUnits::breakdown(24, 20)['label'])->toBe('24 pcs');
+        expect(BoxUnits::breakdown(30, 20)['label'])->toBe('30 pcs');
+        expect(BoxUnits::breakdown(6, 20)['label'])->toBe('6 pcs');
+        expect(BoxUnits::breakdown(0, 20)['label'])->toBe('0 pcs');
+        // Keping apa pun yang belum penuh pada kerdus A6 juga disebut pcs.
+        expect(BoxUnits::breakdown(39, 40)['label'])->toBe('39 pcs');
+    });
+
+    it('menjelaskan isi 1 doz supaya tidak salah tafsir', function () {
+        // Halaman memakai istilah "doz" (dus), jadi isinya harus ditulis jelas.
+        expect(BoxUnits::explanation(20, 'A5'))->toBe('1 doz = 20 pcs (A5)');
+        expect(BoxUnits::explanation(160, 'IQRO'))->toBe('1 doz = 160 pcs (IQRO)');
+        expect(BoxUnits::explanation(0))->toBe('Kapasitas kerdus belum ditentukan');
+    });
+
+    it('tidak meledak bila kapasitas kerdus tidak masuk akal', function () {
+        // Kapasitas 0 tidak boleh membuat pembagian tak-hingga atau label aneh.
+        expect(BoxUnits::breakdown(10, 0)['label'])->toBe('10 pcs')
+            ->and(BoxUnits::breakdown(10, 0)['doz'])->toBe(0.0);
     });
 
     it('menyertakan satuan dan QR pada daftar kerdus', function () {
+        // Kerdus A5 berkapasitas 20: 20 keping = tepat 1 doz (kerdus penuh).
         $box = makeBox([
             'status' => PackingBox::STATUS_FILLING,
-            'jumlah_terisi' => 24,
+            'jumlah_terisi' => 20,
+            'kapasitas' => 20,
         ]);
 
         $this->actingAs(managerUser())
@@ -118,10 +146,33 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/BoxTracking/Index')
-                ->where('boxes.data.0.satuan.label', '2 doz')
-                ->where('boxes.data.0.satuan.pcs', 24)
+                ->where('boxes.data.0.satuan.label', '1 doz')
+                ->where('boxes.data.0.satuan.pcs', 20)
+                ->where('boxes.data.0.satuan_keterangan', '1 doz = 20 pcs (A5)')
                 ->where('boxes.data.0.kode_kerdus', $box->kode_kerdus)
                 ->has('boxes.data.0.qr_code_base64')
+            );
+    });
+
+    it('memakai isi doz sesuai jenis kerdus, bukan angka tetap 20', function () {
+        // Kerdus A6 berisi 40 per doz: 40 keping harus terbaca "1 doz", bukan
+        // "40 pcs" atau "3,33 doz" seperti bila memakai asumsi lusin.
+        $jenisA6 = JenisQuran::where('kode_jenis', 'A6')->firstOrFail();
+
+        makeBox([
+            'status' => PackingBox::STATUS_SEALED,
+            'jenis_quran_id' => $jenisA6->id,
+            'jumlah_terisi' => 40,
+            'kapasitas' => 40,
+            'sealed_at' => now(),
+        ]);
+
+        $this->actingAs(managerUser())
+            ->get('/admin/box-tracking')
+            ->assertSuccessful()
+            ->assertInertia(fn ($page) => $page
+                ->where('boxes.data.0.satuan.label', '1 doz')
+                ->where('boxes.data.0.satuan_keterangan', '1 doz = 40 pcs (A6)')
             );
     });
 
@@ -169,24 +220,61 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
                 ->where('boxes.data.0.qr_code_base64', null)
-                ->where('boxes.data.0.satuan.label', '1 doz')
+                // 12 keping pada kerdus A5 (isi 20) belum penuh, jadi disebut pcs.
+                ->where('boxes.data.0.satuan.label', '12 pcs')
             );
     });
 
     it('menghitung total satuan hanya dari kerdus tersegel', function () {
-        makeBox([
-            'status' => PackingBox::STATUS_SEALED,
-            'jumlah_terisi' => 24,
-        ]);
-        // Kerdus yang belum tersegel TIDAK boleh ikut dihitung.
-        makeBox(['status' => PackingBox::STATUS_FILLING, 'jumlah_terisi' => 7]);
+        // Semua satu jenis supaya benar-benar teruji penggabungannya: dua kerdus
+        // A5 penuh = 40 keping = 2 doz. Kerdus yang belum tersegel TIDAK dihitung.
+        $jenisA5 = JenisQuran::where('kode_jenis', 'A5')->firstOrFail();
+
+        makeBox(['status' => PackingBox::STATUS_SEALED, 'jenis_quran_id' => $jenisA5->id, 'jumlah_terisi' => 20, 'kapasitas' => 20]);
+        makeBox(['status' => PackingBox::STATUS_SEALED, 'jenis_quran_id' => $jenisA5->id, 'jumlah_terisi' => 20, 'kapasitas' => 20]);
+        makeBox(['status' => PackingBox::STATUS_FILLING, 'jenis_quran_id' => $jenisA5->id, 'jumlah_terisi' => 7, 'kapasitas' => 20]);
 
         $this->actingAs(managerUser())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
-                ->where('stats.sealed_pcs', 24)
-                ->where('stats.sealed_satuan.label', '2 doz')
+                ->where('stats.sealed_pcs', 40)
+                ->where('stats.sealed_per_jenis.0.satuan.label', '2 doz')
+                ->where('stats.sealed_per_jenis.0.jumlah_kerdus', 2)
             );
+    });
+
+    it('memisahkan total per jenis karena isi doz berbeda tiap ukuran', function () {
+        // Menjumlahkan keping dari jenis berbeda lalu membaginya satu angka doz
+        // selalu salah: 20 keping A5 = 1 doz, 40 keping A6 juga 1 doz, tetapi
+        // 60 keping campuran bukan "3 doz". Karena itu dirinci per jenis.
+        $jenisA5 = JenisQuran::where('kode_jenis', 'A5')->firstOrFail();
+        $jenisA6 = JenisQuran::where('kode_jenis', 'A6')->firstOrFail();
+
+        makeBox([
+            'status' => PackingBox::STATUS_SEALED,
+            'jenis_quran_id' => $jenisA5->id,
+            'jumlah_terisi' => 20,
+            'kapasitas' => 20,
+        ]);
+        makeBox([
+            'status' => PackingBox::STATUS_SEALED,
+            'jenis_quran_id' => $jenisA6->id,
+            'jumlah_terisi' => 40,
+            'kapasitas' => 40,
+        ]);
+
+        $this->actingAs(managerUser())
+            ->get('/admin/box-tracking')
+            ->assertSuccessful()
+            ->assertInertia(function ($page) {
+                $baris = collect($page->toArray()['props']['stats']['sealed_per_jenis']);
+
+                expect($baris)->toHaveCount(2)
+                    ->and($baris->pluck('kode_jenis')->all())->toEqualCanonicalizing(['A5', 'A6'])
+                    // Keduanya kerdus penuh, jadi keduanya tepat 1 doz.
+                    ->and($baris->pluck('satuan.label')->all())->toBe(['1 doz', '1 doz'])
+                    ->and($baris->pluck('jumlah_kerdus')->all())->toBe([1, 1]);
+            });
     });
 });

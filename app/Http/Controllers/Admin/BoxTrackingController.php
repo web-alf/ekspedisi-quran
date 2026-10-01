@@ -22,7 +22,7 @@ class BoxTrackingController extends Controller
         $query = PackingBox::with([
             'dailyPackingTask:id,user_id,tanggal_tugas',
             'dailyPackingTask.user:id,name',
-            'jenisQuran:id,nama_jenis,kode_jenis',
+            'jenisQuran:id,nama_jenis,kode_jenis,default_capacity',
             'packingItems' => function ($query) {
                 $query->select('id', 'packing_box_id', 'pengiriman_id', 'urutan_dalam_box')
                     ->with([
@@ -85,6 +85,10 @@ class BoxTrackingController extends Controller
         $boxesData = $boxes->through(function ($box) {
             $statusInfo = $box->getStatusInfo();
 
+            // Isi 1 doz (= 1 kerdus penuh) untuk jenis ini. Kapasitas kerdus
+            // adalah sumber pertamanya; kalau kosong, jatuh ke pengaturan jenis.
+            $pcsPerDoz = (int) ($box->kapasitas ?: ($box->jenisQuran?->getDefaultCapacity() ?? 0));
+
             return [
                 'id' => $box->id,
                 'kode_kerdus' => $box->kode_kerdus,
@@ -99,10 +103,12 @@ class BoxTrackingController extends Controller
                 'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
                 'created_at' => $box->created_at->format('d/m/Y H:i'),
                 'item_count' => $box->packingItems->count(),
-                // Satuan isi kerdus (pcs / doz / lusin) — diturunkan dari jumlah
-                // keping, tidak ada angka yang perlu diisi manual.
-                'satuan' => BoxUnits::breakdown((int) $box->jumlah_terisi),
-                'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas),
+                // Satuan isi kerdus (pcs / doz). 1 doz = 1 kerdus penuh, dan
+                // isinya berbeda per jenis (A5=20, A6=40, IQRO=160), jadi
+                // pembaginya diambil dari kapasitas kerdus itu sendiri.
+                'satuan' => BoxUnits::breakdown((int) $box->jumlah_terisi, $pcsPerDoz),
+                'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas, $pcsPerDoz),
+                'satuan_keterangan' => BoxUnits::explanation($pcsPerDoz, $box->jenisQuran->kode_jenis ?? null),
                 // QR kerdus sudah dipakai gudang untuk operasi massal; ditampilkan
                 // di daftar supaya bisa langsung dipindai tanpa membuka detail.
                 'qr_code_base64' => $this->safeBoxQr($box),
@@ -127,7 +133,28 @@ class BoxTrackingController extends Controller
             // untuk menghitung isi gudang, dan mereka menghitung dalam doz.
             'sealed_pcs' => (int) PackingBox::where('status', PackingBox::STATUS_SEALED)->sum('jumlah_terisi'),
         ];
-        $stats['sealed_satuan'] = BoxUnits::breakdown($stats['sealed_pcs']);
+
+        // Ringkasan "selesai packing" tidak bisa diringkas jadi satu angka doz:
+        // isi 1 doz berbeda per jenis (A5=20, A6=40, IQRO=160), jadi 100 keping
+        // A5 dan 100 keping A6 sama-sama "100 pcs" tapi jumlah doz-nya 5 vs 2,5.
+        // Karena itu dirinci per jenis — itulah bentuk yang bisa dipakai gudang.
+        $stats['sealed_per_jenis'] = PackingBox::where('status', PackingBox::STATUS_SEALED)
+            ->selectRaw('jenis_quran_id, kapasitas, COUNT(*) as jumlah_kerdus, SUM(jumlah_terisi) as total_pcs')
+            ->groupBy('jenis_quran_id', 'kapasitas')
+            ->with('jenisQuran:id,nama_jenis,kode_jenis')
+            ->get()
+            ->map(function ($row) {
+                $pcsPerDoz = (int) ($row->kapasitas ?: ($row->jenisQuran?->getDefaultCapacity() ?? 0));
+
+                return [
+                    'jenis' => $row->jenisQuran->nama_jenis ?? 'Belum ditentukan',
+                    'kode_jenis' => $row->jenisQuran->kode_jenis ?? null,
+                    'jumlah_kerdus' => (int) $row->jumlah_kerdus,
+                    'satuan' => BoxUnits::breakdown((int) $row->total_pcs, $pcsPerDoz),
+                    'keterangan' => BoxUnits::explanation($pcsPerDoz, $row->jenisQuran->kode_jenis ?? null),
+                ];
+            })
+            ->values();
 
         return Inertia::render('Admin/BoxTracking/Index', [
             'boxes' => $boxesData,

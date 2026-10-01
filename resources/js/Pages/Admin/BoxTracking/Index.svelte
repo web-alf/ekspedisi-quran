@@ -259,26 +259,37 @@
     </div>
   </div>
 
-  <!-- Ringkasan Selesai Packing (satuan) -->
+  <!-- Ringkasan Selesai Packing (per jenis: isi 1 doz berbeda tiap ukuran) -->
   <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-5 mb-6">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
       <div>
         <h3 class="text-sm font-semibold text-gray-900">Total Al-Qur'an Selesai Packing</h3>
-        <p class="text-xs text-gray-500 mt-1">Kerdus yang sudah tersegel dan siap distribusi</p>
+        <p class="text-xs text-gray-500 mt-1">
+          Kerdus yang sudah tersegel dan siap distribusi.
+          <span class="text-gray-400">1 doz = 1 kerdus penuh, isinya beda per ukuran.</span>
+        </p>
       </div>
-      <div class="flex flex-wrap items-center gap-x-8 gap-y-3">
-        <div>
-          <div class="text-xs text-gray-500">Pcs</div>
-          <div class="text-xl font-bold text-gray-900">{stats.sealed_pcs || 0}</div>
-        </div>
-        <div>
-          <div class="text-xs text-gray-500">Doz</div>
-          <div class="text-xl font-bold text-gray-900">{stats.sealed_satuan?.doz ?? 0}</div>
-        </div>
-        <div class="pl-4 border-l border-gray-200">
-          <div class="text-xs text-gray-500">Total</div>
-          <div class="text-xl font-bold text-green-600">{stats.sealed_satuan?.label || '0 pcs'}</div>
-        </div>
+      <div class="flex flex-wrap items-start gap-x-8 gap-y-3">
+        {#if stats.sealed_per_jenis?.length}
+          {#each stats.sealed_per_jenis as baris}
+            <div>
+              <div class="text-xs text-gray-500">
+                {baris.kode_jenis || baris.jenis}
+                <span class="text-gray-400">· {baris.keterangan}</span>
+              </div>
+              <div class="text-xl font-bold text-gray-900">{baris.satuan?.label || '0 pcs'}</div>
+              <div class="text-xs text-gray-500">
+                {baris.jumlah_kerdus} kerdus · {baris.satuan?.pcs || 0} pcs
+              </div>
+            </div>
+          {/each}
+        {:else}
+          <div>
+            <div class="text-xs text-gray-500">Total keping</div>
+            <div class="text-xl font-bold text-green-600">{stats.sealed_pcs || 0} pcs</div>
+            <div class="text-xs text-gray-500">belum ada kerdus tersegel</div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>
@@ -333,7 +344,10 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                   <!-- Satuan dihitung dari jumlah keping (dikirim server) -->
                   <div class="text-sm font-medium text-gray-900">{box.satuan?.label || '-'}</div>
-                  <div class="text-xs text-gray-500">dari {box.satuan_kapasitas?.label || box.kapasitas} / kerdus</div>
+                  <div class="text-xs text-gray-500">
+                    dari {box.satuan_kapasitas?.label || box.kapasitas} / kerdus
+                    {#if box.satuan_keterangan}<span class="text-gray-400">· {box.satuan_keterangan}</span>{/if}
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   {#if box.qr_code_base64}
