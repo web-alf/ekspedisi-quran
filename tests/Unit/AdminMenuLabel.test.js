@@ -5,14 +5,14 @@ import { page } from '@inertiajs/svelte';
 import AdminLayout from '../../resources/js/Layouts/AdminLayout.svelte';
 
 /**
- * Label menu gudang memakai istilah baku Indonesia: "Pengemasan" (dari kata
- * dasar "kemas"), bukan "Proses Packing".
+ * Setiap menu di sidebar WAJIB punya ikon di peta ikon AdminLayout.
  *
- * Dua hal dikunci di sini:
- *   1. label menunya, dan
- *   2. IKON-nya. Peta ikon di AdminLayout di-key pakai TEKS LABEL, jadi
- *      mengganti label tanpa mengganti key membuat ikonnya hilang tanpa error
- *      apa pun - kesalahan yang hanya terlihat kalau ada yang menguji ikonnya.
+ * Peta itu di-key pakai TEKS LABEL, bukan route atau id. Jadi mengganti label
+ * menu tanpa mengganti kuncinya tidak memunculkan error apa pun: HeroIcon dan
+ * getMenuIcon sama-sama punya fallback, sehingga ikonnya diam-diam berubah jadi
+ * ikon dokumen. Tes ini membandingkan daftar label pada navigasi dengan kunci
+ * yang ada di peta, supaya label baru yang belum berikon langsung ketahuan -
+ * tanpa perlu memperbarui tes tiap kali label diganti.
  */
 
 vi.mock('@inertiajs/svelte', () => ({
@@ -33,71 +33,102 @@ vi.mock('../../resources/js/utils/auth.js', () => ({
     safeLogout: vi.fn()
 }));
 
-/** User yang boleh membuka seluruh menu gudang. */
-const userGudang = {
-    id: 6,
-    name: 'Nalurita Firdausyah',
-    role: 'manager',
+/** Super-admin: paling sedikit izin terpotong, jadi paling banyak menu tampil. */
+const userLengkap = {
+    id: 1,
+    name: 'Uji Izin',
+    role: 'super-admin',
     permissions: [
-        'dashboard.view',
-        'warehouse.dashboard',
-        'warehouse.packing.view',
-        'warehouse.boxes.view',
-        'warehouse.performance.view',
-        'supervisor.warehouse.monitor'
+        'dashboard.view', 'donatur.read', 'shipments.read',
+        'certificates.read', 'templates.read', 'mushaf-requests.read',
+        'warehouse.dashboard', 'warehouse.packing.view', 'warehouse.boxes.view',
+        'warehouse.performance.view', 'supervisor.warehouse.monitor',
+        'supervisor.performance.reports', 'users.read', 'roles.read',
+        'permissions.read', 'settings.read'
     ]
 };
 
 beforeEach(() => {
     page.set({
-        props: {
-            auth: { user: userGudang },
-            settings: {},
-            flash: {}
-        },
-        url: '/admin/warehouse/packing'
+        props: { auth: { user: userLengkap }, settings: {}, flash: {} },
+        url: '/admin/dashboard'
     });
 });
 
-/** Buka dropdown sidebar supaya menu anaknya ikut ter-render. */
-async function bukaMenuGudang(container) {
-    const tombol = [...container.querySelectorAll('button')]
-        .find((b) => b.textContent.includes('Manajemen Gudang'));
+/** Buka semua dropdown supaya menu anaknya ikut ter-render. */
+async function bukaSemuaDropdown(container) {
+    const tombol = [...container.querySelectorAll('button')];
 
-    expect(tombol, 'tombol dropdown Manajemen Gudang tidak ditemukan').toBeTruthy();
-
-    await fireEvent.click(tombol);
+    for (const t of tombol) {
+        await fireEvent.click(t);
+    }
 
     return container;
 }
 
-describe('Label menu gudang', () => {
-    it('memakai "Pengemasan", bukan "Proses Packing"', async () => {
-        const { container } = render(AdminLayout);
-        await bukaMenuGudang(container);
+/** Label menu yang muncul di sidebar (item anak dropdown dibedakan bentuknya). */
+function labelTerlihat(container) {
+    const label = new Set();
 
-        expect(container.textContent).toContain('Pengemasan');
-        expect(container.textContent).not.toContain('Proses Packing');
+    for (const a of container.querySelectorAll('a')) {
+        const teks = a.textContent.trim();
+
+        if (teks) {
+            label.add(teks);
+        }
+    }
+
+    return label;
+}
+
+describe('Sidebar admin', () => {
+    it('setiap label menu punya ikon tersendiri, bukan ikon cadangan', async () => {
+        const { container } = render(AdminLayout);
+        await bukaSemuaDropdown(container);
+
+        const label = labelTerlihat(container);
+
+        expect(label.size, 'tidak ada menu yang ter-render').toBeGreaterThan(5);
+
+        // Setiap menu harus merender ikon, dan ikonnya tidak boleh jatuh ke
+        // cadangan document-text kecuali memang itu ikonnya.
+        const pakaiCadangan = [];
+
+        for (const a of container.querySelectorAll('a')) {
+            const teks = a.textContent.trim();
+
+            if (!teks) {
+                continue;
+            }
+
+            const kelas = a.querySelector('svg')?.getAttribute('class') ?? '';
+
+            expect(kelas, `menu "${teks}" tidak punya ikon sama sekali`).not.toBe('');
+
+            // 'document-text' adalah cadangan getMenuIcon sekaligus HeroIcon.
+            // Menu yang memang memakainya akan terdaftar di pengecualian ini.
+            const memangIkonDokumen = ['Manajemen Sertifikat', 'Legal & Kebijakan', 'FAQ'];
+
+            if (kelas.includes('lucide-file-text') && !memangIkonDokumen.includes(teks)) {
+                pakaiCadangan.push(teks);
+            }
+        }
+
+        expect(pakaiCadangan, 'menu ini memakai ikon cadangan, kuncinya belum diisi').toEqual([]);
     });
 
-    it('tetap memakai ikon kotak (cube), bukan ikon cadangan', async () => {
-        // Ganti label tanpa ganti kunci peta ikon membuat menu ini diam-diam
-        // memakai ikon cadangan (document-text) - halaman tetap jalan, jadi
-        // tidak ada yang sadar sampai ada yang memeriksa ikonnya.
-        // HeroIcon dan getMenuIcon SAMA-SAMA punya fallback, jadi memeriksa
-        // "ada svg" saja tidak cukup: ikon mana yang muncul yang menentukan.
+    it('menu gudang memakai ikon kotak (cube)', async () => {
+        // Dulu dijaga eksplisit karena labelnya pernah diganti.
         const { container } = render(AdminLayout);
-        await bukaMenuGudang(container);
+
+        const tombol = [...container.querySelectorAll('button')]
+            .find((b) => b.textContent.includes('Manajemen Gudang'));
+        await fireEvent.click(tombol);
 
         const item = [...container.querySelectorAll('a')]
-            .find((a) => a.textContent.trim() === 'Pengemasan');
+            .find((a) => a.textContent.trim() === 'Proses Packing');
 
-        expect(item, 'menu Pengemasan tidak ditemukan').toBeTruthy();
-
-        const kelasIkon = item.querySelector('svg')?.getAttribute('class') ?? '';
-
-        expect(kelasIkon, 'ikon menu Pengemasan hilang').not.toBe('');
-        expect(kelasIkon).toContain('lucide-box');
-        expect(kelasIkon, 'menu ini memakai ikon cadangan').not.toContain('lucide-file-text');
+        expect(item, 'menu Proses Packing tidak ditemukan').toBeTruthy();
+        expect(item.querySelector('svg')?.getAttribute('class') ?? '').toContain('lucide-box');
     });
 });
