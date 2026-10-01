@@ -163,7 +163,7 @@ php artisan storage:link     # Create storage symlink
 Daily task-based packing system for warehouse staff with automatic assignment, progress tracking, and performance monitoring.
 
 ### Key Components
-- **DailyPackingTask**: 80 mushaf per day per user with carry-over system
+- **DailyPackingTask**: 80 mushaf per day per user, carry-over dibatasi 20% (maksimal 96/hari)
 - **PackingBox**: 20 mushaf per box (kerdus) with unique codes (KB-YYYYMMDD-XXX)
 - **PackingItem**: Individual mushaf tracking within boxes
 - **UserPerformance**: Monthly performance tracking and analytics
@@ -172,14 +172,14 @@ Daily task-based packing system for warehouse staff with automatic assignment, p
 ### Workflows
 1. **Manual Target Assignment**: Supervisor assigns daily target (e.g., 80 mushaf + carry-over) to warehouse users
 2. **Free-Pick Packing Process**: Staff scan any available QR code → System assigns to their task → Add to current box → Auto-seal when full → Move to next box
-3. **Progress Monitoring**: Hourly checks with notifications (25% @ 10AM, 40% @ 12PM, etc.)
-4. **Daily Expiration** (23:59): Expire incomplete tasks, calculate carry-over for next day
+3. **Progress Monitoring**: Hourly checks with notifications (25% @ 10AM, 40% @ 12PM, 60% @ 3PM, 80% @ 5PM critical)
+4. **Daily Expiration** (23:59): Expire incomplete tasks, calculate bounded carry-over for next day (maksimal 20% dari target dasar)
 
 ### Assignment System (NEW)
 - **Target-Only Assignment**: Supervisor only sets daily target numbers (no specific item assignment)
 - **Free-Pick System**: Warehouse staff can scan any available QR code, system auto-assigns to their daily task
-- **Auto-Assignment DISABLED**: Removed automatic daily assignment, supervisor controls all assignments
-- **Carry-Over System**: Unfinished work from previous day automatically added to next day's target
+- **Auto-Assignment AKTIF**: `packing:daily-assignment` berjalan otomatis tiap 06:00 dan membuat satu tugas per user gudang aktif (terbukti 24 tugas/hari di produksi). Supervisor tetap dapat menimpa target lewat assign-target; tidak ada yang perlu di-assign manual setiap hari.
+- **Carry-Over System**: Sisa tugas kemarin ditambahkan ke target hari ini, DIBATASI oleh `config('packing.task_expiration.max_carryover_percent')` (20% dari target dasar: dasar 80 -> tambahan maksimal 16 -> target 96). Set `allow_carryover => false` untuk mematikannya, atau `max_carryover_percent => 100` untuk tanpa batas.
 
 ### Routes
 - `/admin/warehouse/` - Warehouse dashboard (role: gudang, warehouse, super_admin)
@@ -187,13 +187,16 @@ Daily task-based packing system for warehouse staff with automatic assignment, p
 - `/admin/supervisor/warehouse-monitor` - Supervisor monitoring (role: super_admin, cs, supervisor)
 
 ### Commands
-- `php artisan packing:daily-assignment` - DISABLED: Use supervisor target assignment instead
-- `php artisan packing:expire-tasks` - Expire old tasks
-- `php artisan packing:check-progress` - Send progress notifications
+- `php artisan packing:daily-assignment` - Penugasan otomatis harian (AKTIF, dijadwalkan 06:00). Supervisor bisa menimpa lewat `/admin/supervisor/assign-target`.
+- `php artisan packing:expire-tasks` - Expire tugas hari sebelumnya yang belum selesai (dijadwalkan 23:59)
+- `php artisan packing:check-progress` - Kirim notifikasi checkpoint progres (10am/12pm/3pm/5pm)
+- `php artisan packing:prune-notifications` - Hapus notifikasi packing yang menempel pada tugas hari yang sudah lewat (dijadwalkan 23:45)
 
 ### Scheduled Tasks
-- Daily expiration at 23:59 (auto-assignment DISABLED)
-- Hourly progress checks (08:00-17:00)
+- Auto-assignment harian 06:00 (AKTIF)
+- Daily expiration at 23:59
+- Hourly progress checks 08:00-17:00. Batas akhir jendela WAJIB `'17:59'`: `between()` hanya mencakup sampai 17:00:00.000, sedangkan cron memanggil `schedule:run` beberapa ratus milidetik setelah batas menit, sehingga dengan `'17:00'` checkpoint 5pm (critical) tidak pernah terkirim.
+- Prune notifikasi packing 23:45
 
 ### API Endpoints (NEW SYSTEM)
 - `POST /admin/supervisor/assign-target` - Assign daily target to warehouse user
