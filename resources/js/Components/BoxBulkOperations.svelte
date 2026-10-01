@@ -183,7 +183,7 @@
         {#if previewData}
           <div class="mt-2 text-sm text-gray-600">
             Box: <span class="font-mono font-medium">{previewData.box.kode_kerdus}</span> | 
-            {previewData.box.item_count} items | 
+            {previewData.box.item_count} mushaf | 
             {previewData.box.jenis_quran}
           </div>
         {/if}

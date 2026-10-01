@@ -311,7 +311,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-medium text-gray-900">{box.kode_kerdus}</div>
-                  <div class="text-sm text-gray-500">{box.item_count} items</div>
+                  <div class="text-sm text-gray-500">{box.satuan?.label || `${box.item_count} pcs`} mushaf</div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {box.status_info.bg} {box.status_info.text}">
