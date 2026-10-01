@@ -124,7 +124,7 @@
             requiredPermissions: ['warehouse.dashboard']
           },
           {
-            label: 'Proses Packing',
+            label: 'Pengemasan',
             route: '/admin/warehouse/packing',
             requiredPermissions: ['warehouse.packing.view']
           },
@@ -459,7 +459,9 @@
       
       // Warehouse submenu
       'Dasbor Gudang': 'home',
-      'Proses Packing': 'cube',
+      // Peta ini di-key pakai TEKS LABEL menu, bukan route. Mengganti label
+      // tanpa mengganti key di sini membuat ikonnya hilang tanpa error apa pun.
+      'Pengemasan': 'cube',
       'Box Scanner': 'qr-code',
       'Laporan Kinerja': 'document-chart-bar',
       'Monitor Gudang': 'eye',

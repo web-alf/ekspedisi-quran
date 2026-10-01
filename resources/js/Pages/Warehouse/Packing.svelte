@@ -875,8 +875,8 @@
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Proses Packing</h1>
-            <p class="text-gray-600">Scan QR code mushaf untuk packing</p>
+            <h1 class="text-2xl font-bold text-gray-900">Pengemasan</h1>
+            <p class="text-gray-600">Scan QR code mushaf untuk pengemasan</p>
           </div>
           <a 
             href="/admin/warehouse" 
