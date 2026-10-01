@@ -19,6 +19,7 @@
   import IconArrowTopRightOnSquare from 'lucide-svelte/icons/external-link';
   import IconArrowTrendingUp from 'lucide-svelte/icons/trending-up';
   import IconArrowUpTray from 'lucide-svelte/icons/upload';
+  import IconArchiveBox from 'lucide-svelte/icons/package-check';
   import IconBars3 from 'lucide-svelte/icons/menu';
   import IconBell from 'lucide-svelte/icons/bell';
   import IconBolt from 'lucide-svelte/icons/zap';
@@ -131,6 +132,7 @@
     'cog-6-tooth': IconCog6Tooth,
     'cpu-chip': IconCpuChip,
     'cube': IconCube,
+    'archive-box': IconArchiveBox,
     'document-chart-bar': IconDocumentChartBar,
     'document-text': IconDocumentText,
     'envelope': IconEnvelope,

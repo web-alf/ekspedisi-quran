@@ -10,6 +10,7 @@ use App\Models\Sertifikat;
 use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Models\User;
+use App\Support\PengirimanStageVisibility;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -232,11 +233,17 @@ class DashboardCacheService extends BaseCacheService
         $activities = [];
 
         // Recent shipments
-        $recentShipments = Pengiriman::with([
-            'donatur:id,nama_donatur',
-            'status:id,nama',
-        ])
-            ->select('id', 'no_resi', 'jumlah_quran', 'donatur_id', 'status_id', 'created_at')
+        // Batas tahap role manager juga berlaku di sini: dashboard mengambil
+        // dari cache ini lebih dulu, jadi tanpa filter, tiga pengiriman tahap
+        // awal tetap tampil walau jalur fallback sudah disaring.
+        $recentShipments = PengirimanStageVisibility::applyToQuery(
+            Pengiriman::with([
+                'donatur:id,nama_donatur',
+                'status:id,nama',
+            ])
+                ->select('id', 'no_resi', 'jumlah_quran', 'donatur_id', 'status_id', 'created_at'),
+            auth()->user()
+        )
             ->orderBy('created_at', 'desc')
             ->limit(3)
             ->get();

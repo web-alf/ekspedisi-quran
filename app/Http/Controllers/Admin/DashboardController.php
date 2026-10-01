@@ -3,9 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Donatur;
+use App\Models\MushafRequest;
+use App\Models\Pengiriman;
+use App\Models\StatusPengiriman;
+use App\Models\User;
 use App\Services\AnalyticsService;
 use App\Services\Cache\DashboardCacheService;
 use App\Services\Cache\ReferenceDataCacheService;
+use App\Support\PengirimanStageVisibility;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -112,10 +119,10 @@ class DashboardController extends Controller
     {
         // Simplified stats without the complex optimizations
         return [
-            'totalPengiriman' => \App\Models\Pengiriman::count(),
-            'totalDonatur' => \App\Models\Donatur::count(),
-            'totalMushafRequests' => \App\Models\MushafRequest::count(),
-            'totalUsers' => \App\Models\User::count(),
+            'totalPengiriman' => Pengiriman::count(),
+            'totalDonatur' => Donatur::count(),
+            'totalMushafRequests' => MushafRequest::count(),
+            'totalUsers' => User::count(),
         ];
     }
 
@@ -127,7 +134,13 @@ class DashboardController extends Controller
         // Simplified activities
         $activities = [];
 
-        $recentShipments = \App\Models\Pengiriman::with(['donatur:id,nama_donatur', 'status:id,nama'])
+        // Manager hanya boleh melihat aktivitas pengiriman pada tahap yang
+        // menjadi wewenangnya; tanpa filter ini, tiga pengiriman terbaru
+        // (umumnya masih tahap awal) bocor lewat dashboard.
+        $recentShipments = PengirimanStageVisibility::applyToQuery(
+            Pengiriman::with(['donatur:id,nama_donatur', 'status:id,nama']),
+            auth()->user()
+        )
             ->orderBy('created_at', 'desc')
             ->limit(3)
             ->get();
@@ -185,10 +198,10 @@ class DashboardController extends Controller
         $monthlyData = [];
 
         for ($i = $months - 1; $i >= 0; $i--) {
-            $date = \Carbon\Carbon::now()->subMonths($i);
+            $date = Carbon::now()->subMonths($i);
             $month = $date->format('M Y');
 
-            $count = \App\Models\Pengiriman::whereMonth('created_at', $date->month)
+            $count = Pengiriman::whereMonth('created_at', $date->month)
                 ->whereYear('created_at', $date->year)
                 ->count();
 
@@ -209,10 +222,10 @@ class DashboardController extends Controller
         $monthlyData = [];
 
         for ($i = $months - 1; $i >= 0; $i--) {
-            $date = \Carbon\Carbon::now()->subMonths($i);
+            $date = Carbon::now()->subMonths($i);
             $month = $date->format('M Y');
 
-            $count = \App\Models\MushafRequest::whereMonth('created_at', $date->month)
+            $count = MushafRequest::whereMonth('created_at', $date->month)
                 ->whereYear('created_at', $date->year)
                 ->count();
 
@@ -230,7 +243,7 @@ class DashboardController extends Controller
      */
     private function getStatusDistribution(): array
     {
-        return \App\Models\StatusPengiriman::withCount('pengiriman')
+        return StatusPengiriman::withCount('pengiriman')
             ->where('is_active', true)
             ->get()
             ->map(function ($status) {
@@ -251,7 +264,7 @@ class DashboardController extends Controller
      */
     private function getTopDonatur(int $limit = 5): array
     {
-        return \App\Models\Donatur::select('id', 'nama_donatur')
+        return Donatur::select('id', 'nama_donatur')
             ->withSum('pengiriman', 'jumlah_quran')
             ->orderBy('pengiriman_sum_jumlah_quran', 'desc')
             ->limit($limit)
@@ -274,23 +287,23 @@ class DashboardController extends Controller
 
         // Prepare date array for the last 7 days
         for ($i = 6; $i >= 0; $i--) {
-            $date = \Carbon\Carbon::now()->subDays($i);
+            $date = Carbon::now()->subDays($i);
             $dateString = $date->toDateString();
 
             // Count shipments and mushaf sent for this date
-            $shipments = \App\Models\Pengiriman::whereDate('updated_at', $dateString)
+            $shipments = Pengiriman::whereDate('updated_at', $dateString)
                 ->whereHas('status', function ($query) {
                     $query->where('slug', 'pengiriman');
                 })
                 ->count();
 
-            $completedShipments = \App\Models\Pengiriman::whereDate('updated_at', $dateString)
+            $completedShipments = Pengiriman::whereDate('updated_at', $dateString)
                 ->whereHas('status', function ($query) {
                     $query->where('slug', 'diterima');
                 })
                 ->count();
 
-            $mushafSent = \App\Models\Pengiriman::whereDate('updated_at', $dateString)
+            $mushafSent = Pengiriman::whereDate('updated_at', $dateString)
                 ->whereHas('status', function ($query) {
                     $query->whereIn('slug', ['pengiriman', 'diterima']);
                 })
@@ -299,7 +312,7 @@ class DashboardController extends Controller
             $dailyActivities[] = [
                 'day' => $date->format('D'),
                 'shipments' => $shipments,
-                'requests' => \App\Models\MushafRequest::whereDate('created_at', $dateString)->count(),
+                'requests' => MushafRequest::whereDate('created_at', $dateString)->count(),
                 'mushaf_sent' => (int) $mushafSent,
                 'completed_shipments' => $completedShipments,
             ];

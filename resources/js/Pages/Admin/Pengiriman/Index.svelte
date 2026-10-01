@@ -18,6 +18,7 @@
   export let jenisQuranList = [];
   export const donaturList = [];
   export let stats = {};
+  export let stageVisibility = { restricted: false, slugs: [] };
   export const errors = {};
   export const auth = {};
   export const flash = {};
@@ -757,29 +758,44 @@
   
   <!-- Statistics Cards -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-      <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
-          <HeroIcon name="cube" class="w-5 h-5 md:w-6 md:h-6" />
-        </div>
-        <div class="ml-3 md:ml-4 min-w-0 flex-1">
-          <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Pemesanan</p>
-          <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.pemesanan || 0}</p>
+    {#if stageVisibility?.restricted}
+      <!-- Manager: tahap awal gudang tidak ditampilkan, diganti Selesai Packing -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
+        <div class="flex items-center">
+          <div class="w-10 h-10 md:w-12 md:h-12 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
+            <HeroIcon name="archive-box" class="w-5 h-5 md:w-6 md:h-6" />
+          </div>
+          <div class="ml-3 md:ml-4 min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Selesai Packing</p>
+            <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.selesai_packing || 0}</p>
+          </div>
         </div>
       </div>
-    </div>
+    {:else}
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
+        <div class="flex items-center">
+          <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+            <HeroIcon name="cube" class="w-5 h-5 md:w-6 md:h-6" />
+          </div>
+          <div class="ml-3 md:ml-4 min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Pemesanan</p>
+            <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.pemesanan || 0}</p>
+          </div>
+        </div>
+      </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-      <div class="flex items-center">
-        <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center text-yellow-600">
-          <HeroIcon name="inbox-stack" class="w-5 h-5 md:w-6 md:h-6" />
-        </div>
-        <div class="ml-3 md:ml-4 min-w-0 flex-1">
-          <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Proses Packing</p>
-          <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.packing || 0}</p>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
+        <div class="flex items-center">
+          <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center text-yellow-600">
+            <HeroIcon name="inbox-stack" class="w-5 h-5 md:w-6 md:h-6" />
+          </div>
+          <div class="ml-3 md:ml-4 min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Proses Packing</p>
+            <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.packing || 0}</p>
+          </div>
         </div>
       </div>
-    </div>
+    {/if}
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
       <div class="flex items-center">

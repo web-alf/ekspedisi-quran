@@ -12,7 +12,9 @@ use App\Models\Pengiriman;
 use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Models\TrackingHistory;
+use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
+use App\Support\PengirimanStageVisibility;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,6 +52,11 @@ class PengirimanController extends Controller
             'sertifikat:id,pengiriman_id,nomor_sertifikat,generated_at',
             'mushafRequest:id,pengiriman_id,nama_lembaga,status',
         ]);
+
+        // Role manager hanya menangani pengiriman yang sudah selesai dikerjakan
+        // gudang. Diterapkan di sini (bukan di tampilan) supaya pencarian,
+        // penomoran baris, dan paginasi ikut tunduk pada batas yang sama.
+        PengirimanStageVisibility::applyToQuery($query, $request->user());
 
         // Search functionality
         if ($request->search) {
@@ -204,10 +211,11 @@ class PengirimanController extends Controller
         return Inertia::render('Admin/Pengiriman/Index', [
             'pengiriman' => $pengiriman,
             'filters' => $request->only(['search', 'status', 'jenis_quran', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to']),
-            'statusList' => StatusPengiriman::active()->select('id', 'nama', 'slug', 'warna')->get(),
+            'statusList' => PengirimanStageVisibility::visibleStatuses($request->user()),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
-            'stats' => $this->getOptimizedPengirimanStats(),
+            'stats' => $this->getOptimizedPengirimanStats($request->user()),
+            'stageVisibility' => PengirimanStageVisibility::frontendContext($request->user()),
         ]);
     }
 
@@ -215,43 +223,55 @@ class PengirimanController extends Controller
      * Get optimized pengiriman statistics using single query
      * Replaces multiple whereHas calls to prevent N+1 query problem
      */
-    private function getOptimizedPengirimanStats()
+    private function getOptimizedPengirimanStats(?User $user = null)
     {
+        // Role manager tidak boleh melihat angka tahap awal sama sekali — kalau
+        // tetap dihitung, mereka tahu ada 26.096 pengiriman yang disembunyikan.
+        $restricted = PengirimanStageVisibility::restricts($user);
+
         try {
+
             // Single query with conditional aggregation - eliminates N+1 problem
-            $stats = \DB::table('pengiriman')
+            $query = \DB::table('pengiriman')
                 ->join('status_pengiriman', 'pengiriman.status_id', '=', 'status_pengiriman.id')
                 ->selectRaw('
                     COUNT(CASE WHEN status_pengiriman.slug = "pemesanan" THEN 1 END) as pemesanan,
                     COUNT(CASE WHEN status_pengiriman.slug = "packing" THEN 1 END) as packing,
+                    COUNT(CASE WHEN status_pengiriman.slug = "selesai-packing" THEN 1 END) as selesai_packing,
                     COUNT(CASE WHEN status_pengiriman.slug = "pengiriman" THEN 1 END) as pengiriman,
                     COUNT(CASE WHEN status_pengiriman.slug = "diterima" THEN 1 END) as diterima
-                ')
-                ->first();
+                ');
 
-            return [
+            if ($restricted) {
+                $query->whereIn('status_pengiriman.slug', PengirimanStageVisibility::allowedSlugs());
+            }
+
+            $stats = $query->first();
+
+            $result = [
                 'pemesanan' => (int) $stats->pemesanan,
                 'packing' => (int) $stats->packing,
+                'selesai_packing' => (int) $stats->selesai_packing,
                 'pengiriman' => (int) $stats->pengiriman,
                 'diterima' => (int) $stats->diterima,
             ];
+
+            return $result;
         } catch (\Exception $e) {
             // Fallback to individual queries if optimization fails
             \Log::warning('Optimized pengiriman stats failed, falling back to individual queries: '.$e->getMessage());
 
             return [
-                'pemesanan' => Pengiriman::whereHas('status', function ($q) {
-                    $q->where('slug', 'pemesanan');
-                })->count(),
-                'packing' => Pengiriman::whereHas('status', function ($q) {
-                    $q->where('slug', 'packing');
-                })->count(),
-                'pengiriman' => Pengiriman::whereHas('status', function ($q) {
-                    $q->where('slug', 'pengiriman');
-                })->count(),
-                'diterima' => Pengiriman::whereHas('status', function ($q) {
-                    $q->where('slug', 'diterima');
-                })->count(),
+                'pemesanan' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'pemesanan'))->count(),
+                'packing' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'packing'))->count(),
+                'selesai_packing' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'selesai-packing'))->count(),
+                'pengiriman' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'pengiriman'))->count(),
+                'diterima' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'diterima'))->count(),
             ];
         }
     }
@@ -262,6 +282,12 @@ class PengirimanController extends Controller
     public function edit(Pengiriman $pengiriman)
     {
         auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE->value);
+
+        abort_unless(
+            PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman),
+            403,
+            'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
+        );
 
         $pengiriman->load(['donatur', 'jenisQuran', 'status', 'creator', 'wakafItem']);
 
@@ -403,7 +429,11 @@ class PengirimanController extends Controller
 
             $updated = 0;
             $skipped = 0;
-            $pengirimanList = Pengiriman::whereIn('id', $request->pengiriman_ids)
+            $pengirimanList = PengirimanStageVisibility::applyToQuery(
+                Pengiriman::query(),
+                $request->user()
+            )
+                ->whereIn('id', $request->pengiriman_ids)
                 ->lockForUpdate()
                 ->get();
 
@@ -548,7 +578,15 @@ class PengirimanController extends Controller
         ]);
 
         try {
-            $updated = Pengiriman::whereIn('id', $request->pengiriman_ids)
+            // Batas tahap juga mengikat di jalur tulis: manager tidak boleh
+            // mengubah pengiriman yang tidak bisa dilihatnya, walau ID-nya dikirim
+            // langsung dari luar tampilan.
+            $visibleIds = PengirimanStageVisibility::applyToQuery(
+                Pengiriman::query(),
+                $request->user()
+            )->whereIn('id', $request->pengiriman_ids)->pluck('id');
+
+            $updated = Pengiriman::whereIn('id', $visibleIds)
                 ->update([
                     'alamat_tujuan' => $request->alamat_tujuan,
                     'nama_penerima' => $request->nama_penerima,
@@ -590,6 +628,14 @@ class PengirimanController extends Controller
     public function show(Pengiriman $pengiriman)
     {
         auth()->user()->can(PermissionEnum::SHIPMENTS_READ->value);
+
+        // Manager tidak boleh membuka pengiriman di tahap awal lewat URL
+        // langsung: data itu bukan wewenangnya.
+        abort_unless(
+            PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman),
+            403,
+            'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
+        );
 
         $pengiriman->load([
             'donatur', 'wakafItem', 'jenisQuran', 'status', 'creator',
@@ -637,6 +683,10 @@ class PengirimanController extends Controller
         ])
             ->whereIn('status_id', $activeStatusIds) // Filter by all active non-final statuses
             ->select('id', 'no_resi', 'nama_penerima', 'nama_lembaga', 'no_hp_penerima', 'alamat_tujuan', 'donatur_id', 'wakaf_item_id', 'jenis_quran_id', 'status_id', 'jumlah_quran', 'created_at', 'qr_code_path', 'qr_code_data');
+
+        // Batas tahap role manager juga berlaku di halaman Generate QR — daftarnya
+        // memuat data pengiriman yang sama.
+        PengirimanStageVisibility::applyToQuery($query, $request->user());
 
         // Search functionality
         if ($request->search) {
@@ -890,6 +940,15 @@ class PengirimanController extends Controller
                 ->first();
 
             if (! $pengiriman) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
+                ], 404);
+            }
+
+            // Resi mudah ditebak (EQ-YYYY-XXXXX), jadi batas tahap manager harus
+            // berlaku di sini juga — bukan hanya di halaman daftar.
+            if (! PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
