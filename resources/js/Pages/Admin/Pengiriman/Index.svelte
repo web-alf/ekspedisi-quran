@@ -1055,7 +1055,7 @@
                 bind:value={bulkStatus}
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
-                <option value="">Pilih Status...</option>
+                <option value="">Pilih Status Baru...</option>
                 {#each statusList as status}
                   <option value={status.id}>{status.nama}</option>
                 {/each}

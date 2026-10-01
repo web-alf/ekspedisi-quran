@@ -232,7 +232,7 @@
             <!-- Status -->
             <div>
               <label for="status-select" class="block text-sm font-medium text-gray-700 mb-2">
-                Status Pengiriman *
+                Status *
               </label>
               <select 
                 id="status-select"
