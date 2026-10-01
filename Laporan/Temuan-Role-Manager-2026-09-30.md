@@ -22,7 +22,7 @@ Temuan tambahan di luar daftar: **`/admin/performance` error 500** untuk manager
 
 ## Status perbaikan (30 Sep 2026)
 
-**Paket A — selesai & terverifikasi.** Paket B — selesai & terverifikasi. Poin #4 dan #5 masih menunggu keputusan Anda.
+**Semua poin selesai & terverifikasi** (1-5). Poin #4 dan #5 kini juga sudah diputuskan pemilik sistem: izin donatur dicabut, dan satuan "doz" berarti 1 kerdus penuh (A5=20, A6=40, IQRA=160), bukan lusin 12. "Barcode" yang dimaksud tim = QR yang sudah dipakai.
 
 | # | Perbaikan | Bukti |
 |---|---|---|
@@ -254,7 +254,32 @@ stats.sealed_satuan = {"total":24,"pcs":24,"doz":2,"lusin":2,"label":"2 doz"}
 -- bersih: 0 kerdus sisa
 ```
 
-**Yang masih menunggu keputusan Anda:** apakah "barcode" di maksud tim berarti QR yang sudah ada (pilihan yang saya ambil), atau memang perlu barcode 1D sungguhan (Code128/EAN) yang berarti menambah pustaka baru. Juga: bila di lapangan 1 doz ≠ 12, cukup ubah konstanta di `BoxUnits` — tidak perlu ubah skema.
+**KEPUTUSAN PRODUK (dijawab pemilik sistem):**
+
+1. **"Barcode" = QR yang sudah ada**, bukan barcode 1D. Tidak perlu menambah
+   pustaka Code128/EAN. Terverifikasi: QR kerdus tampil di daftar (h-16 w-16),
+   di halaman detail (data URL PNG 2.122 char), dan bisa dicetak sebagai label
+   thermal 100x150 mm lewat `/admin/thermal-print/box/{id}` — manager punya
+   semua izin yang dibutuhkan (`qr.generate`, `warehouse.boxes.view`,
+   `warehouse.qr.scan`).
+
+2. **Satuan "doz" = 1 kerdus penuh (dus), BUKAN lusin 12.** Isinya berbeda per
+   ukuran: **A5 = 20, A6 = 40, IQRA = 160**. Implementasi pertama salah memakai
+   konstanta 12 sehingga kerdus penuh A6 (40 eks) terbaca "40 pcs" dan kerdus
+   penuh A5 (20 eks) tidak pernah disebut doz sama sekali. Sudah diperbaiki:
+   `BoxUnits::breakdown($pcs, $pcsPerDoz)` kini menerima pembagi per jenis, dan
+   label "doz" hanya dipakai bila kepingnya PAS kerdus penuh.
+
+3. **Daftar tetap per-kerdus** (bukan per-mushaf): halaman Pelacakan Kerdus
+   menampilkan kerdus + kolom "Isi (Satuan)", dan daftar mushaf per keping
+   tersedia di halaman detail kerdus (`Admin/BoxTracking/Show`).
+
+**Bug produksi yang ikut ketemu:** `JenisQuranSeeder` memakai `updateOrCreate`
+tanpa menyebut `default_capacity`, sehingga setiap kali seeder dijalankan kolom
+itu kembali ke default skema (20) dan menimpa A6 (40) serta IQRO (160). Akibatnya
+produksi menyimpan 20 untuk SEMUA jenis tanpa error apa pun. Seeder sudah
+diperbaiki + ada tes penjaga yang menjalankan seeder dua kali. Data produksi
+dibetulkan secara transaksional: A5=20, A6=40, IQRO=160.
 
 ---
 
@@ -297,7 +322,7 @@ Batas yang sudah benar: manager **tidak** bisa `/admin/users` dan `/admin/roles`
 
 **C. Donatur untuk manager** — pilih: (1) sembunyikan menu saja, (2) cabut `donatur.read` dari role manager juga (tetap aman untuk halaman Pengiriman), atau (3) cabut semua izin `donatur.*` kecuali yang dipakai halaman lain.
 
-**D. Daftar Quran selesai packing + barcode + satuan** — perlu keputusan produk dulu: definisi satuan (1 kerdus = berapa pcs? doz = 12 atau 20?), apakah barcode menggantikan atau melengkapi QR di label, dan apakah daftarnya per-mushaf atau per-kerdus.
+**D. Daftar Quran selesai packing + barcode + satuan** — SUDAH DIPUTUSKAN dan selesai. Barcode = QR yang ada (bukan 1D). Satuan doz = 1 kerdus penuh, isinya per ukuran (A5=20, A6=40, IQRA=160). Daftar per-kerdus, dengan rincian per-mushaf di halaman detail.
 
 **E. Bonus** — perbaiki `getSlowQueries()` (jadikan `public`) supaya menu Laporan Kinerja tidak 500.
 
