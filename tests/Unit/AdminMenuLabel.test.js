@@ -131,4 +131,32 @@ describe('Sidebar admin', () => {
         expect(item, 'menu Proses Packing tidak ditemukan').toBeTruthy();
         expect(item.querySelector('svg')?.getAttribute('class') ?? '').toContain('lucide-box');
     });
+
+    it('menu Pengemasan memakai ikon kardus, bukan truck', async () => {
+        // Ikon truk adalah sisa dari waktu label menu ini masih "Pengiriman".
+        // Setelah labelnya jadi "Pengemasan", truk tidak nyambung - ikon adalah
+        // hal pertama yang terlihat sebelum labelnya dibaca. Dikunci eksplisit
+        // supaya sisa lama itu tidak kembali tanpa ketahuan.
+        const { container } = render(AdminLayout);
+
+        const item = [...container.querySelectorAll('a')]
+            .find((a) => a.textContent.trim() === 'Pengemasan');
+
+        expect(item, 'menu Pengemasan tidak ditemukan').toBeTruthy();
+
+        const kelas = item.querySelector('svg')?.getAttribute('class') ?? '';
+
+        expect(kelas).toContain('lucide-package-check');
+        expect(kelas, 'ikon truck tidak boleh dipakai lagi di menu Pengemasan').not.toContain('lucide-truck');
+    });
+
+    it('menu Pengemasan tetap mengarah ke halaman pengiriman', async () => {
+        // Hanya label dan ikon yang berubah; route dan izinnya tidak disentuh.
+        const { container } = render(AdminLayout);
+
+        const item = [...container.querySelectorAll('a')]
+            .find((a) => a.textContent.trim() === 'Pengemasan');
+
+        expect(item.getAttribute('href')).toContain('/admin/pengiriman');
+    });
 });

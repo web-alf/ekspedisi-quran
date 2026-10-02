@@ -446,9 +446,15 @@
       // Main menu items
       'Dashboard': 'chart-bar',
       'Kelola Donatur': 'users',
-      // Menu ini menangani pengemasan sampai pengiriman, dan pemilik sistem
-      // menyebutnya "Pengemasan" - ikon truck dipertahankan.
-      'Pengemasan': 'truck',
+      // Menu ini menangani pengemasan, jadi ikonnya kardus kemasan
+      // (archive-box -> package-check), BUKAN truck.
+      //
+      // Sebelumnya di sini 'truck', sisa dari waktu labelnya masih "Pengiriman".
+      // Setelah labelnya diganti "Pengemasan", truk jadi tidak nyambung: menu
+      // ini soal mengemas barang, bukan mengangkutnya. Ikon adalah janji visual
+      // pertama sebelum orang membaca labelnya - kalau tidak cocok, yang
+      // terlihat lebih dulu justru yang salah.
+      'Pengemasan': 'archive-box',
       'Sertifikat': 'academic-cap',
       'Permintaan Mushaf': 'book-open',
       'Manajemen Gudang': 'building-office-2',
