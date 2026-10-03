@@ -1255,7 +1255,22 @@
               <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p class="text-xs text-blue-800">
                   <strong>💡 Tips:</strong> Download template terlebih dahulu untuk format yang benar.
+                  Template berisi <strong>lembar "Data"</strong> untuk diisi dan
+                  <strong>lembar "Panduan Kolom"</strong> yang menjelaskan tiap kolom —
+                  kolomnya sudah disamakan dengan bagian "Informasi Lembaga" pada halaman detail.
                 </p>
+                <p class="mt-2 text-xs text-blue-800">
+                  Hanya <strong>lembar pertama ("Data")</strong> yang dibaca, jadi jangan
+                  memindahkan atau mengganti nama lembar itu. Baris yang belum memenuhi
+                  syarat tidak ikut masuk, dan penyebabnya akan ditampilkan setelah import.
+                </p>
+                <button
+                  type="button"
+                  on:click={downloadTemplate}
+                  class="mt-2 inline-flex items-center text-xs font-medium text-blue-700 underline hover:text-blue-900"
+                >
+                  Download template Excel
+                </button>
               </div>
             </div>
           </div>

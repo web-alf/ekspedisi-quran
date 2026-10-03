@@ -46,6 +46,12 @@ final class MushafAddressResolver
 
     private const GEOCODE_TTL = 604800; // 7 hari — koordinat tidak berubah
 
+    /** Kolom yang boleh diisi langsung dari berkas dan tidak boleh ditimpa. */
+    private const PETAKOLOM = [
+        'provinsi', 'kota_kabupaten', 'kecamatan', 'kelurahan_desa',
+        'kode_pos', 'alamat_detail', 'latitude', 'longitude',
+    ];
+
     public function __construct(
         private readonly GeographicCacheService $geographicCache,
     ) {}
@@ -58,17 +64,50 @@ final class MushafAddressResolver
      *               kelurahan_desa: ?string, kelurahan_desa_id: ?string, kode_pos: ?string,
      *               alamat_detail: ?string, latitude: ?float, longitude: ?float}
      */
-    public function resolve(?string $alamatLengkap, ?string $linkGmaps = null): array
+    public function resolve(?string $alamatLengkap, ?string $linkGmaps = null, array $isian = []): array
     {
-        $kosong = [
-            'provinsi' => null, 'provinsi_id' => null,
-            'kota_kabupaten' => null, 'kota_kabupaten_id' => null,
-            'kecamatan' => null, 'kecamatan_id' => null,
-            'kelurahan_desa' => null, 'kelurahan_desa_id' => null,
-            'kode_pos' => null,
-            'alamat_detail' => $this->bersihkanDetail($alamatLengkap),
-            'latitude' => null, 'longitude' => null,
-        ];
+        // Baris yang sudah memuat koordinat DAN detail alamatnya tidak perlu
+        // diuraikan sama sekali. Selain mubazir, penguraian selalu memanggil
+        // layanan peta dan pencocokan wilayah — tidak ada gunanya dilakukan
+        // untuk data yang sudah lengkap.
+        $sudahLengkap = $this->adaIsi($isian['latitude'] ?? null)
+            && $this->adaIsi($isian['longitude'] ?? null)
+            && $this->adaIsi($isian['alamat_detail'] ?? null);
+
+        $hasil = $sudahLengkap
+            ? $this->kerangka($alamatLengkap)
+            : $this->uraiOtomatis($alamatLengkap, $linkGmaps);
+
+        // Kolom yang diisi LANGSUNG di berkas dipakai apa adanya, dan menang
+        // atas hasil penguraian. Yang perlu menebak adalah berkas yang cuma
+        // punya satu kolom teks alamat; kalau pengisinya sudah tahu provinsi
+        // atau kelurahannya, menimpanya dengan hasil tebakan justru merusak
+        // data yang benar.
+        foreach (self::PETAKOLOM as $kunci) {
+            $nilai = $isian[$kunci] ?? null;
+            if (is_string($nilai)) {
+                $nilai = trim($nilai);
+            }
+            if ($nilai !== null && $nilai !== '') {
+                $hasil[$kunci] = $nilai;
+            }
+        }
+
+        // Lengkapi ID wilayah dari nama yang diisi manual, supaya bentuk
+        // datanya sama dengan hasil penguraian otomatis (bukan hanya namanya).
+        $this->lengkapiId($hasil);
+
+        return $hasil;
+    }
+
+    /**
+     * Susun kolom wilayah dari alamat + tautan peta saja.
+     *
+     * @return array<string, mixed>
+     */
+    private function uraiOtomatis(?string $alamatLengkap, ?string $linkGmaps): array
+    {
+        $kosong = $this->kerangka($alamatLengkap);
 
         $koordinat = $this->koordinatDariLink($linkGmaps);
         if (! $koordinat) {
@@ -127,6 +166,67 @@ final class MushafAddressResolver
         $kosong['kode_pos'] = $geo['address']['postcode'] ?? null;
 
         return $kosong;
+    }
+
+    /**
+     * Kerangka hasil: seluruh tingkat wilayah kosong, kecuali teks alamatnya
+     * yang selalu disimpan utuh.
+     *
+     * @return array<string, mixed>
+     */
+    private function kerangka(?string $alamatLengkap): array
+    {
+        return [
+            'provinsi' => null, 'provinsi_id' => null,
+            'kota_kabupaten' => null, 'kota_kabupaten_id' => null,
+            'kecamatan' => null, 'kecamatan_id' => null,
+            'kelurahan_desa' => null, 'kelurahan_desa_id' => null,
+            'kode_pos' => null,
+            'alamat_detail' => $this->bersihkanDetail($alamatLengkap),
+            'latitude' => null, 'longitude' => null,
+        ];
+    }
+
+    /** Apakah nilainya benar-benar terisi (bukan null/string kosong)? */
+    private function adaIsi(mixed $nilai): bool
+    {
+        return $nilai !== null && trim((string) $nilai) !== '';
+    }
+
+    /**
+     * Lengkapi `*_id` dari nama wilayah yang sudah ada, tanpa mengubah namanya.
+     *
+     * Dipakai setelah kolom isian manual dipasang: bila pengisi berkas menulis
+     * "Jawa Timur" tanpa ID, ID-nya dilengkapi di sini. Bila namanya tidak ada di
+     * sumber data wilayah, ID dibiarkan kosong — nama tetap tersimpan apa adanya
+     * dan tidak pernah diganti dengan tebakan.
+     */
+    private function lengkapiId(array &$hasil): void
+    {
+        if (empty($hasil['provinsi_id']) && ! empty($hasil['provinsi'])) {
+            $hasil['provinsi_id'] = $this->cocokkanProvinsi($hasil['provinsi'])['id'] ?? null;
+        }
+
+        if (empty($hasil['kota_kabupaten_id']) && ! empty($hasil['kota_kabupaten']) && $hasil['provinsi_id']) {
+            $hasil['kota_kabupaten_id'] = $this->cocokkanKota(
+                $hasil['provinsi_id'],
+                $hasil['kota_kabupaten']
+            )['id'] ?? null;
+        }
+
+        if (empty($hasil['kecamatan_id']) && ! empty($hasil['kecamatan']) && $hasil['kota_kabupaten_id']) {
+            $hasil['kecamatan_id'] = $this->cariDalamDaftar(
+                $this->geographicCache->getDistricts($hasil['kota_kabupaten_id']) ?? [],
+                $hasil['kecamatan']
+            )['pertama']['id'] ?? null;
+        }
+
+        if (empty($hasil['kelurahan_desa_id']) && ! empty($hasil['kelurahan_desa']) && $hasil['kecamatan_id']) {
+            $hasil['kelurahan_desa_id'] = $this->cariDalamDaftar(
+                $this->geographicCache->getVillages($hasil['kecamatan_id']) ?? [],
+                $hasil['kelurahan_desa']
+            )['pertama']['id'] ?? null;
+        }
     }
 
     /**

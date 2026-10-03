@@ -4,98 +4,253 @@ namespace App\Exports;
 
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
+use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithHeadings, WithStyles
+/**
+ * Template import permintaan mushaf.
+ *
+ * Kolomnya SENGAJA disamakan dengan field yang ada di kartu "Informasi
+ * Lembaga" pada halaman detail permintaan (/admin/mushaf-requests/{id}).
+ * Sebelumnya template hanya memuat satu kolom teks `alamat_lengkap`, sedangkan
+ * form itu memecah alamat menjadi provinsi / kota-kabupaten / kecamatan /
+ * kelurahan / kode pos / detail — sehingga kolom-kolom itu selalu kosong pada
+ * hasil import, dan "Informasi Lembaga" tidak bisa disimpan karena latitude dan
+ * longitude-nya ikut kosong.
+ *
+ * Yang mengisi kolom wilayah di template tidak perlu mengisi kolom teks apa pun;
+ * yang hanya punya satu baris alamat cukup mengisi `alamat_lengkap` dan kolom
+ * wilayahnya dikosongkan (akan diuraikan otomatis bila ada tautan peta).
+ */
+class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEvents, WithHeadings, WithStyles
 {
+    /**
+     * Nama kolom template — satu sumber kebenaran dengan pengimpornya.
+     *
+     * @var array<int, string>
+     */
+    public const KOLOM = [
+        'nama_lembaga',
+        'nama_penanggung_jawab_1',
+        'nomor_hp',
+        'jabatan_penanggung_jawab_1',
+        'kategori_lembaga',
+        'provinsi',
+        'kota_kabupaten',
+        'kecamatan',
+        'kelurahan_desa',
+        'kode_pos',
+        'alamat_detail',
+        'alamat_lengkap',
+        'latitude',
+        'longitude',
+        'link_gmaps',
+        'jumlah_mushaf_a5',
+        'jumlah_mushaf_a6',
+        'jumlah_iqra',
+        'urgensi',
+        'sumber_info',
+    ];
+
+    /**
+     * Pilihan kategori lembaga — harus sama persis dengan daftar pada kartu
+     * "Informasi Lembaga" dan dengan nilai yang diterima halaman publik.
+     *
+     * @var array<int, string>
+     */
+    public const KATEGORI = [
+        'Pondok Pesantren',
+        "Rumah Tahfidz/Rumah Qur'an",
+        'TPQ/TPA/Madin',
+        'Sekolah/Madrasah',
+        'Masjid/Mushola/Majelis Taklim/Jamaah Masjid',
+        'Masyarakat/Jamaah Alfatihah',
+        'Organisasi/Paguyuban/Event Sosial/Komunitas',
+        'Santri & Karyawan Alfatihah',
+        'Yayasan',
+        'Panti Asuhan/Anak Yatim',
+        'RT/RW/Pemerintah Desa/Kecamatan',
+        'Lembaga Lainnya',
+        'Muallaf',
+        'Penerima Manfaat Khusus Lainnya',
+    ];
+
+    /**
+     * Baris contoh.
+     *
+     * Sengaja memakai nama LEMBAGA FIKTIF. Tiga baris sebelumnya adalah data
+     * pemohon sungguhan — nama lembaga, alamat, dan nomor HP-nya lengkap dan
+     * masih aktif (REQ-2026-00025 s/d 00027), sehingga template yang diunduh
+     * dan diedarkan berisi data pribadi orang lain.
+     *
+     * @return array<int, array<int, mixed>>
+     */
     public function array(): array
     {
-        // Return sample data rows - minimal format
         return [
             [
-                'TPQ Al Falah Plosorejo',
-                'Latifah',
-                '085731507971',
-                'Lingkungan, Plosorejo RT.2/RW.5, Bence, Kec. Garum, Blitar',
-                'https://maps.app.goo.gl/na4EG41yECawFzka8',
-                10,
-                'Banyak Al-Qur\'an yang sudah rusak',
-            ],
-            [
-                'Yayasan Al Hikmah Peduli',
-                'Tri Handayani',
-                '081553843650',
-                'Perum Gardenia G1, Bence, Kec. Garum, Blitar',
-                'https://maps.app.goo.gl/NNkfrnA5V4goEypTA',
-                500,
-                'Untuk kebutuhan Al-Qur\'an saat naik jilid',
-            ],
-            [
-                'MI Darul Huda Bence',
-                'Arzuq Fanani Zen',
-                '085649645815',
-                'Jl. Slorok, RT.2/RW.1, Lingkungan Tanggung, Bence, Kec. Garum, Blitar',
-                'https://maps.app.goo.gl/uXgwGX5nAtuyiSPJ9',
-                181,
-                'Untuk pembelajaran disekolah sejumlah siswa',
+                'TPQ Contoh Al Falah',
+                'Nama Penanggung Jawab',
+                '081234567890',
+                'Ketua',
+                'TPQ/TPA/Madin',
+                'Jawa Timur',
+                'Kabupaten Blitar',
+                'Garum',
+                'Contoh Kelurahan',
+                '66181',
+                'Jl. Contoh No. 1, RT.2/RW.5, Lingkungan Contoh',
+                '',
+                -8.0868357,
+                112.2396983,
+                'https://maps.app.goo.gl/contohSaja',
+                100,
+                0,
+                0,
+                'sedang',
+                'WhatsApp',
             ],
         ];
     }
 
+    /**
+     * @return array<int, string>
+     */
     public function headings(): array
     {
-        return [
-            'nama_lembaga',
-            'nama_penanggung_jawab_1',
-            'nomor_hp',
-            'alamat_lengkap',
-            'link_gmaps',
-            'jumlah_kebutuhan_mushaf',
-            'urgensi',
-        ];
+        return self::KOLOM;
     }
 
     public function styles(Worksheet $sheet)
     {
         return [
-            // Style untuk header row
             1 => [
                 'font' => [
                     'bold' => true,
-                    'size' => 12,
+                    'size' => 11,
                     'color' => ['rgb' => 'FFFFFF'],
                 ],
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => '4CAF50'],
                 ],
                 'alignment' => [
-                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                    'wrapText' => true,
                 ],
             ],
-            // Style untuk sample data rows
-            '2:4' => [
+            2 => [
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => 'E8F5E9'],
                 ],
             ],
         ];
     }
 
+    /**
+     * @return array<string, int>
+     */
     public function columnWidths(): array
     {
         return [
-            'A' => 30, // nama_lembaga
+            'A' => 28, // nama_lembaga
             'B' => 25, // nama_penanggung_jawab_1
-            'C' => 18, // nomor_hp
-            'D' => 50, // alamat_lengkap
-            'E' => 40, // link_gmaps
-            'F' => 30, // jumlah_kebutuhan_mushaf
-            'G' => 45, // urgensi
+            'C' => 16, // nomor_hp
+            'D' => 20, // jabatan_penanggung_jawab_1
+            'E' => 34, // kategori_lembaga
+            'F' => 18, // provinsi
+            'G' => 20, // kota_kabupaten
+            'H' => 18, // kecamatan
+            'I' => 20, // kelurahan_desa
+            'J' => 10, // kode_pos
+            'K' => 40, // alamat_detail
+            'L' => 40, // alamat_lengkap
+            'M' => 14, // latitude
+            'N' => 14, // longitude
+            'O' => 38, // link_gmaps
+            'P' => 14, // jumlah_mushaf_a5
+            'Q' => 14, // jumlah_mushaf_a6
+            'R' => 12, // jumlah_iqra
+            'S' => 12, // urgensi
+            'T' => 18, // sumber_info
         ];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $spreadsheet = $event->sheet->getDelegate()->getParent();
+                $event->sheet->getDelegate()->setTitle('Data');
+
+                $this->tambahLembarPanduan($spreadsheet);
+
+                // Berkas yang diunduh dibuka pada lembar "Data", bukan panduan.
+                $spreadsheet->setActiveSheetIndex(0);
+            },
+        ];
+    }
+
+    /**
+     * Lembar kedua berisi penjelasan tiap kolom, supaya pengisi tidak perlu
+     * menebak — termasuk kolom mana yang wajib dan mana yang boleh dikosongkan.
+     *
+     * Lembar ini TIDAK ikut terbaca saat import: pengimpornya tidak memakai
+     * WithMultipleSheets, dan pembaca hanya memproses lembar pertama.
+     */
+    private function tambahLembarPanduan($spreadsheet): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Panduan Kolom');
+
+        $baris = [
+            ['Kolom', 'Wajib', 'Keterangan', 'Contoh'],
+            ['nama_lembaga', 'Ya', 'Nama lengkap lembaga/penerima manfaat.', 'TPQ Al Falah'],
+            ['nama_penanggung_jawab_1', 'Ya', 'Nama orang yang bisa dihubungi.', 'Latifah'],
+            ['nomor_hp', 'Ya', 'Nomor HP/WhatsApp aktif. Boleh ditulis 08xx atau 62xx.', '081234567890'],
+            ['jabatan_penanggung_jawab_1', 'Tidak', 'Jabatan pengurus 1. Bila kosong diisi "Penanggung Jawab".', 'Ketua'],
+            ['kategori_lembaga', 'Ya', 'Pilih salah satu (tulis persis): '.implode(' / ', self::KATEGORI), 'TPQ/TPA/Madin'],
+            ['provinsi', 'Tidak', 'Nama provinsi. Kosongkan bila ingin diuraikan otomatis dari link_gmaps.', 'Jawa Timur'],
+            ['kota_kabupaten', 'Tidak', 'Nama kabupaten/kota. Kosongkan bila ingin diuraikan otomatis.', 'Kabupaten Blitar'],
+            ['kecamatan', 'Tidak', 'Nama kecamatan, tanpa awalan "Kec.". Bila diisi, dipakai apa adanya.', 'Garum'],
+            ['kelurahan_desa', 'Tidak', 'Nama kelurahan/desa. Isi hanya bila yakin — salah isi tidak akan terdeteksi.', 'Contoh Kelurahan'],
+            ['kode_pos', 'Tidak', 'Kode pos 5 digit.', '66181'],
+            ['alamat_detail', 'Ya', 'Jalan, nomor rumah, RT/RW, nama perumahan/lingkungan.', 'Jl. Contoh No. 1, RT.2/RW.5'],
+            ['alamat_lengkap', 'Tidak', 'Alamat lengkap dalam satu baris. Isi ini saja bila tidak mau memecah alamat per kolom wilayah.', 'Jl. Contoh No. 1, Garum, Blitar'],
+            ['latitude', 'Tidak', 'Koordinat lintang. Kosongkan bila link_gmaps sudah diisi.', '-8.0868357'],
+            ['longitude', 'Tidak', 'Koordinat bujur. Kosongkan bila link_gmaps sudah diisi.', '112.2396983'],
+            ['link_gmaps', 'Tidak', 'Tautan lokasi dari Google Maps. Bentuk pendek (maps.app.goo.gl) juga bisa.', 'https://maps.app.goo.gl/xxxx'],
+            ['jumlah_mushaf_a5', 'Ya', 'Jumlah mushaf ukuran A5.', '100'],
+            ['jumlah_mushaf_a6', 'Tidak', 'Jumlah mushaf ukuran A6. Isi 0 bila tidak ada.', '0'],
+            ['jumlah_iqra', 'Tidak', 'Jumlah buku Iqra. Isi 0 bila tidak ada.', '0'],
+            ['urgensi', 'Tidak', 'Tingkat urgensi: rendah / sedang / tinggi / mendesak. Kosong = sedang.', 'sedang'],
+            ['sumber_info', 'Tidak', 'Dari mana permohonan ini diketahui.', 'WhatsApp'],
+        ];
+
+        $sheet->fromArray($baris, null, 'A1');
+
+        $lebar = ['A' => 28, 'B' => 9, 'C' => 68, 'D' => 40];
+        foreach ($lebar as $kolom => $nilai) {
+            $sheet->getColumnDimension($kolom)->setWidth($nilai);
+        }
+
+        $terakhir = count($baris);
+        $sheet->getStyle('A1:D1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4CAF50']],
+            'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getStyle("A1:D{$terakhir}")->applyFromArray([
+            'alignment' => ['vertical' => Alignment::VERTICAL_TOP, 'wrapText' => true],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D9D9D9']]],
+        ]);
     }
 }

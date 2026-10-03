@@ -228,7 +228,7 @@ it('membiarkan import berjalan walau layanan geocoding mati', function () {
 // UJUNG KE UJUNG: template resmi
 // ============================================
 
-it('mengisi kolom alamat pada template resmi yang diimpor apa adanya', function () {
+it('mengisi kolom alamat pada template yang diimpor apa adanya', function () {
     // Inilah keluhan aslinya: berkas template diimpor, dan kolom alamat kosong.
     Excel::store(new MushafRequestTemplateExport, 'template-uji.xlsx');
     $berkas = Storage::disk('local')->path('template-uji.xlsx');
@@ -236,17 +236,46 @@ it('mengisi kolom alamat pada template resmi yang diimpor apa adanya', function 
     $import = new MushafRequestImport($this->resolver);
     Excel::import($import, $berkas);
 
-    expect($import->getResults()['success_count'])->toBe(3);
+    expect($import->getResults()['success_count'])->toBe(1);
 
-    foreach (MushafRequest::all() as $req) {
-        expect($req->provinsi)->toBe('JAWA TIMUR')
-            ->and($req->kota_kabupaten)->toBe('KABUPATEN BLITAR')
-            ->and($req->kecamatan)->toBe('GARUM')
-            ->and($req->latitude)->not->toBeNull()
-            ->and($req->longitude)->not->toBeNull()
-            // Detail alamat kini terisi, jadi generateAlamatLengkap() pada baris
-            // ini tidak menimpa alamat_lengkap dengan teks komponen wilayah.
-            ->and($req->alamat_detail)->not->toBeNull();
+    $req = MushafRequest::first();
+
+    // Baris contoh template mengisi kolom wilayahnya SENDIRI, jadi kolomnya
+    // terisi tanpa perlu diuraikan — dan tautan contohnya tidak pernah disentuh.
+    expect($req->provinsi)->toBe('Jawa Timur')
+        ->and($req->kota_kabupaten)->toBe('Kabupaten Blitar')
+        ->and($req->kecamatan)->toBe('Garum')
+        ->and($req->kelurahan_desa)->toBe('Contoh Kelurahan')
+        ->and($req->alamat_detail)->toBe('Jl. Contoh No. 1, RT.2/RW.5, Lingkungan Contoh')
+        ->and((float) $req->latitude)->toBe(-8.0868357)
+        ->and((float) $req->longitude)->toBe(112.2396983);
+
+    // Yang penting: tautan peta CONTOH tidak pernah diikuti, dan tidak ada
+    // reverse geocoding sama sekali — barisnya sudah punya koordinat sendiri.
+    // (Daftar wilayah tetap dipanggil sekali untuk melengkapi provinsi_id dan
+    // kawan-kawan, dan itu memang perlu.)
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'maps.app.goo.gl'));
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'nominatim'));
+
+    unlink($berkas);
+});
+
+it('tidak mengirim data pribadi pemohon di dalam template', function () {
+    // Tiga baris contoh template yang lama adalah data pemohon SUNGGUHAN:
+    // nama lembaga, alamat, dan nomor HP-nya lengkap serta masih aktif
+    // (REQ-2026-00025 s/d 00027). Template yang diunduh dan diedarkan tidak
+    // boleh memuat data pribadi orang lain.
+    Excel::store(new MushafRequestTemplateExport, 'template-privasi.xlsx');
+    $berkas = Storage::disk('local')->path('template-privasi.xlsx');
+
+    $isi = file_get_contents($berkas);
+
+    foreach (['TPQ Al Falah Plosorejo', 'Yayasan Al Hikmah Peduli', 'MI Darul Huda Bence'] as $nama) {
+        expect($isi)->not->toContain($nama);
+    }
+
+    foreach (['085731507971', '081553843650', '085649645815'] as $hp) {
+        expect($isi)->not->toContain($hp);
     }
 
     unlink($berkas);
