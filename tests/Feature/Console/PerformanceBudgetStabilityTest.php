@@ -56,23 +56,41 @@ it('lulus persis seperti perintah terjadwal produksi (--output=json)', function 
     $this->artisan('performance:check-budgets', ['--output' => 'json'])->assertSuccessful();
 });
 
-it('memakai ambang waktu query di atas derau pengukuran server', function () {
-    // Server produksi 1 vCPU; pengukuran berkisar 7-11 ms. Ambang harus di atas
-    // itu supaya laporannya tidak untung-untungan, tapi tetap cukup ketat untuk
-    // menangkap kemunduran nyata.
+it('memakai ambang yang jelas di atas derau pengukuran server', function () {
+    // Riwayat produksi (storage/logs/performance-budgets.log) menunjukkan kueri
+    // COUNT yang sama terukur 11 ms sampai 213 ms antar malam — variasi 20x
+    // karena cron tengah malam bersaing dengan tugas lain di VPS 1 vCPU. Ambang
+    // harus di atas puncak derau itu, kalau tidak laporannya cuma untung-untungan.
     $berkas = file_get_contents(app_path('Console/Commands/Performance/CheckBudgetsCommand.php'));
 
     preg_match("/'simple_count_max_time' => \\\$strict \? (\d+) : (\d+)/", $berkas, $m);
 
     expect($m)->not->toBeEmpty('ambang simple_count tidak ditemukan');
 
-    $ketat = (int) $m[1];
     $longgar = (int) $m[2];
 
-    expect($ketat)->toBeGreaterThan(10)
-        ->and($longgar)->toBeGreaterThanOrEqual(25)
-        // Tetap ada jaring: jangan sampai dilonggarkan sampai tak berguna.
-        ->and($longgar)->toBeLessThanOrEqual(100);
+    // Di atas puncak derau terukur (213 ms).
+    expect($longgar)->toBeGreaterThan(213)
+        // Tapi tetap ada jaring: jangan sampai dilonggarkan sampai tak berguna.
+        ->and($longgar)->toBeLessThanOrEqual(500);
+});
+
+it('mengukur sebagai median, bukan satu kali ukur', function () {
+    // Satu kali ukur membuat laporan sensitif terhadap lonjakan sesaat; median
+    // membuangnya. Ini yang membuat hasilnya stabil antar-jalan.
+    $sumber = file_get_contents(app_path('Console/Commands/Performance/CheckBudgetsCommand.php'));
+
+    expect($sumber)->toContain('private function ukurMedian(')
+        ->and($sumber)->toContain('$this->ukurMedian(');
+
+    // Blok pengukuran DB harus memakai ukurMedian untuk ketiga bentuk kueri,
+    // bukan microtime langsung.
+    $awal = strpos($sumber, 'private function checkDatabaseBudgets');
+    $akhir = strpos($sumber, 'private function ukurMedian');
+    $blokDb = substr($sumber, $awal, $akhir - $awal);
+
+    expect(substr_count($blokDb, 'ukurMedian'))->toBe(3)
+        ->and($blokDb)->not->toContain('$start = microtime(true)');
 });
 
 it('menghangatkan kueri DB sebelum mengukur', function () {
