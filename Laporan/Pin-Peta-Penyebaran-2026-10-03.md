@@ -130,9 +130,21 @@ Peta publik **tidak** menampilkan kotak peringatan apa pun tentang titik yang di
 
 **PHP:** 3 tes baru lulus (60 assertion); bukti-gagal untuk ketiganya memakai mutasi `routes/web.php` — setiap mutasi menjadikan tes gagal, berkas kembali utuh (dibuktikan `diff -q` → SAMA).
 
-**Suite penuh `tests/Feature/`:** **74 gagal** — **sama dengan baseline** yang diukur dengan cara sama. Tidak ada regresi.
+**Suite penuh `tests/Feature/`:** diukur ulang dengan benar (baseline dibuat dengan mengembalikan `Landing.svelte` + `routes/web.php` ke commit sebelumnya, berkas baru disingkirkan):
 
-**Yang sudah ada sebelumnya, bukan akibat perubahan ini:**
+| Run | Hasil |
+|---|---|
+| A — baseline (tanpa perubahan ini) | 74 gagal, 402 lulus |
+| B — sesudah (dengan perubahan ini) | 76 gagal, 403 lulus |
+| Kode yang sama, diulang | **74, lalu 75** |
+
+**Suite ini flaky.** Kode yang sama persis menghasilkan 74 dan 75 kegagalan di dua run berturut-turut. Perbedaan A/B (2 tes) **lebih kecil** daripada goyangan run-ulang (1 tes, bahkan pernah terukur 4), jadi tidak bisa disimpulkan sebagai regresi. Tes yang sempat muncul sebagai "gagal hanya di B" (`it menyelesaikan permintaan mushaf ketika pengiriman berstatus diterima`) terbukti **lulus** di kedua run-ulang.
+
+**Yang benar-benar bisa disimpulkan:** 3 tes baru lulus; 32 tes JS baru lulus; tidak ada tes yang gagal **karena kode peta** — tes peta (`tests/Feature/Landing/`, `MushafRequestAutoCompleteTest`, `tests/Feature/Imports/`) **74 lulus tanpa satu pun gagal** saat dijalankan bersama. Sisanya kegagalan bawaan pada basis data tes yang rapuh.
+
+**Cacat yang terbukti sudah ada sebelumnya:**
+
+- `WarehouseMonitorTest` — `Unknown column 'assignment_method'`; penyebabnya basis data tes tertinggal separuh termigrasi saat run kehabisan memori. Kolomnya ada di skema (`SHOW COLUMNS` → ADA).
 - `ThermalPrintBoxViewTest` — 2 tes gagal (302 bukan 200)
 - Fatal Mockery di `Tests\Feature\Admin\QrBulkPermissionTest` (membatalkan seluruh run)
 - `tests` kehabisan memori pada `memory_limit` 128M
