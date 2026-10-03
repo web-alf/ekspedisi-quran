@@ -90,6 +90,11 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
      * masih aktif (REQ-2026-00025 s/d 00027), sehingga template yang diunduh
      * dan diedarkan berisi data pribadi orang lain.
      *
+     * Kolom wilayah (provinsi..kode_pos) diisi nama yang SUNGGUHAN ADA, bukan
+     * "Contoh Kelurahan". Panduannya sendiri memperingatkan bahwa nama kelurahan
+     * yang salah tidak akan terdeteksi — nilainya dipakai apa adanya — sehingga
+     * contoh yang dikarang mengajarkan kebiasaan yang merusak data.
+     *
      * @return array<int, array<int, mixed>>
      */
     public function array(): array
@@ -105,12 +110,12 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
                 'Jawa Timur',
                 'Kabupaten Blitar',
                 'Garum',
-                'Contoh Kelurahan',
-                '66181',
-                'Jl. Contoh No. 1, RT.2/RW.5, Lingkungan Contoh',
+                'GARUM',
+                '66182',
+                'Jl. Contoh No. 1, RT.2/RW.5, Dusun Contoh',
                 '',
-                -8.0868357,
-                112.2396983,
+                -8.07859,
+                112.2175005,
                 'https://maps.app.goo.gl/contohBarisSatu',
                 100,
                 0,
@@ -119,24 +124,24 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
                 'Banyak Al-Qur\'an yang sudah rusak dan perlu diganti',
                 'WhatsApp',
             ],
-            // Contoh 2 — hanya mengisi satu kolom alamat + tautan peta; kolom
-            // wilayah sengaja dikosongkan karena akan diuraikan otomatis.
+            // Contoh 2 — titik di desa/kecamatan yang sama, tetapi tanpa
+            // memecah alamat per kolom: cukup nama wilayah + koordinat.
             [
                 'MI Contoh Nurul Huda',
                 'Nama Pengurus Kedua',
                 '081298765432',
                 'Sekretaris',
                 'Sekolah/Madrasah',
+                'Jawa Timur',
+                'Kabupaten Blitar',
+                'Garum',
+                'GARUM',
+                '66182',
+                'Jl. Contoh Raya No. 2 RT.1/RW.1',
                 '',
+                -8.0801234,
+                112.2198765,
                 '',
-                '',
-                '',
-                '',
-                '',
-                'Jl. Contoh Raya No. 2, Kec. Garum, Blitar',
-                '',
-                '',
-                'https://maps.app.goo.gl/contohBarisDua',
                 0,
                 50,
                 0,
@@ -251,12 +256,12 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
             ['provinsi', 'Tidak', 'Nama provinsi. Kosongkan bila ingin diuraikan otomatis dari link_gmaps.', 'Jawa Timur'],
             ['kota_kabupaten', 'Tidak', 'Nama kabupaten/kota. Kosongkan bila ingin diuraikan otomatis.', 'Kabupaten Blitar'],
             ['kecamatan', 'Tidak', 'Nama kecamatan, tanpa awalan "Kec.". Bila diisi, dipakai apa adanya.', 'Garum'],
-            ['kelurahan_desa', 'Tidak', 'Nama kelurahan/desa. Isi hanya bila yakin — salah isi tidak akan terdeteksi.', 'Contoh Kelurahan'],
-            ['kode_pos', 'Tidak', 'Kode pos, maksimal 10 karakter.', '66181'],
+            ['kelurahan_desa', 'Tidak', 'Nama kelurahan/desa. Isi hanya bila yakin — salah isi tidak akan terdeteksi.', 'GARUM'],
+            ['kode_pos', 'Tidak', 'Kode pos, maksimal 10 karakter.', '66182'],
             ['alamat_detail', 'Ya', 'Jalan, nomor rumah, RT/RW, nama perumahan/lingkungan.', 'Jl. Contoh No. 1, RT.2/RW.5'],
             ['alamat_lengkap', 'Tidak', 'Alamat lengkap dalam satu baris. Isi ini bila tidak mau memecah alamat per kolom wilayah.', 'Jl. Contoh No. 1, Garum, Blitar'],
-            ['latitude', 'Tidak', 'Koordinat lintang. Kosongkan bila link_gmaps sudah diisi.', '-8.0868357'],
-            ['longitude', 'Tidak', 'Koordinat bujur. Kosongkan bila link_gmaps sudah diisi.', '112.2396983'],
+            ['latitude', 'Tidak', 'Koordinat lintang. Kosongkan bila link_gmaps sudah diisi.', '-8.07859'],
+            ['longitude', 'Tidak', 'Koordinat bujur. Kosongkan bila link_gmaps sudah diisi.', '112.2175005'],
             ['link_gmaps', 'Tidak', 'Tautan lokasi dari Google Maps. Bentuk pendek (maps.app.goo.gl) juga bisa. Tautan pada contoh HANYA peraga — ganti dengan tautan lokasi Anda sendiri.', 'https://maps.app.goo.gl/xxxx'],
             ['jumlah_mushaf_a5', 'Ya*', 'Jumlah mushaf ukuran A5. *Jumlah wajib ada: minimal salah satu dari A5/A6/Iqra lebih dari 0.', '100'],
             ['jumlah_mushaf_a6', 'Ya*', 'Jumlah mushaf ukuran A6. Isi 0 bila tidak ada.', '0'],

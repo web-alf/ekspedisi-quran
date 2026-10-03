@@ -8,6 +8,7 @@
   import AddressFormIndonesia from '../../../Components/AddressFormIndonesia.svelte';
   import { fade, scale } from 'svelte/transition';
   import { can } from '../../../utils/permissions.js';
+  import { buatFormLembaga } from '../../../utils/mushafLembagaForm.js';
 
   export let mushafRequest;
   export const wakifList = [];
@@ -30,22 +31,11 @@
     foto_lembaga: false
   };
 
-  // Form for editing lembaga info
-  let lembagaForm = {
-    nama_lembaga: mushafRequest.nama_lembaga,
-    kategori_lembaga: mushafRequest.kategori_lembaga || '',
-    alamat_lengkap: mushafRequest.alamat_lengkap,
-    provinsi: mushafRequest.provinsi || '',
-    kota_kabupaten: mushafRequest.kota_kabupaten || '',
-    kecamatan: mushafRequest.kecamatan || '',
-    kelurahan_desa: mushafRequest.kelurahan_desa || '',
-    kode_pos: mushafRequest.kode_pos || '',
-    alamat_detail: mushafRequest.alamat_detail || '',
-    latitude: mushafRequest.latitude || '',
-    longitude: mushafRequest.longitude || '',
-    urgensi_request: mushafRequest.urgensi_request || '',
-    sumber_info: mushafRequest.sumber_info || ''
-  };
+  // Form for editing lembaga info.
+  //
+  // Dipisah ke utils/mushafLembagaForm.js supaya pemetaan ID wilayahnya bisa
+  // diuji langsung — lihat catatan di berkas itu.
+  let lembagaForm = buatFormLembaga(mushafRequest);
 
   // Form for editing kontak info
   let kontakForm = {

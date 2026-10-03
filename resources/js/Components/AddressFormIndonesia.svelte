@@ -111,7 +111,63 @@
     } finally {
       loadingProvinces = false;
     }
+
+    // Lanjutkan memuat rantai wilayah yang sudah terisi.
+    //
+    // Saat MEMBUKA data yang sudah ada (bukan mengisi baru), provinsi..kelurahan
+    // sudah punya ID sejak awal, tetapi daftar kabupaten/kecamatan/kelurahan
+    // hanya dimuat oleh handler perubahan dropdown — yang tidak pernah berjalan
+    // karena tidak ada yang mengubah apa pun. Akibatnya ketiga dropdown itu
+    // tampil kosong ("Pilih Kota/Kabupaten") walau datanya ada, dan menyimpan
+    // form dalam keadaan begitu akan menghapus wilayah yang sudah benar.
+    await muatWilayahTersimpan();
   });
+
+  /**
+   * Muat daftar kabupaten/kecamatan/kelurahan untuk ID yang sudah tersimpan.
+   *
+   * Dipanggil sekali saat komponen dipasang. Sengaja TIDAK memakai
+   * handleProvinceChange/handleRegencyChange/handleDistrictChange karena fungsi
+   * itu mengosongkan kolom turunannya lebih dulu — justru itu yang harus
+   * dihindari di sini.
+   */
+  async function muatWilayahTersimpan() {
+    try {
+      if (form.provinsi_id) {
+        loadingRegencies = true;
+        regencies = await fetchWithCache(
+          `${API_BASE}/regencies/${form.provinsi_id}`,
+          { type: 'regencies', key: form.provinsi_id },
+          'keyed'
+        );
+      }
+
+      if (form.kota_kabupaten_id) {
+        loadingDistricts = true;
+        districts = await fetchWithCache(
+          `${API_BASE}/districts/${form.kota_kabupaten_id}`,
+          { type: 'districts', key: form.kota_kabupaten_id },
+          'keyed'
+        );
+      }
+
+      if (form.kecamatan_id) {
+        loadingVillages = true;
+        villages = await fetchWithCache(
+          `${API_BASE}/villages/${form.kecamatan_id}`,
+          { type: 'villages', key: form.kecamatan_id },
+          'keyed'
+        );
+      }
+    } catch (error) {
+      console.error('Gagal memuat wilayah tersimpan:', error);
+      apiError = 'Gagal memuat data wilayah';
+    } finally {
+      loadingRegencies = false;
+      loadingDistricts = false;
+      loadingVillages = false;
+    }
+  }
   
   // Handle province change
   async function handleProvinceChange() {
