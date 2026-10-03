@@ -4,10 +4,18 @@ use App\Imports\MushafRequestImport;
 use App\Models\MushafRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    // Pengimpor kini melengkapi kolom alamat, yang berarti memanggil layanan
+    // peta dan data wilayah. Tirukan supaya uji ini tidak menyentuh jaringan
+    // dan hasilnya tetap dapat ditentukan.
+    Cache::flush();
+    Http::fake(['*' => Http::response([], 200)]);
+
     $this->import = new MushafRequestImport;
 });
 
@@ -367,7 +375,7 @@ test('it handles import with missing nama_penanggung_jawab', function () {
     expect($this->import->getResults()['errors'][0]['error'])->toContain('Nama penanggung jawab wajib diisi');
 });
 
-test('it sets all optional fields to default values', function () {
+test('it fills the address breakdown it can determine, and leaves the rest alone', function () {
     $rows = new Collection([
         [
             'nama_lembaga' => 'TPQ Test',
@@ -384,22 +392,22 @@ test('it sets all optional fields to default values', function () {
 
     $mushafRequest = MushafRequest::first();
 
-    // Verify all optional fields have defaults or are null
+    // Defaults yang memang tetap
     expect($mushafRequest->nama_pengurus_2)->toBe('-');
     expect($mushafRequest->jabatan_pengurus_2)->toBe('-');
     expect($mushafRequest->whatsapp_pengurus_2)->toBe('-');
     expect($mushafRequest->kategori_lembaga)->toBe('Lembaga Lainnya');
     expect($mushafRequest->jabatan_pengurus_1)->toBe('Penanggung Jawab');
+
+    // Teks alamat SELALU disimpan, walau wilayahnya tidak bisa diuraikan.
+    expect($mushafRequest->alamat_detail)->toBe('Alamat Test');
+
+    // Tanpa link gmaps, wilayah tidak bisa ditentukan — dibiarkan kosong,
+    // bukan ditebak. (Pengisian otomatisnya diuji di MushafAddressAutoFillTest.)
     expect($mushafRequest->provinsi)->toBeNull();
-    expect($mushafRequest->provinsi_id)->toBeNull();
     expect($mushafRequest->kota_kabupaten)->toBeNull();
-    expect($mushafRequest->kota_kabupaten_id)->toBeNull();
-    expect($mushafRequest->kecamatan)->toBeNull();
-    expect($mushafRequest->kecamatan_id)->toBeNull();
     expect($mushafRequest->kelurahan_desa)->toBeNull();
-    expect($mushafRequest->kelurahan_desa_id)->toBeNull();
-    expect($mushafRequest->kode_pos)->toBeNull();
-    expect($mushafRequest->alamat_detail)->toBeNull();
+
     expect($mushafRequest->foto_santri_path)->toBeNull();
     expect($mushafRequest->foto_lembaga_path)->toBeNull();
     expect($mushafRequest->file_nama_santri_path)->toBeNull();
@@ -414,7 +422,7 @@ test('it sets all optional fields to default values', function () {
  */
 function invokeMethod(&$object, $methodName, array $parameters = [])
 {
-    $reflection = new \ReflectionClass(get_class($object));
+    $reflection = new ReflectionClass(get_class($object));
     $method = $reflection->getMethod($methodName);
     $method->setAccessible(true);
 

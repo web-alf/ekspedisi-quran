@@ -3,6 +3,8 @@
 namespace App\Imports;
 
 use App\Models\MushafRequest;
+use App\Services\Cache\GeographicCacheService;
+use App\Services\MushafAddressResolver;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\SkipsErrors;
@@ -23,6 +25,10 @@ class MushafRequestImport implements SkipsOnError, SkipsOnFailure, ToCollection,
 
     protected $validationFailures = [];
 
+    public function __construct(
+        private readonly MushafAddressResolver $addressResolver = new MushafAddressResolver(new GeographicCacheService),
+    ) {}
+
     public function collection(Collection $rows): void
     {
         Log::info('MushafRequestImport: Starting collection with '.$rows->count().' rows');
@@ -42,6 +48,17 @@ class MushafRequestImport implements SkipsOnError, SkipsOnFailure, ToCollection,
                 // Parse koordinat from link gmaps if provided
                 $coordinates = $this->parseGoogleMapsLink($rowData['link_gmaps'] ?? '');
                 Log::info('Parsed coordinates for row '.($index + 1), ['coordinates' => $coordinates]);
+
+                // Lengkapi kolom wilayah (provinsi..kelurahan) dari alamat + tautan
+                // peta. Sebelumnya kolom-kolom ini SELALU null sehingga halaman
+                // detail tidak menampilkan alamat lengkap dan form "Informasi
+                // Lembaga" — yang mewajibkan latitude/longitude — tidak bisa
+                // disimpan. Lihat App\Services\MushafAddressResolver.
+                $wilayah = $this->addressResolver->resolve(
+                    $rowData['alamat_lengkap'] ?? null,
+                    $rowData['link_gmaps'] ?? null,
+                );
+                Log::info('Resolved address for row '.($index + 1), $wilayah);
 
                 // Normalize phone number
                 $normalizedPhone = $this->normalizePhoneNumber($rowData['nomor_hp'] ?? '');
@@ -71,8 +88,8 @@ class MushafRequestImport implements SkipsOnError, SkipsOnFailure, ToCollection,
                     'whatsapp_pengurus_2' => '-',
 
                     // Optional: Google Maps link & coordinates
-                    'latitude' => $coordinates['lat'] ?? null,
-                    'longitude' => $coordinates['lng'] ?? null,
+                    'latitude' => $wilayah['latitude'] ?? $coordinates['lat'] ?? null,
+                    'longitude' => $wilayah['longitude'] ?? $coordinates['lng'] ?? null,
 
                     // Jumlah mushaf breakdown
                     'jumlah_mushaf_a5' => $parsedQuantities['mushaf_a5'],
@@ -90,17 +107,24 @@ class MushafRequestImport implements SkipsOnError, SkipsOnFailure, ToCollection,
                     'status' => 'pending',
                     'sumber_info' => 'Import Excel',
 
-                    // Address breakdown fields - null (will be filled later)
-                    'provinsi' => null,
-                    'provinsi_id' => null,
-                    'kota_kabupaten' => null,
-                    'kota_kabupaten_id' => null,
-                    'kecamatan' => null,
-                    'kecamatan_id' => null,
-                    'kelurahan_desa' => null,
-                    'kelurahan_desa_id' => null,
-                    'kode_pos' => null,
-                    'alamat_detail' => null,
+                    // Address breakdown fields — hasil App\MushafAddressResolver.
+                    // Tingkat yang tidak bisa dipastikan tetap null (sumber data
+                    // wilayah yang dipakai aplikasi belum lengkap).
+                    'provinsi' => $wilayah['provinsi'],
+                    'provinsi_id' => $wilayah['provinsi_id'],
+                    'kota_kabupaten' => $wilayah['kota_kabupaten'],
+                    'kota_kabupaten_id' => $wilayah['kota_kabupaten_id'],
+                    'kecamatan' => $wilayah['kecamatan'],
+                    'kecamatan_id' => $wilayah['kecamatan_id'],
+                    'kelurahan_desa' => $wilayah['kelurahan_desa'],
+                    'kelurahan_desa_id' => $wilayah['kelurahan_desa_id'],
+                    'kode_pos' => $wilayah['kode_pos'],
+                    'alamat_detail' => $wilayah['alamat_detail'],
+
+                    // Simpan tautan petanya supaya koordinat bisa diturunkan
+                    // ulang kapan saja — kalau tidak, sekali penguraian gagal,
+                    // baris itu tidak akan pernah bisa dilengkapi lagi.
+                    'link_gmaps' => $rowData['link_gmaps'] ?? null,
 
                     // Files - null (will be uploaded later)
                     'foto_santri_path' => null,

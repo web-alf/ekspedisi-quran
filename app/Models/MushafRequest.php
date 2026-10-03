@@ -59,6 +59,7 @@ class MushafRequest extends Model
         'kelurahan_desa_id',
         'kode_pos',
         'alamat_detail',
+        'link_gmaps',
         'latitude',
         'longitude',
         // Existing fields
