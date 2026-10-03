@@ -105,12 +105,6 @@ class AppServiceProvider extends ServiceProvider
         // gejalanya 403 yang sulit dilacak (persis kasus route mushaf-requests.show).
         // Dengan Gate::before, super-admin tidak lagi bergantung pada isi tabel
         // permissions.
-        //
-        // Catatan: pembatasan operasi gudang untuk super-admin tetap dijaga di
-        // RolePermissionSeeder (super-admin tidak diberi izin gudang operasional),
-        // tetapi TIDAK dipaksakan di sini agar perilaku super-admin konsisten dengan
-        // kondisi produksi saat ini dan tidak menimbulkan efek samping tak terduga
-        // pada policy yang menggabungkan beberapa izin.
         Gate::before(function (User $user) {
             if (! $user->hasRole(RoleEnum::SUPER_ADMIN->value)) {
                 return null;
@@ -119,27 +113,6 @@ class AppServiceProvider extends ServiceProvider
             return true;
         });
     }
-
-    /**
-     * Izin operasional gudang yang TIDAK diberikan ke super-admin.
-     *
-     * Dipakai bersama oleh Gate::before (di atas) dan RolePermissionSeeder, agar
-     * super-admin tetap "pengawas strategis" yang tidak menjalankan operasi gudang.
-     *
-     * @var array<int, string>
-     */
-    public const WAREHOUSE_OPERATIONAL_PERMISSIONS = [
-        'warehouse.packing.view',
-        'warehouse.packing.scan',
-        'warehouse.packing.seal',
-        'warehouse.qr.generate',
-        'warehouse.qr.scan',
-        'warehouse.qr.verify',
-        'warehouse.tasks.view',
-        'warehouse.tasks.update',
-        'warehouse.boxes.view',
-        'warehouse.boxes.seal',
-    ];
 
     /**
      * Configure comprehensive rate limiting for API protection

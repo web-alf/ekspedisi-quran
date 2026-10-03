@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
-use App\Providers\AppServiceProvider;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -145,26 +144,30 @@ class RolePermissionSeeder extends Seeder
 
         // Create roles and assign permissions
 
-        // Super Admin Role - strategic overview, no direct warehouse operations
+        // Super Admin Role — akses penuh ke seluruh izin.
+        //
+        // Dulu role ini sengaja TIDAK diberi izin operasional gudang, dengan niat
+        // "pengawas strategis yang tidak menjalankan operasi gudang". Niat itu
+        // ditinggalkan karena tidak pernah benar-benar ditegakkan, dan keadaan
+        // setengah jalan itu justru menyesatkan:
+        //
+        //   - Gate::before        -> super-admin lolos SEMUA pemeriksaan izin
+        //   - PermissionMiddleware-> super-admin lolos SEMUA pemeriksaan route
+        //   - sidebar/daftar menu -> TIDAK punya cabang super-admin, murni cek
+        //                            izin mentah
+        //
+        // Akibatnya halaman gudang tetap bisa dibuka lewat URL, tetapi menunya
+        // HILANG dari sidebar begitu izinnya tidak ada. Pemilik sistem mengira
+        // dirinya tidak punya akses padahal punya — persis kebingungan yang
+        // pernah terjadi pada /admin/warehouse/packing.
+        //
+        // Sekarang: super-admin = akses penuh, satu aturan di semua lapisan.
         $superAdmin = Role::firstOrCreate(
             ['name' => RoleEnum::SUPER_ADMIN->value],
             ['display_name' => 'Super Admin', 'guard_name' => 'web']
         );
 
-        // Give all permissions EXCEPT direct warehouse operational permissions.
-        // Daftar pengecualian diambil dari AppServiceProvider agar konsisten dengan
-        // Gate::before (satu sumber kebenaran).
-        $allPermissions = Permission::all();
-        $excludedWarehousePermissions = AppServiceProvider::WAREHOUSE_OPERATIONAL_PERMISSIONS;
-
-        $superAdminPermissions = $allPermissions->reject(function ($permission) use ($excludedWarehousePermissions) {
-            return in_array($permission->name, $excludedWarehousePermissions);
-        });
-
-        // Tambahkan akses bulk QR sebagai pengecualian manual untuk super-admin
-        $superAdminPermissions->push(Permission::firstOrCreate(['name' => PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value]));
-
-        $superAdmin->syncPermissions($superAdminPermissions);
+        $superAdmin->syncPermissions(Permission::all());
 
         // Customer Service Role
         $cs = Role::firstOrCreate(

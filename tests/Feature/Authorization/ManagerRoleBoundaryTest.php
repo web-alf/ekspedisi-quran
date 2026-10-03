@@ -6,6 +6,7 @@ use App\Http\Middleware\PermissionMiddleware;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Http\Request;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -62,15 +63,22 @@ it('tetap memberi manager wewenang baca dan ubah', function () {
 
     foreach ([
         PermissionEnum::DASHBOARD_VIEW->value,
-        PermissionEnum::DONATUR_READ->value,
-        PermissionEnum::DONATUR_UPDATE->value,
-        PermissionEnum::DONATUR_CREATE->value,
         PermissionEnum::SHIPMENTS_READ->value,
         PermissionEnum::SHIPMENTS_UPDATE->value,
         PermissionEnum::MUSHAF_REQUESTS_APPROVE->value,
         PermissionEnum::CERTIFICATES_GENERATE->value,
     ] as $expected) {
         expect($perms)->toContain($expected);
+    }
+
+    // donatur.* sengaja DICABUT dari manager: pengelolaan data donatur tetap milik
+    // customer-service saja. Dulu tes ini menuntut manager memilikinya.
+    foreach ([
+        PermissionEnum::DONATUR_READ->value,
+        PermissionEnum::DONATUR_UPDATE->value,
+        PermissionEnum::DONATUR_CREATE->value,
+    ] as $revoked) {
+        expect($perms)->not->toContain($revoked);
     }
 });
 
@@ -98,12 +106,14 @@ it('menolak manager membuka halaman permissions', function () {
     $this->actingAs($manager)->get('/admin/permissions')->assertForbidden();
 });
 
-it('mengizinkan manager membuka halaman donatur dan mushaf request', function () {
+it('menolak manager membuka halaman donatur, tetapi mengizinkan mushaf request', function () {
     $manager = User::factory()->create(['is_active' => true]);
     $manager->assignRole('manager');
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-    $this->actingAs($manager)->get('/admin/donatur')->assertSuccessful();
+    // Pengelolaan donatur tetap milik customer-service; manager tidak lagi punya
+    // donatur.* sejak pencabutan izin tersebut.
+    $this->actingAs($manager)->get('/admin/donatur')->assertForbidden();
     $this->actingAs($manager)->get('/admin/mushaf-requests')->assertSuccessful();
 });
 
@@ -138,9 +148,17 @@ it('super-admin lolos middleware permission walau izin belum di-seed', function 
     expect($reached)->toBeTrue();
 });
 
-it('super-admin tidak diberi izin operasional gudang oleh seeder', function () {
+it('super-admin diberi seluruh izin oleh seeder, termasuk operasional gudang', function () {
+    // Dulu tes ini menuntut yang sebaliknya ("super-admin tidak diberi izin
+    // operasional gudang"), sisa dari niat "pengawas strategis" yang tidak pernah
+    // benar-benar ditegakkan: Gate::before dan PermissionMiddleware sama-sama
+    // meloloskan super-admin, sementara sidebar cek izin mentah — sehingga menunya
+    // hilang padahal halamannya bisa dibuka. Sekarang super-admin = akses penuh,
+    // satu aturan di semua lapisan.
     $admin = Role::where('name', RoleEnum::SUPER_ADMIN->value)->first();
     $perms = $admin->permissions->pluck('name');
+
+    expect($perms->count())->toBe(Permission::count());
 
     foreach ([
         PermissionEnum::WAREHOUSE_PACKING_SCAN->value,
@@ -148,7 +166,7 @@ it('super-admin tidak diberi izin operasional gudang oleh seeder', function () {
         PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
         PermissionEnum::WAREHOUSE_BOXES_SEAL->value,
     ] as $warehousePermission) {
-        expect($perms)->not->toContain($warehousePermission);
+        expect($perms)->toContain($warehousePermission);
     }
 });
 

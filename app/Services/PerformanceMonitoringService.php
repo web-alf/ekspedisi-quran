@@ -156,8 +156,10 @@ class PerformanceMonitoringService
 
     /**
      * Get recent slow queries
+     *
+     * @return array<int, mixed>
      */
-    private function getSlowQueries()
+    public function getSlowQueries()
     {
         $today = Cache::get('slow_queries:'.now()->format('Y-m-d'), []);
         $yesterday = Cache::get('slow_queries:'.now()->subDay()->format('Y-m-d'), []);
@@ -167,8 +169,10 @@ class PerformanceMonitoringService
 
     /**
      * Get API performance statistics
+     *
+     * @return array<string, mixed>
      */
-    private function getApiStats()
+    public function getApiStats()
     {
         $stats = [];
         $now = now();
