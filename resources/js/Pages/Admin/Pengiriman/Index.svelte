@@ -18,6 +18,8 @@
   export let jenisQuranList = [];
   export const donaturList = [];
   export let stats = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let stageVisibility = { restricted: false, slugs: [] };
   export const errors = {};
   export const auth = {};
@@ -548,9 +550,32 @@
     if (numberTo) {
       params.set('number_to', numberTo);
     }
+    // Ukuran halaman harus ikut, kalau tidak pilihannya kembali ke bawaan
+    // begitu pengguna menekan filter atau berpindah halaman.
+    if (perPage) {
+      params.set('per_page', perPage);
+    }
 
     const url = params.toString() ? `/admin/pengiriman?${params.toString()}` : '/admin/pengiriman';
     router.visit(url, { preserveState: true, preserveScroll: true });
+  }
+
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar
+  // ke halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams();
+
+    if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+    if (filters.status) params.set('status', filters.status);
+    if (filters.jenis_quran) params.set('jenis_quran', filters.jenis_quran);
+    if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
+    if (startDate) params.set('tanggal_mulai', startDate);
+    if (endDate) params.set('tanggal_akhir', endDate);
+    if (numberFrom) params.set('number_from', numberFrom);
+    if (numberTo) params.set('number_to', numberTo);
+    params.set('per_page', perPage);
+
+    router.visit(`/admin/pengiriman?${params.toString()}`, { preserveState: true, preserveScroll: true });
   }
 
   function clearFilters() {
@@ -562,7 +587,11 @@
     filters.alamat_status = '';
     startDate = '';
     endDate = '';
-    router.visit('/admin/pengiriman', { preserveState: true, preserveScroll: true });
+    // Ukuran halaman TIDAK ikut direset: ia preferensi tampilan, bukan filter
+    // isi tabel. Menekan "Bersihkan Filter" tidak seharusnya mengubah berapa
+    // baris yang ingin dilihat pengguna.
+    const url = perPage ? `/admin/pengiriman?per_page=${perPage}` : '/admin/pengiriman';
+    router.visit(url, { preserveState: true, preserveScroll: true });
   }
   
   // Toggle all checkbox
@@ -714,7 +743,10 @@
     if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
     if (startDate) params.set('tanggal_mulai', startDate);
     if (endDate) params.set('tanggal_akhir', endDate);
-    
+    // Tanpa ini, ukuran halaman kembali ke bawaan setiap kali pengguna menekan
+    // tombol nomor halaman.
+    if (perPage) params.set('per_page', perPage);
+
     return `/admin/pengiriman?${params.toString()}`;
   }
   
@@ -1357,12 +1389,29 @@
     </div>
     
     <!-- Pagination -->
-    {#if pengiriman && pengiriman.last_page > 1}
+    {#if pengiriman}
       <div class="px-4 sm:px-6 py-4 border-t border-gray-200">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div class="text-sm text-gray-500 text-center sm:text-left">
-            Menampilkan {pengiriman.from} - {pengiriman.to} dari {pengiriman.total} hasil
+          <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div class="text-sm text-gray-500 text-center sm:text-left">
+              Menampilkan {pengiriman.from ?? 0} - {pengiriman.to ?? 0} dari {pengiriman.total} hasil
+            </div>
+            <!-- Ukuran halaman: berapa baris yang ditampilkan sekali lihat -->
+            <div class="flex items-center justify-center sm:justify-start gap-2">
+              <label for="per_page_filter" class="text-sm text-gray-500 whitespace-nowrap">Baris per halaman</label>
+              <select
+                id="per_page_filter"
+                bind:value={perPage}
+                on:change={gantiPerHalaman}
+                class="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {#each perPageOptions as opsi}
+                  <option value={opsi}>{opsi}</option>
+                {/each}
+              </select>
+            </div>
           </div>
+          {#if pengiriman.last_page > 1}
           <div class="flex justify-center sm:justify-end items-center space-x-1">
             <!-- Previous -->
             {#if pengiriman.prev_page_url}
@@ -1458,6 +1507,7 @@
               </span>
             {/if}
           </div>
+          {/if}
         </div>
       </div>
     {/if}

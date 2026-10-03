@@ -25,6 +25,20 @@ use Inertia\Inertia;
 class PengirimanController extends Controller
 {
     /**
+     * Ukuran halaman yang boleh dipilih pengguna pada tabel pengiriman.
+     *
+     * Bawaannya 20, bukan 100: seratus baris sekaligus membuat tabel berat dan
+     * sulit dibaca, sementara 20 cukup untuk sekali layar gulir. `per_page` dari
+     * permintaan SELALU dipaksa cocok dengan daftar ini, supaya nilai asal-asalan
+     * (?per_page=100000) tidak bisa meminta seluruh tabel sekaligus.
+     *
+     * @var array<int, int>
+     */
+    public const UKURAN_HALAMAN = [10, 20, 50, 100, 200];
+
+    public const UKURAN_HALAMAN_BAWAAN = 20;
+
+    /**
      * Display a listing of pengiriman
      */
     public function index(Request $request)
@@ -118,8 +132,14 @@ class PengirimanController extends Controller
         $sortOrder = $request->sort_order ?? 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
-        // Handle row number filtering
-        $perPage = 100;
+        // Ukuran halaman dipilih pengguna, tetapi hanya dari daftar yang sah.
+        // Nilai di luar daftar jatuh ke bawaan — bukan diteruskan apa adanya, supaya
+        // ?per_page=999999 tidak bisa meminta seluruh tabel sekaligus.
+        $perPage = (int) $request->input('per_page', self::UKURAN_HALAMAN_BAWAAN);
+        if (! in_array($perPage, self::UKURAN_HALAMAN, true)) {
+            $perPage = self::UKURAN_HALAMAN_BAWAAN;
+        }
+
         $page = 1;
 
         if ($request->filled('number_from') && $request->filled('number_to')) {
@@ -179,6 +199,14 @@ class PengirimanController extends Controller
                 ]
             );
 
+            // Catatan (diketahui, bukan bug baru): nomor baris di tabel dihitung
+            // frontend sebagai `pengiriman.from + index`. Nilai `from` yang di-set
+            // di sini TIDAK sampai ke frontend, karena
+            // LengthAwarePaginator::toArray() mengirim 'from' => firstItem().
+            // Akibatnya, bila "No. Dari" jatuh di halaman terakhir yang terpotong
+            // (mis. 105 dengan 10 baris per halaman), penomoran baris bisa meleset.
+            // Cara memakainya tetap sama seperti sebelumnya; memperbaikinya perlu
+            // menyentuh paginator, di luar lingkup perubahan ukuran halaman ini.
             $pengiriman->from = $numberFrom;
 
         } elseif ($request->filled('number_to')) {
@@ -210,7 +238,9 @@ class PengirimanController extends Controller
 
         return Inertia::render('Admin/Pengiriman/Index', [
             'pengiriman' => $pengiriman,
-            'filters' => $request->only(['search', 'status', 'jenis_quran', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to']),
+            'filters' => $request->only(['search', 'status', 'jenis_quran', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
+            'perPage' => $perPage,
+            'perPageOptions' => self::UKURAN_HALAMAN,
             'statusList' => PengirimanStageVisibility::visibleStatuses($request->user()),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
