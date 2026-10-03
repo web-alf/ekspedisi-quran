@@ -415,7 +415,13 @@ final class MushafAddressResolver
     {
         $bersih = $this->buangNamaJalan($teks);
         $dibuang = $kecualikan ? mb_strtoupper(trim($kecualikan)) : null;
+
+        // Jenis tempat yang disebut di teks ("Kota Jayapura" / "Kabupaten
+        // Jayapura"). Dipakai untuk memilih di antara nama kembar.
+        $jenisDiminta = $this->jenisTempat($bersih);
+
         $cocok = [];
+        $cocokSesuaiJenis = [];
 
         foreach ($daftar as $entri) {
             $nama = mb_strtoupper(trim($entri['name'] ?? ''));
@@ -430,14 +436,56 @@ final class MushafAddressResolver
 
             if (preg_match('/\b'.preg_quote($nama, '/').'\b/', $bersih)
                 || $this->cocokkanPecahan($bersih, $nama)) {
-                $cocok[] = ['nama' => $entri['name'], 'id' => (string) $entri['id']];
+                $hasil = ['nama' => $entri['name'], 'id' => (string) $entri['id']];
+                $cocok[] = $hasil;
+
+                // Jenis pada daftar harus sama dengan yang diminta
+                // ("KOTA" vs "KABUPATEN"). Tanpa ini, "Kota Jayapura" bisa
+                // memilih KABUPATEN JAYAPURA hanya karena entri itu muncul
+                // lebih dulu di daftar.
+                if ($jenisDiminta !== null && $this->jenisTempat($nama) === $jenisDiminta) {
+                    $cocokSesuaiJenis[] = $hasil;
+                }
             }
+        }
+
+        // Bila teks menyebut jenisnya dengan jelas, utamakan entri yang
+        // jenisnya cocok. Bila tidak ada yang cocok, jatuh ke hasil seperti semula
+        // supaya teks yang tidak menyebut jenis tetap bisa dicocokkan.
+        if ($jenisDiminta !== null && $cocokSesuaiJenis !== []) {
+            return [
+                'pertama' => $cocokSesuaiJenis[0],
+                'semua' => $cocokSesuaiJenis,
+            ];
         }
 
         return [
             'pertama' => $cocok[0] ?? null,
             'semua' => $cocok,
         ];
+    }
+
+    /**
+     * Jenis tempat yang disebut di teks atau nama wilayah.
+     *
+     * Mengembalikan "KOTA", "KABUPATEN", "KECAMATAN", atau null bila tidak
+     * disebut. Dipakai untuk membedakan nama kembar — banyak kabupaten dan kota
+     * memakai nama yang sama persis (Jayapura, Blitar, Tangerang, Malang, ...).
+     */
+    private function jenisTempat(?string $teks): ?string
+    {
+        if (empty($teks)) {
+            return null;
+        }
+
+        $atas = mb_strtoupper($teks);
+
+        return match (true) {
+            (bool) preg_match('/\b(KOTA|KOTAMADYA)\b/', $atas) => 'KOTA',
+            (bool) preg_match('/\b(KABUPATEN|KAB)\b/', $atas) => 'KABUPATEN',
+            (bool) preg_match('/\b(KECAMATAN|KEC)\b/', $atas) => 'KECAMATAN',
+            default => null,
+        };
     }
 
     /**
