@@ -13,6 +13,8 @@
   export let group = 'landing';
   export const groupName = 'Landing Page';
   export let filters = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
 
   // Initialize filters from backend
   let searchQuery = filters.search || '';
@@ -614,7 +616,9 @@
           {#if settingsCollection && settingsCollection.links}
             <div class="mt-6 pt-6 border-t border-gray-200">
               <Pagination 
-                data={settingsCollection} 
+                data={settingsCollection}
+                perPage={perPage}
+                perPageOptions={perPageOptions} 
                 additionalParams={{
                   group,
                   search: searchQuery || undefined,

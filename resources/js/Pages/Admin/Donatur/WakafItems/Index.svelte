@@ -4,12 +4,15 @@
   import { fade, scale } from 'svelte/transition';
   import AdminLayout from '../../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../../Components/PerPageSelector.svelte';
   import { can } from '../../../../utils/permissions.js';
   import { toast, dialog } from '../../../../utils/notifications.js';
   import ConfirmDialog from '../../../../Components/ConfirmDialog.svelte';
   
   // Props from backend
   export let donatur = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let items = { data: [] };
   export let stats = { statusCounts: {}, typeData: [] };
   export let can_manage = false;
@@ -338,6 +341,15 @@
     ...generateWakifPreview('A6', $addForm.a6_quantity),
     ...generateWakifPreview('IQRA', $addForm.iqra_quantity)
   ];
+  // WakafItems: halaman ini punya beberapa filter sendiri, jadi cukup bawa
+  // per_page dan kembali ke halaman 1.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`${window.location.pathname}?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <svelte:head>
@@ -805,6 +817,7 @@
           <div class="text-sm text-gray-500 text-center sm:text-left">
             Menampilkan {items.from} - {items.to} dari {items.total} hasil
           </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
           <div class="flex justify-center sm:justify-end items-center space-x-1">
             <!-- Previous -->
             {#if items.prev_page_url}

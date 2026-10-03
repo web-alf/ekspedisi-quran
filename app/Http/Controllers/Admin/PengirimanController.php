@@ -15,6 +15,7 @@ use App\Models\TrackingHistory;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use App\Support\PengirimanStageVisibility;
+use App\Support\PerPage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,9 +35,10 @@ class PengirimanController extends Controller
      *
      * @var array<int, int>
      */
-    public const UKURAN_HALAMAN = [10, 20, 50, 100, 200];
+    /** Ukuran halaman kini dipusatkan di App\Support\PerPage supaya seragam dengan tabel lain. */
+    public const UKURAN_HALAMAN = PerPage::OPTIONS;
 
-    public const UKURAN_HALAMAN_BAWAAN = 20;
+    public const UKURAN_HALAMAN_BAWAAN = PerPage::DEFAULT;
 
     /**
      * Display a listing of pengiriman

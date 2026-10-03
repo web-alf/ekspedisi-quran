@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use App\Models\Testimonial;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -18,7 +19,7 @@ class TestimonialController extends Controller
 
     public function index()
     {
-        $testimonials = Testimonial::ordered()->paginate(10);
+        $testimonials = Testimonial::ordered()->paginate(PerPage::resolve(request()));
 
         // Get Testimonial-related settings
         $testimonialSettings = Setting::where('group', 'testimonial')
@@ -27,6 +28,8 @@ class TestimonialController extends Controller
             ->get();
 
         return Inertia::render('Admin/Testimonials/Index', [
+            'perPage' => PerPage::resolve(request()),
+            'perPageOptions' => PerPage::OPTIONS,
             'testimonials' => $testimonials,
             'testimonialSettings' => $testimonialSettings,
         ]);

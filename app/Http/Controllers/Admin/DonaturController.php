@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\DonaturExport;
+use App\Exports\DonaturTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDonaturRequest;
 use App\Http\Requests\UpdateDonaturRequest;
@@ -10,9 +12,12 @@ use App\Imports\DonaturImport;
 use App\Models\Donatur;
 use App\Models\JenisQuran;
 use App\Models\Pengiriman;
+use App\Models\StatusPengiriman;
 use App\Models\WakafBatch;
 use App\Models\WakafItem;
+use App\Services\DonaturImportService;
 use App\Services\OnDemandCertificateService;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -119,7 +124,7 @@ class DonaturController extends Controller
         }
 
         $donatur = $query->orderBy('created_at', 'desc')
-            ->paginate(20)
+            ->paginate(PerPage::resolve($request))
             ->withQueryString();
 
         // Transform the data to include actual counts from wakaf_items
@@ -133,6 +138,8 @@ class DonaturController extends Controller
         });
 
         return Inertia::render('Admin/Donatur/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'donatur' => $donatur,
             'filters' => $request->only('search', 'kode_donatur', 'start_date', 'end_date'),
             'stats' => [
@@ -310,7 +317,7 @@ class DonaturController extends Controller
                     }
 
                     // Get default status with error handling
-                    $defaultStatusId = \App\Models\StatusPengiriman::getDefaultStatusId();
+                    $defaultStatusId = StatusPengiriman::getDefaultStatusId();
                     if (! $defaultStatusId) {
                         throw new \Exception('Status pengiriman default tidak ditemukan.');
                     }
@@ -798,7 +805,7 @@ class DonaturController extends Controller
                     'jenis_quran_id' => $request->jenis_quran_id,
                     'jumlah_quran' => 1,
                     'tanggal_wakaf' => $request->tanggal_wakaf,
-                    'status_id' => \App\Models\StatusPengiriman::getDefaultStatusId(), // Default status: Proses Pemesanan
+                    'status_id' => StatusPengiriman::getDefaultStatusId(), // Default status: Proses Pemesanan
                     'nama_penerima' => $request->nama_penerima ?: null,
                     'alamat_tujuan' => $request->alamat_tujuan,
                     'catatan' => $request->catatan,
@@ -883,7 +890,7 @@ class DonaturController extends Controller
 
             $filename .= '.xlsx';
 
-            return Excel::download(new \App\Exports\DonaturExport($filters), $filename);
+            return Excel::download(new DonaturExport($filters), $filename);
         } catch (\Exception $e) {
             \Log::error('Export donatur error', [
                 'error' => $e->getMessage(),
@@ -908,7 +915,7 @@ class DonaturController extends Controller
         ]);
 
         try {
-            $import = new DonaturImport(new \App\Services\DonaturImportService);
+            $import = new DonaturImport(new DonaturImportService);
             Excel::import($import, $request->file('file'));
 
             $results = $import->getResults();
@@ -940,7 +947,7 @@ class DonaturController extends Controller
         try {
             $filename = 'donatur-import-template-'.now()->format('Y-m-d').'.xlsx';
 
-            return Excel::download(new \App\Exports\DonaturTemplateExport, $filename);
+            return Excel::download(new DonaturTemplateExport, $filename);
         } catch (\Exception $e) {
             return back()->with('error', 'Error saat download template: '.$e->getMessage());
         }

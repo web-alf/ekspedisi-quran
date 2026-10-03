@@ -2,7 +2,10 @@
   import { router, page } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   
   export let roles = { data: [] };
   export let filters = {};
@@ -52,6 +55,15 @@
     showDeleteModal = false;
     selectedRole = null;
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/roles?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <AdminLayout>
@@ -211,6 +223,7 @@
         <div class="text-sm text-gray-700">
           Showing {roles.from} to {roles.to} of {roles.total} results
         </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
         
         <div class="flex items-center gap-2">
           {#each roles.links as link}

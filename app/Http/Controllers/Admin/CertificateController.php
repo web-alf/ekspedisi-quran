@@ -8,12 +8,15 @@ use App\Jobs\Certificate\GenerateBulkCertificatesJob;
 use App\Jobs\Certificate\GenerateSingleCertificateJob;
 use App\Jobs\Warehouse\CertificateGenerationJob;
 use App\Models\Donatur;
+use App\Models\JenisQuran;
 use App\Models\JobProgress;
+use App\Models\Pengiriman;
 use App\Models\Sertifikat;
 use App\Models\WakafBatch;
 use App\Services\BatchCertificateService;
 use App\Services\ConsolidatedCertificateService;
 use App\Services\OnDemandCertificateService;
+use App\Support\PerPage;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -78,13 +81,13 @@ class CertificateController extends Controller
         }
 
         // Paginate results
-        $certificates = $query->paginate(20)->appends($request->query());
+        $certificates = $query->paginate(PerPage::resolve($request))->appends($request->query());
 
         // Add wakif names to each certificate
         $certificates->getCollection()->transform(function ($certificate) {
             if ($certificate->wakafBatch && $certificate->wakafBatch->donatur) {
                 // Get wakif names from all pengiriman of this donatur
-                $wakifNames = \App\Models\Pengiriman::where('donatur_id', $certificate->wakafBatch->donatur_id)
+                $wakifNames = Pengiriman::where('donatur_id', $certificate->wakafBatch->donatur_id)
                     ->with('wakafItem:id,pengiriman_id,wakif_name')
                     ->get()
                     ->map(function ($p) {
@@ -113,6 +116,8 @@ class CertificateController extends Controller
         ];
 
         return Inertia::render('Admin/Certificates/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'certificates' => $certificates,
             'stats' => $stats,
             'filters' => $request->only(['search', 'sent_status', 'start_date', 'end_date']),
@@ -401,7 +406,7 @@ class CertificateController extends Controller
     private function createMissingWakafBatches()
     {
         // Find donatur that don't have WakafBatches but have donations
-        $donatursWithoutBatches = \App\Models\Donatur::whereDoesntHave('wakafBatches')
+        $donatursWithoutBatches = Donatur::whereDoesntHave('wakafBatches')
             ->where(function ($query) {
                 $query->where('total_a5_count', '>', 0)
                     ->orWhere('total_a6_count', '>', 0)
@@ -412,10 +417,10 @@ class CertificateController extends Controller
         foreach ($donatursWithoutBatches as $donatur) {
             // Create WakafBatch for each jenis_quran that has count > 0
             if ($donatur->total_a5_count > 0) {
-                $jenisQuran = \App\Models\JenisQuran::where('kode_jenis', 'A5')->first();
+                $jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first();
                 if ($jenisQuran) {
-                    \App\Models\WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(\App\Models\WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                    WakafBatch::create([
+                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_a5_count,
@@ -427,10 +432,10 @@ class CertificateController extends Controller
             }
 
             if ($donatur->total_a6_count > 0) {
-                $jenisQuran = \App\Models\JenisQuran::where('kode_jenis', 'A6')->first();
+                $jenisQuran = JenisQuran::where('kode_jenis', 'A6')->first();
                 if ($jenisQuran) {
-                    \App\Models\WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(\App\Models\WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                    WakafBatch::create([
+                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_a6_count,
@@ -442,10 +447,10 @@ class CertificateController extends Controller
             }
 
             if ($donatur->total_iqra_count > 0) {
-                $jenisQuran = \App\Models\JenisQuran::where('kode_jenis', 'IQRO')->first();
+                $jenisQuran = JenisQuran::where('kode_jenis', 'IQRO')->first();
                 if ($jenisQuran) {
-                    \App\Models\WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(\App\Models\WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                    WakafBatch::create([
+                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_iqra_count,

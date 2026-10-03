@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\Setting;
+use App\Support\PerPage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -41,13 +42,13 @@ class ThermalPrintController extends Controller
     {
         // Get available pengiriman for bulk printing
         $pengirimanList = Pengiriman::with(['wakafItem', 'jenisQuran', 'donatur', 'status'])
-            ->whereHas('status', function($query) {
+            ->whereHas('status', function ($query) {
                 // Only show pengiriman yang sudah bisa di-print (proses packing atau selesai)
                 $query->whereIn('nama', ['Proses Packing', 'Sedang Dikirim', 'Selesai']);
             })
             ->where('qr_code_path', '!=', null) // Harus sudah ada QR code
             ->orderBy('created_at', 'desc')
-            ->paginate(20);
+            ->paginate(PerPage::resolve($request));
 
         // Get logo and contact settings
         $appLogo = Setting::where('key', 'app_logo')->first();
@@ -61,7 +62,7 @@ class ThermalPrintController extends Controller
                 'total_available' => $pengirimanList->total(),
                 'app_logo' => $appLogo ? $appLogo->value : null,
                 'contact_address' => $contactAddress ? $contactAddress->value : 'Alamat kontak tidak tersedia',
-                'message' => 'Thermal print bulk data loaded successfully'
+                'message' => 'Thermal print bulk data loaded successfully',
             ]);
         }
 

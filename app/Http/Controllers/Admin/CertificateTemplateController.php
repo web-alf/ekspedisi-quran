@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Helpers\HijriHelper;
 use App\Http\Controllers\Controller;
 use App\Models\CertificateTemplate;
 use App\Models\WakafBatch;
 use App\Services\CertificateService;
+use App\Support\PerPage;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -38,9 +40,11 @@ class CertificateTemplateController extends Controller
             $query->where('is_active', $request->status === 'active');
         }
 
-        $templates = $query->paginate(20)->appends($request->query());
+        $templates = $query->paginate(PerPage::resolve($request))->appends($request->query());
 
         return Inertia::render('Admin/CertificateTemplates/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'templates' => $templates,
             'filters' => $request->only(['search', 'status']),
             'stats' => [
@@ -161,8 +165,8 @@ class CertificateTemplateController extends Controller
         // Get current Hijri date for accurate preview
         $currentHijriDate = 'Semarang, [Tanggal Hijriah Saat Ini]';
         try {
-            $currentHijriDate = 'Semarang, '.\App\Helpers\HijriHelper::getCurrentHijriDate();
-        } catch (\Exception $e) {
+            $currentHijriDate = 'Semarang, '.HijriHelper::getCurrentHijriDate();
+        } catch (Exception $e) {
             \Log::warning('Failed to get current Hijri date for template preview: '.$e->getMessage());
         }
 
@@ -478,7 +482,7 @@ class CertificateTemplateController extends Controller
     {
         try {
             // Use current date for more accurate preview
-            $currentHijriDate = \App\Helpers\HijriHelper::getCurrentHijriDate();
+            $currentHijriDate = HijriHelper::getCurrentHijriDate();
 
             $sampleData = [
                 'wakif_name' => 'Bapak Ahmad Sulaiman',

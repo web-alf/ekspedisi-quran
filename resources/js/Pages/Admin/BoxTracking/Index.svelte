@@ -1,11 +1,14 @@
 <script>
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { router } from '@inertiajs/svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import { can } from '../../../utils/permissions.js';
 
   // Props
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let boxes = {};
   export let filters = {};
   export let jenisQuranList = [];
@@ -92,6 +95,15 @@
   function printBoxLabel(boxId) {
     window.open(`/admin/thermal-print/box/${boxId}`, '_blank');
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/box-tracking?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <svelte:head>
@@ -417,6 +429,9 @@
                 <span class="font-medium">{boxes.total || 0}</span>
                 kerdus
               </p>
+              <div class="mt-2">
+                <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
+              </div>
             </div>
             <div class="flex items-center space-x-1">
               {#each boxes.links as link}

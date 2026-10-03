@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\LandingContent;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Services\LandingSectionRegistry;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -47,12 +49,14 @@ class LandingSettingsController extends Controller
             }
         }
 
-        $settings = $query->paginate(25)->withQueryString();
+        $settings = $query->paginate(PerPage::resolve($request))->withQueryString();
 
         // Group settings for compatibility with frontend
         $groupedSettings = $settings->getCollection()->groupBy('group');
 
         return Inertia::render('Admin/Settings/LandingContent/Landing', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'settingsCollection' => $settings,
             'settingsData' => $groupedSettings,
             'group' => $this->group,
@@ -102,7 +106,7 @@ class LandingSettingsController extends Controller
 
                         // Validate section order structure if this is the landing_section_order setting
                         if ($setting->key === 'landing_section_order' && is_array($jsonData)) {
-                            $validatedOrder = \App\Services\LandingSectionRegistry::validate($jsonData);
+                            $validatedOrder = LandingSectionRegistry::validate($jsonData);
                             $settingData['value'] = json_encode($validatedOrder);
                         }
                     }

@@ -2,10 +2,13 @@
   import { router, page } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { dialog } from '../../../utils/notifications.js';
   import { hasPermission } from '../../../utils/permissions.js';
 
   export let videos = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let videoSettings = [];
 
   // Permission checks
@@ -95,6 +98,15 @@
     const videoId = getYoutubeVideoId(url);
     return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/videos?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <AdminLayout>
@@ -223,6 +235,10 @@
               {/each}
             </div>
 
+            <!-- Pagination -->
+            <div class="mt-6 flex justify-center">
+              <PerPageSelector bind:perPage options={perPageOptions} id="per_page_kartu" onchange={gantiPerHalaman} />
+            </div>
             <!-- Pagination -->
             {#if videos.last_page > 1}
               <div class="mt-6 flex justify-center">

@@ -4,11 +4,17 @@ namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
 use App\Models\DailyPackingTask;
+use App\Models\DailyPackingTaskTarget;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
+use App\Models\PackingNotification;
 use App\Models\Pengiriman;
+use App\Models\SharedBoxAssignment;
+use App\Models\User;
 use App\Services\ConcurrencyMonitorService;
 use App\Services\PackingAssignmentService;
+use App\Support\PerPage;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -434,7 +440,7 @@ class PackingController extends Controller
                     ]);
                 }, 5); // 5 attempts for deadlock retry
 
-            } catch (\Illuminate\Database\QueryException $e) {
+            } catch (QueryException $e) {
                 // Record failed transaction for monitoring
                 $this->concurrencyMonitor->recordFailedTransaction(
                     'item_packing',
@@ -468,6 +474,7 @@ class PackingController extends Controller
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
                 ]);
+
                 // Return as business error to keep frontend UX consistent
                 return response()->json([
                     'success' => false,
@@ -675,7 +682,7 @@ class PackingController extends Controller
             $box->load(['sharedBoxAssignments.user']);
 
             // Check completion status
-            $completionStatus = \App\Models\SharedBoxAssignment::getBoxCompletionStatus($box);
+            $completionStatus = SharedBoxAssignment::getBoxCompletionStatus($box);
 
             if (! $completionStatus['can_proceed_to_seal']) {
                 return response()->json([
@@ -758,7 +765,7 @@ class PackingController extends Controller
     private function notifySharedBoxSealed(PackingBox $box)
     {
         foreach ($box->sharedBoxAssignments as $assignment) {
-            \App\Models\PackingNotification::create([
+            PackingNotification::create([
                 'user_id' => $assignment->user_id,
                 'daily_packing_task_id' => $assignment->daily_packing_task_id,
                 'type' => 'shared_box_sealed',
@@ -777,10 +784,10 @@ class PackingController extends Controller
         }
 
         // Also notify supervisors
-        $supervisors = \App\Models\User::permission('supervisor.warehouse.monitor')->get();
+        $supervisors = User::permission('supervisor.warehouse.monitor')->get();
 
         foreach ($supervisors as $supervisor) {
-            \App\Models\PackingNotification::create([
+            PackingNotification::create([
                 'user_id' => $supervisor->id,
                 'daily_packing_task_id' => $box->sharedBoxAssignments->first()->daily_packing_task_id,
                 'type' => 'shared_box_sealed_supervisor',
@@ -823,7 +830,7 @@ class PackingController extends Controller
             }])
             ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'started_at', 'completed_at')
             ->orderBy('tanggal_tugas', 'desc')
-            ->paginate(10);
+            ->paginate(PerPage::resolve(request()));
 
         return Inertia::render('Warehouse/PackingHistory', [
             'history' => $history,
@@ -845,7 +852,7 @@ class PackingController extends Controller
         $quantity = $pengiriman->jumlah_quran ?? 1;
 
         // Update target breakdown progress
-        $targetBreakdown = \App\Models\DailyPackingTaskTarget::where('daily_packing_task_id', $task->id)
+        $targetBreakdown = DailyPackingTaskTarget::where('daily_packing_task_id', $task->id)
             ->where('jenis_quran_id', $jenisQuranId)
             ->first();
 
@@ -862,7 +869,7 @@ class PackingController extends Controller
 
         // Update shared box allocation if applicable
         if ($box->assignment_type === 'shared') {
-            $sharedAllocation = \App\Models\SharedBoxAssignment::where('packing_box_id', $box->id)
+            $sharedAllocation = SharedBoxAssignment::where('packing_box_id', $box->id)
                 ->where('user_id', $userId)
                 ->first();
 
@@ -960,7 +967,7 @@ class PackingController extends Controller
             }
 
             // Second Priority: Find shared box where user has allocation
-            $sharedAllocation = \App\Models\SharedBoxAssignment::with(['packingBox' => function ($query) {
+            $sharedAllocation = SharedBoxAssignment::with(['packingBox' => function ($query) {
                 $query->where('status', '!=', 'sealed');
             }])
                 ->where('daily_packing_task_id', $task->id)
@@ -1005,7 +1012,7 @@ class PackingController extends Controller
             }
 
             // Third Priority: Check if user has target breakdown for this jenis (fallback)
-            $targetBreakdown = \App\Models\DailyPackingTaskTarget::where('daily_packing_task_id', $task->id)
+            $targetBreakdown = DailyPackingTaskTarget::where('daily_packing_task_id', $task->id)
                 ->where('jenis_quran_id', $jenisQuranId)
                 ->where('completed_quantity', '<', DB::raw('target_quantity'))
                 ->lockForUpdate()

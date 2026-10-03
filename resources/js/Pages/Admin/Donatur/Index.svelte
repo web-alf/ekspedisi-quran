@@ -3,12 +3,15 @@
   import { fade, scale } from 'svelte/transition';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
   import { toast, dialog } from '../../../utils/notifications.js';
   
   export let donatur;
   export let filters = {};
   export let stats = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   
   let search = filters.search || '';
   let kodeDonatur = filters.kode_donatur || '';
@@ -217,6 +220,15 @@
     
     return `/admin/donatur?${params.toString()}`;
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/donatur?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <svelte:head>
@@ -659,6 +671,7 @@
           <div class="text-sm text-gray-500 text-center sm:text-left">
             Menampilkan {donatur.from} - {donatur.to} dari {donatur.total} hasil
           </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
           <div class="flex justify-center sm:justify-end items-center space-x-1">
             <!-- Previous -->
             {#if donatur.prev_page_url}

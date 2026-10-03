@@ -3,67 +3,70 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Sertifikat;
 use App\Models\User;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-
     /**
      * Display a listing of users.
      */
     public function index(Request $request)
     {
         // Check permission using Spatie
-        if (!auth()->user()->can('users.read')) {
+        if (! auth()->user()->can('users.read')) {
             abort(403, 'Unauthorized: User management is restricted to super administrators only.');
         }
         $query = User::query();
-        
+
         // Search functionality
         if ($request->search) {
-            $query->where(function($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('email', 'like', '%' . $request->search . '%');
+            $query->where(function ($q) use ($request) {
+                $q->where('name', 'like', '%'.$request->search.'%')
+                    ->orWhere('email', 'like', '%'.$request->search.'%');
             });
         }
-        
+
         // Role filter
         if ($request->role) {
-            $query->whereHas('roles', function($q) use ($request) {
+            $query->whereHas('roles', function ($q) use ($request) {
                 $q->where('name', $request->role);
             });
         }
-        
+
         // Status filter
         if ($request->filled('status')) {
             $query->where('is_active', $request->status);
         }
-        
+
         $users = $query->with('roles')
-                      ->orderBy('created_at', 'desc')
-                      ->paginate(10)
-                      ->withQueryString();
+            ->orderBy('created_at', 'desc')
+            ->paginate(PerPage::resolve($request))
+            ->withQueryString();
 
         // Transform users to include proper role information
         $users->getCollection()->transform(function ($user) {
             $user->spatie_role = $user->roles->first()?->name;
             $user->role_display = $user->getRoleDisplayAttribute();
+
             return $user;
         });
 
         return Inertia::render('Admin/Users/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'users' => $users,
             'filters' => $request->only('search', 'role', 'status'),
-            'roles' => Role::all()->mapWithKeys(function($role) {
+            'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
-            })
+            }),
         ]);
     }
 
@@ -73,13 +76,14 @@ class UserController extends Controller
     public function create()
     {
         // Check permission
-        if (!auth()->user()->can('users.create')) {
+        if (! auth()->user()->can('users.create')) {
             abort(403, 'Unauthorized: You do not have permission to create users.');
         }
+
         return Inertia::render('Admin/Users/Create', [
-            'roles' => Role::all()->mapWithKeys(function($role) {
+            'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
-            })
+            }),
         ]);
     }
 
@@ -89,7 +93,7 @@ class UserController extends Controller
     public function store(Request $request)
     {
         // Check permission
-        if (!auth()->user()->can('users.create')) {
+        if (! auth()->user()->can('users.create')) {
             abort(403, 'Unauthorized: You do not have permission to create users.');
         }
         $request->validate([
@@ -105,12 +109,12 @@ class UserController extends Controller
             'password' => Hash::make($request->password),
             'is_active' => true,
         ]);
-        
+
         // Assign role using Spatie
         $user->assignRole($request->role);
 
         return redirect()->route('admin.users.index')
-                        ->with('success', 'User berhasil dibuat.');
+            ->with('success', 'User berhasil dibuat.');
     }
 
     /**
@@ -119,12 +123,13 @@ class UserController extends Controller
     public function edit(User $user)
     {
         // Check permission
-        if (!auth()->user()->can('users.update')) {
+        if (! auth()->user()->can('users.update')) {
             abort(403, 'Unauthorized: You do not have permission to edit users.');
         }
+
         return Inertia::render('Admin/Users/Edit', [
             'user' => $user,
-            'roles' => Role::all()->mapWithKeys(function($role) {
+            'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
             }),
             'auth' => [
@@ -133,8 +138,8 @@ class UserController extends Controller
                     'name' => auth()->user()->name,
                     'email' => auth()->user()->email,
                     'role' => auth()->user()->role,
-                ]
-            ]
+                ],
+            ],
         ]);
     }
 
@@ -144,18 +149,18 @@ class UserController extends Controller
     public function update(Request $request, User $user)
     {
         // Check permission
-        if (!auth()->user()->can('users.update')) {
+        if (! auth()->user()->can('users.update')) {
             abort(403, 'Unauthorized: You do not have permission to update users.');
         }
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
             'role' => ['required', 'exists:roles,name'],
             'is_active' => ['boolean'],
         ]);
 
         // Prevent admin from deactivating themselves
-        if ($user->id === auth()->id() && $request->has('is_active') && !$request->is_active) {
+        if ($user->id === auth()->id() && $request->has('is_active') && ! $request->is_active) {
             return back()->withErrors(['error' => 'Anda tidak bisa menonaktifkan akun sendiri.']);
         }
 
@@ -170,12 +175,12 @@ class UserController extends Controller
         }
 
         $user->update($data);
-        
+
         // Update role using Spatie
         $user->syncRoles([$request->role]);
 
         return redirect()->route('admin.users.index')
-                        ->with('success', 'User berhasil diupdate.');
+            ->with('success', 'User berhasil diupdate.');
     }
 
     /**
@@ -184,7 +189,7 @@ class UserController extends Controller
     public function destroy(User $user)
     {
         // Check permission
-        if (!auth()->user()->can('users.delete')) {
+        if (! auth()->user()->can('users.delete')) {
             abort(403, 'Unauthorized: You do not have permission to delete users.');
         }
         // Prevent admin from deleting themselves
@@ -216,16 +221,17 @@ class UserController extends Controller
         }
 
         // Check for Sertifikat (certificates generated by user)
-        $certificateCount = \App\Models\Sertifikat::where('generated_by', $user->id)->count();
+        $certificateCount = Sertifikat::where('generated_by', $user->id)->count();
         if ($certificateCount > 0) {
             $relatedData[] = "$certificateCount sertifikat";
         }
 
-        if (!empty($relatedData)) {
+        if (! empty($relatedData)) {
             $dataList = implode(', ', $relatedData);
+
             return back()->withErrors([
-                'error' => "User tidak dapat dihapus karena masih memiliki data terkait: {$dataList}. " .
-                          "Silakan hapus atau transfer data tersebut terlebih dahulu."
+                'error' => "User tidak dapat dihapus karena masih memiliki data terkait: {$dataList}. ".
+                          'Silakan hapus atau transfer data tersebut terlebih dahulu.',
             ]);
         }
 
@@ -233,7 +239,7 @@ class UserController extends Controller
         $user->delete();
 
         return redirect()->route('admin.users.index')
-                        ->with('success', 'User berhasil dihapus.');
+            ->with('success', 'User berhasil dihapus.');
     }
 
     /**
@@ -242,7 +248,7 @@ class UserController extends Controller
     public function patch(Request $request, User $user)
     {
         // Check permission
-        if (!auth()->user()->can('users.update')) {
+        if (! auth()->user()->can('users.update')) {
             abort(403, 'Unauthorized: You do not have permission to update users.');
         }
         $request->validate([
@@ -250,15 +256,16 @@ class UserController extends Controller
         ]);
 
         // Prevent admin from deactivating themselves
-        if ($user->id === auth()->id() && !$request->is_active) {
+        if ($user->id === auth()->id() && ! $request->is_active) {
             return back()->withErrors(['error' => 'Anda tidak bisa menonaktifkan akun sendiri.']);
         }
 
         $user->update([
-            'is_active' => $request->is_active
+            'is_active' => $request->is_active,
         ]);
 
         $status = $request->is_active ? 'diaktifkan' : 'dinonaktifkan';
+
         return back()->with('success', "User berhasil {$status}.");
     }
 }

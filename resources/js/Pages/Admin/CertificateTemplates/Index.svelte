@@ -3,11 +3,14 @@
   import { router } from '@inertiajs/svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
   import { onMount } from 'svelte';
 
   // Props from controller
   export let templates = { data: [] };
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export const filters = {};
   export let stats = {};
   export const auth = {};
@@ -112,6 +115,15 @@
       }
     });
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/certificate-templates?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <svelte:head>
@@ -319,12 +331,15 @@
             <div class="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
               <!-- Results Info -->
               <div class="text-sm text-gray-600 text-center lg:text-left order-2 lg:order-1">
-                <div class="flex items-center justify-center lg:justify-start space-x-2">
-                  <HeroIcon name="document-text" class="w-4 h-4 text-gray-400" />
-                  <span>
-                    Menampilkan <span class="font-semibold text-[#eb3434]">{templates.from}</span> - <span class="font-semibold text-[#eb3434]">{templates.to}</span> 
-                    dari <span class="font-semibold text-[#eb3434]">{templates.total}</span> template
-                  </span>
+                <div class="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-3">
+                  <div class="flex items-center space-x-2">
+                    <HeroIcon name="document-text" class="w-4 h-4 text-gray-400" />
+                    <span>
+                      Menampilkan <span class="font-semibold text-[#eb3434]">{templates.from}</span> - <span class="font-semibold text-[#eb3434]">{templates.to}</span> 
+                      dari <span class="font-semibold text-[#eb3434]">{templates.total}</span> template
+                    </span>
+                  </div>
+                  <PerPageSelector bind:perPage options={perPageOptions} id="per_page_template" onchange={gantiPerHalaman} />
                 </div>
               </div>
               

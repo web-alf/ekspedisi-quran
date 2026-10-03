@@ -5,10 +5,13 @@
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
   import { canonicalProvince, provinceFromGeoJson } from '../../../utils/provinceName.js';
   
   // Props from Inertia
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let mushafRequests = { data: [], links: [], from: 0, to: 0, total: 0 };
   export const errors = {};
   export const auth = {};
@@ -728,6 +731,15 @@
       }
     });
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/mushaf-requests?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <AdminLayout>
@@ -1102,6 +1114,7 @@
             <div class="text-sm text-gray-500">
               Menampilkan {mushafRequests.from} - {mushafRequests.to} dari {mushafRequests.total} data
             </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
             <div class="flex gap-2">
               {#each mushafRequests.links as link}
                 <button

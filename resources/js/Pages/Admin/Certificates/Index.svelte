@@ -13,6 +13,8 @@
   export let certificates = {};
   export let stats = {};
   export let filters = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
 
   let searchQuery = filters.search || '';
   let sentStatusFilter = filters.sent_status || '';
@@ -481,7 +483,9 @@
       <!-- Pagination -->
       {#if certificates.data && certificates.data.length > 0}
         <div class="px-6 py-4 border-t border-gray-200">
-          <Pagination data={certificates} />
+          <Pagination data={certificates}
+                perPage={perPage}
+                perPageOptions={perPageOptions} />
         </div>
       {/if}
     </div>

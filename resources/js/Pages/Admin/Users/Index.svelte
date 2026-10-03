@@ -4,9 +4,12 @@
   import { fade, scale } from 'svelte/transition';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
   
   // Props from Inertia
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export let users = { data: [], total: 0, from: 0, to: 0, last_page: 1, prev_page_url: null, next_page_url: null };
   export let filters = {};
   export let roles = {};
@@ -153,6 +156,15 @@
       day: 'numeric'
     });
   }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/users?${params.toString()}`, { preserveScroll: true });
+  }
+
 </script>
 
 <svelte:head>
@@ -389,6 +401,7 @@
               <div class="text-sm text-gray-500">
                 Menampilkan {users.from} - {users.to} dari {users.total} hasil
               </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
               <div class="flex space-x-1">
                 <!-- Previous -->
                 {#if users.prev_page_url}

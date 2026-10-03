@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use App\Models\Video;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -17,7 +18,7 @@ class VideoController extends Controller
 
     public function index()
     {
-        $videos = Video::ordered()->paginate(12);
+        $videos = Video::ordered()->paginate(PerPage::resolve(request()));
 
         // Get video-related settings
         $videoSettings = Setting::where('group', 'video')
@@ -26,6 +27,8 @@ class VideoController extends Controller
             ->get();
 
         return Inertia::render('Admin/Videos/Index', [
+            'perPage' => PerPage::resolve(request()),
+            'perPageOptions' => PerPage::OPTIONS,
             'videos' => $videos,
             'videoSettings' => $videoSettings,
         ]);

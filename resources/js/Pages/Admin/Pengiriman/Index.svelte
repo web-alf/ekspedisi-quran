@@ -9,6 +9,7 @@
   import StatusModal from '@/Components/StatusModal.svelte';
   import CameraCapture from '@/Components/CameraCapture.svelte';
   import HeroIcon from '@/Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
   
   // Props from Inertia
@@ -1397,21 +1398,7 @@
               Menampilkan {pengiriman.from ?? 0} - {pengiriman.to ?? 0} dari {pengiriman.total} hasil
             </div>
             <!-- Ukuran halaman: berapa baris yang ditampilkan sekali lihat -->
-            <div class="flex items-center justify-center sm:justify-start gap-2">
-              <label for="per_page_filter" class="text-sm text-gray-500 whitespace-nowrap">Baris per halaman</label>
-              <!-- shrink-0 + lebar tetap: tanpa ini select-nya diperas oleh flex
-                   sampai angka dan panah bawaan browser saling menumpuk. -->
-              <select
-                id="per_page_filter"
-                bind:value={perPage}
-                on:change={gantiPerHalaman}
-                class="shrink-0 w-[4.75rem] pl-3 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {#each perPageOptions as opsi}
-                  <option value={opsi}>{opsi}</option>
-                {/each}
-              </select>
-            </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_filter" onchange={gantiPerHalaman} />
           </div>
           {#if pengiriman.last_page > 1}
           <div class="flex justify-center sm:justify-end items-center space-x-1">

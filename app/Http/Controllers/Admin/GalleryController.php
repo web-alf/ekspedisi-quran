@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Gallery;
 use App\Models\Setting;
+use App\Support\PerPage;
 use App\Traits\HandlesImageUpload;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,7 +21,7 @@ class GalleryController extends Controller
 
     public function index()
     {
-        $galleries = Gallery::ordered()->paginate(12);
+        $galleries = Gallery::ordered()->paginate(PerPage::resolve(request()));
 
         // Get gallery-related settings
         $gallerySettings = Setting::where('group', 'gallery')
@@ -29,6 +30,8 @@ class GalleryController extends Controller
             ->get();
 
         return Inertia::render('Admin/Galleries/Index', [
+            'perPage' => PerPage::resolve(request()),
+            'perPageOptions' => PerPage::OPTIONS,
             'galleries' => $galleries,
             'gallerySettings' => $gallerySettings,
         ]);

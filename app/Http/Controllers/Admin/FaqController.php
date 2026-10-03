@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Faq;
 use App\Models\Setting;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -17,7 +18,7 @@ class FaqController extends Controller
 
     public function index()
     {
-        $faqs = Faq::ordered()->paginate(15);
+        $faqs = Faq::ordered()->paginate(PerPage::resolve(request()));
 
         // Get FAQ-related settings
         $faqSettings = Setting::where('group', 'faq')
@@ -26,6 +27,8 @@ class FaqController extends Controller
             ->get();
 
         return Inertia::render('Admin/Faqs/Index', [
+            'perPage' => PerPage::resolve(request()),
+            'perPageOptions' => PerPage::OPTIONS,
             'faqs' => $faqs,
             'faqSettings' => $faqSettings,
         ]);

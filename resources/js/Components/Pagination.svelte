@@ -1,49 +1,62 @@
 <script>
   import { router } from '@inertiajs/svelte';
   import HeroIcon from './UI/HeroIcon.svelte';
+  import PerPageSelector from './PerPageSelector.svelte';
   
   export let data = {};
   export let additionalParams = {};
-  
-  // Extract pagination info from Laravel pagination object
+  // Ukuran halaman yang sedang dipakai (dikirim controller sebagai prop `perPage`),
+  // supaya pemilihnya menampilkan nilai yang benar dan ikut terbawa saat pindah
+  // halaman. Halaman yang tidak mengirimnya tetap jalan dengan bawaan 20.
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
+
   $: pagination = {
     current_page: data.current_page || 1,
     last_page: data.last_page || 1,
-    per_page: data.per_page || 20,
+    per_page: data.per_page || perPage,
     total: data.total || 0,
     from: data.from || 0,
     to: data.to || 0,
     links: data.links || []
   };
+
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas, dan supaya filternya tetap terbawa.
+  function gantiPerHalaman() {
+    const params = { ...additionalParams, per_page: perPage, page: 1 };
+    router.get(window.location.pathname, params, {
+      preserveState: true,
+      preserveScroll: true
+    });
+  }
   
   function goToPage(url) {
     if (url) {
-      // If additionalParams provided, merge them with the URL
-      if (Object.keys(additionalParams).length > 0) {
-        const urlObj = new URL(url);
-        const params = Object.fromEntries(urlObj.searchParams);
-        const mergedParams = { ...params, ...additionalParams };
-        
-        router.get(urlObj.pathname, mergedParams, {
-          preserveState: true,
-          preserveScroll: true
-        });
-      } else {
-        router.get(url, {}, {
-          preserveState: true,
-          preserveScroll: true
-        });
-      }
+      // Selalu bawa ukuran halaman yang dipilih, kalau tidak pilihannya hilang
+      // begitu pengguna menekan halaman berikutnya.
+      const urlObj = new URL(url);
+      const params = { ...Object.fromEntries(urlObj.searchParams), ...additionalParams, per_page: perPage };
+      
+      router.get(urlObj.pathname, params, {
+        preserveState: true,
+        preserveScroll: true
+      });
     }
   }
 </script>
 
-{#if pagination.last_page > 1}
-  <div class="flex items-center justify-between">
-    <!-- Results info -->
-    <div class="text-sm text-gray-700">
-      Showing <span class="font-medium">{pagination.from}</span> to <span class="font-medium">{pagination.to}</span> of <span class="font-medium">{pagination.total}</span> results
+{#if pagination.total > 0}
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div class="text-sm text-gray-700">
+        Showing <span class="font-medium">{pagination.from}</span> to <span class="font-medium">{pagination.to}</span> of <span class="font-medium">{pagination.total}</span> results
+      </div>
+      <!-- Pemilih selalu tampil walau hasilnya cuma satu halaman: pengguna tetap
+           berhak memperbesar/memperkecil jumlah baris yang ingin dilihat. -->
+      <PerPageSelector bind:perPage options={perPageOptions} id="per_page_bersama" onchange={gantiPerHalaman} />
     </div>
+    {#if pagination.last_page > 1}
 
     <!-- Pagination links -->
     <div class="flex items-center space-x-2">
@@ -81,5 +94,6 @@
         {/if}
       {/each}
     </div>
+    {/if}
   </div>
 {/if}

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -33,10 +34,12 @@ class RoleController extends Controller
         }
 
         $roles = $query->orderBy('name')
-            ->paginate(10)
+            ->paginate(PerPage::resolve($request))
             ->withQueryString();
 
         return Inertia::render('Admin/Roles/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'roles' => $roles,
             'filters' => $request->only('search'),
         ]);

@@ -12,6 +12,7 @@ use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Services\Cache\DashboardCacheService;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -71,7 +72,7 @@ class MushafRequestController extends Controller
             $query->whereDate('created_at', '<=', $request->end_date);
         }
 
-        $mushafRequests = $query->paginate(20)->withQueryString();
+        $mushafRequests = $query->paginate(PerPage::resolve($request))->withQueryString();
 
         // Get map data for distribution visualization
         // ✅ FIX: Use same data source as landing page - only show completed requests
@@ -100,6 +101,8 @@ class MushafRequestController extends Controller
             });
 
         return Inertia::render('Admin/MushafRequest/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'mushafRequests' => $mushafRequests,
             'filters' => $request->only(['search', 'status', 'start_date', 'end_date']),
             'mapData' => $mapData,

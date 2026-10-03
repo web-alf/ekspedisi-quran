@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Permission;
@@ -15,37 +16,39 @@ class PermissionController extends Controller
     public function index(Request $request)
     {
         // Check permission
-        if (!auth()->user()->can('permissions.read')) {
+        if (! auth()->user()->can('permissions.read')) {
             abort(403, 'Unauthorized: Permission management is restricted to super administrators only.');
         }
 
         $query = Permission::query();
-        
+
         // Search functionality
         if ($request->search) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            $query->where('name', 'like', '%'.$request->search.'%');
         }
 
         // Category filter
         if ($request->category) {
-            $query->where('name', 'like', $request->category . '.%');
+            $query->where('name', 'like', $request->category.'.%');
         }
-        
+
         $permissions = $query->orderBy('name')
-                            ->paginate(20)
-                            ->withQueryString();
+            ->paginate(PerPage::resolve($request))
+            ->withQueryString();
 
         // Group permissions by category for display
         $groupedPermissions = Permission::all()
-            ->groupBy(function($permission) {
+            ->groupBy(function ($permission) {
                 return explode('.', $permission->name)[0];
             });
 
         return Inertia::render('Admin/Permissions/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'permissions' => $permissions,
             'groupedPermissions' => $groupedPermissions,
             'filters' => $request->only('search', 'category'),
-            'categories' => $this->getPermissionCategories()
+            'categories' => $this->getPermissionCategories(),
         ]);
     }
 
@@ -55,12 +58,12 @@ class PermissionController extends Controller
     public function create()
     {
         // Check permission
-        if (!auth()->user()->can('permissions.create')) {
+        if (! auth()->user()->can('permissions.create')) {
             abort(403, 'Unauthorized: You do not have permission to create permissions.');
         }
 
         return Inertia::render('Admin/Permissions/Create', [
-            'categories' => $this->getPermissionCategories()
+            'categories' => $this->getPermissionCategories(),
         ]);
     }
 
@@ -70,22 +73,22 @@ class PermissionController extends Controller
     public function store(Request $request)
     {
         // Check permission
-        if (!auth()->user()->can('permissions.create')) {
+        if (! auth()->user()->can('permissions.create')) {
             abort(403, 'Unauthorized: You do not have permission to create permissions.');
         }
 
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:permissions,name'],
-            'category' => ['required', 'string']
+            'category' => ['required', 'string'],
         ]);
 
         Permission::create([
             'name' => $request->name,
-            'guard_name' => 'web'
+            'guard_name' => 'web',
         ]);
 
         return redirect()->route('admin.permissions.index')
-                        ->with('success', 'Permission berhasil dibuat.');
+            ->with('success', 'Permission berhasil dibuat.');
     }
 
     /**
@@ -94,13 +97,13 @@ class PermissionController extends Controller
     public function edit(Permission $permission)
     {
         // Check permission
-        if (!auth()->user()->can('users.update')) {
+        if (! auth()->user()->can('users.update')) {
             abort(403, 'Unauthorized: You do not have permission to edit permissions.');
         }
 
         return Inertia::render('Admin/Permissions/Edit', [
             'permission' => $permission,
-            'categories' => $this->getPermissionCategories()
+            'categories' => $this->getPermissionCategories(),
         ]);
     }
 
@@ -110,20 +113,20 @@ class PermissionController extends Controller
     public function update(Request $request, Permission $permission)
     {
         // Check permission
-        if (!auth()->user()->can('users.update')) {
+        if (! auth()->user()->can('users.update')) {
             abort(403, 'Unauthorized: You do not have permission to update permissions.');
         }
 
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:permissions,name,' . $permission->id],
+            'name' => ['required', 'string', 'max:255', 'unique:permissions,name,'.$permission->id],
         ]);
 
         $permission->update([
-            'name' => $request->name
+            'name' => $request->name,
         ]);
 
         return redirect()->route('admin.permissions.index')
-                        ->with('success', 'Permission berhasil diupdate.');
+            ->with('success', 'Permission berhasil diupdate.');
     }
 
     /**
@@ -132,7 +135,7 @@ class PermissionController extends Controller
     public function destroy(Permission $permission)
     {
         // Check permission
-        if (!auth()->user()->can('users.delete')) {
+        if (! auth()->user()->can('users.delete')) {
             abort(403, 'Unauthorized: You do not have permission to delete permissions.');
         }
 
@@ -144,7 +147,7 @@ class PermissionController extends Controller
         $permission->delete();
 
         return redirect()->route('admin.permissions.index')
-                        ->with('success', 'Permission berhasil dihapus.');
+            ->with('success', 'Permission berhasil dihapus.');
     }
 
     /**
@@ -166,7 +169,7 @@ class PermissionController extends Controller
             'inventory' => 'Inventory Management',
             'deliveries' => 'Delivery Operations',
             'customer' => 'Customer Operations',
-            'audit' => 'Audit & Logs'
+            'audit' => 'Audit & Logs',
         ];
     }
 }

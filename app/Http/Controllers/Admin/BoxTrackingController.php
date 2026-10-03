@@ -8,6 +8,7 @@ use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\User;
 use App\Support\BoxUnits;
+use App\Support\PerPage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -80,7 +81,7 @@ class BoxTrackingController extends Controller
             $query->whereDate('created_at', '<=', $request->end_date);
         }
 
-        $boxes = $query->orderBy('created_at', 'desc')->paginate(20);
+        $boxes = $query->orderBy('created_at', 'desc')->paginate(PerPage::resolve($request));
 
         // Transform data for frontend
         $boxesData = $boxes->through(function ($box) {
@@ -158,6 +159,8 @@ class BoxTrackingController extends Controller
             ->values();
 
         return Inertia::render('Admin/BoxTracking/Index', [
+            'perPage' => PerPage::resolve($request),
+            'perPageOptions' => PerPage::OPTIONS,
             'boxes' => $boxesData,
             'filters' => $request->only(['search', 'status', 'jenis_quran_id', 'user_id', 'start_date', 'end_date', 'selesai_packing']),
             'jenisQuranList' => $jenisQuranList,
