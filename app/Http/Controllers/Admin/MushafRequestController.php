@@ -481,8 +481,16 @@ class MushafRequestController extends Controller
             }
 
             if ($import->hasErrors()) {
+                // Sertakan berapa yang berhasil, supaya pengguna tahu berkasnya
+                // TIDAK terimport seluruhnya. Tanpa angka itu, pesan "selesai
+                // dengan N gagal" masih menyisakan tebak-tebakan: berapa yang
+                // sebenarnya masuk?
+                $pesan = $results['success_count'] > 0
+                    ? "Import selesai: {$results['success_count']} data berhasil, {$results['error_count']} data GAGAL dan tidak ikut masuk"
+                    : "Tidak ada data yang masuk: {$results['error_count']} baris gagal";
+
                 return back()->with([
-                    'warning' => "Import selesai dengan {$results['success_count']} data berhasil dan {$results['error_count']} data gagal",
+                    'warning' => $pesan,
                     'import_errors' => $results['errors'],
                 ]);
             }

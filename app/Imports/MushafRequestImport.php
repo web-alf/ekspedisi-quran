@@ -344,10 +344,17 @@ class MushafRequestImport implements SkipsOnError, SkipsOnFailure, ToCollection,
     }
 
     /**
-     * Check if import has errors
+     * Apakah import punya baris yang gagal?
+     *
+     * WAJIB menghitung kegagalan VALIDASI juga, bukan hanya kegagalan saat
+     * menyimpan. Baris yang tidak memenuhi aturan tidak pernah sampai ke
+     * collection(), jadi kegagalannya hanya tercatat di $failures — dan
+     * pemeriksaan yang hanya melihat $errors melaporkan "tidak ada masalah"
+     * untuk berkas yang barisnya hilang separuh. Halaman lalu menampilkan
+     * "Berhasil import N data" tanpa menyebut satu pun baris yang dibuang.
      */
     public function hasErrors(): bool
     {
-        return count($this->errors) > 0;
+        return count($this->errors) > 0 || $this->failures()->isNotEmpty();
     }
 }

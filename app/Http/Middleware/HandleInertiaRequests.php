@@ -2,9 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use App\Models\Setting;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -54,7 +54,7 @@ class HandleInertiaRequests extends Middleware
             ];
 
         }
-        
+
         // Get basic settings for layout (cached for performance)
         $basicSettings = cache()->remember('basic_settings_for_layout', 3600, function () {
             return Setting::whereIn('key', ['app_name', 'app_logo', 'admin_logo'])
@@ -72,6 +72,11 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'info' => $request->session()->get('info'),
                 'warning' => $request->session()->get('warning'),
+                // Detail baris yang gagal saat import. Tanpa diteruskan di sini,
+                // pengguna hanya diberi tahu "ada N baris gagal" tanpa bisa tahu
+                // baris MANA dan KENAPA — datanya sudah dihitung controller, tetapi
+                // hilang di middleware.
+                'import_errors' => $request->session()->get('import_errors'),
             ],
             'settings' => $basicSettings,
         ];

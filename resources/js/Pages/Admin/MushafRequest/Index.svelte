@@ -1,5 +1,6 @@
 <script>
   import { router } from '@inertiajs/svelte';
+  import { page } from '@inertiajs/svelte';
   import { fade, scale } from 'svelte/transition';
   import { onMount } from 'svelte';
   import FlashMessage from '../../../Components/FlashMessage.svelte';
@@ -7,6 +8,10 @@
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
+  // Dipanggil di handleFileSelect dan submitImport; tanpa impor ini, menolak
+  // berkas yang salah atau gagal import melempar ReferenceError dan pengguna
+  // tidak melihat pesan apa pun.
+  import { showError, showWarning } from '../../../stores/toast.js';
   import { canonicalProvince, provinceFromGeoJson } from '../../../utils/provinceName.js';
   
   // Props from Inertia
@@ -731,6 +736,12 @@
       }
     });
   }
+  // Tutup daftar baris yang gagal. Muat ulang tanpa preserveState supaya
+  // flash 'import_errors' tidak ikut terkirim lagi pada permintaan berikutnya.
+  function tutupDaftarGagal() {
+    router.reload({ preserveScroll: true });
+  }
+
   // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
   // halaman yang melewati batas.
   function gantiPerHalaman() {
@@ -1264,6 +1275,63 @@
             class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
           >
             Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Daftar baris yang gagal saat import.
+     Datanya sudah dihitung controller sejak awal, tetapi tidak pernah sampai
+     ke sini: middleware tidak meneruskan 'import_errors', jadi pengguna hanya
+     diberi tahu "ada N baris gagal" tanpa tahu baris mana dan kenapa. -->
+{#if $page.props.flash?.import_errors?.length}
+  <div class="fixed inset-0 overflow-y-auto" style="z-index: 9999;" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" on:click={tutupDaftarGagal}></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:p-6">
+        <div class="sm:flex sm:items-start gap-3">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
+            <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-amber-600" />
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+            <h3 class="text-lg font-medium text-gray-900">
+              {$page.props.flash.import_errors.length} Baris Gagal Diimport
+            </h3>
+            <p class="mt-1 text-sm text-gray-500">
+              Baris berikut TIDAK ikut masuk. Perbaiki berkasnya lalu import ulang,
+              atau isi datanya lewat halaman detail.
+            </p>
+
+            <div class="mt-4 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-medium text-gray-500 w-16">Baris</th>
+                    <th class="px-3 py-2 text-left font-medium text-gray-500">Penyebab</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                  {#each $page.props.flash.import_errors as err}
+                    <tr>
+                      <td class="px-3 py-2 text-gray-900 whitespace-nowrap">{err.row ?? '-'}</td>
+                      <td class="px-3 py-2 text-gray-700">{err.error ?? '-'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            on:click={tutupDaftarGagal}
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 sm:w-auto sm:text-sm"
+          >
+            Mengerti
           </button>
         </div>
       </div>
