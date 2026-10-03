@@ -257,7 +257,7 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
             ['alamat_lengkap', 'Tidak', 'Alamat lengkap dalam satu baris. Isi ini bila tidak mau memecah alamat per kolom wilayah.', 'Jl. Contoh No. 1, Garum, Blitar'],
             ['latitude', 'Tidak', 'Koordinat lintang. Kosongkan bila link_gmaps sudah diisi.', '-8.0868357'],
             ['longitude', 'Tidak', 'Koordinat bujur. Kosongkan bila link_gmaps sudah diisi.', '112.2396983'],
-            ['link_gmaps', 'Tidak', 'Tautan lokasi dari Google Maps. Bentuk pendek (maps.app.goo.gl) juga bisa.', 'https://maps.app.goo.gl/xxxx'],
+            ['link_gmaps', 'Tidak', 'Tautan lokasi dari Google Maps. Bentuk pendek (maps.app.goo.gl) juga bisa. Tautan pada contoh HANYA peraga — ganti dengan tautan lokasi Anda sendiri.', 'https://maps.app.goo.gl/xxxx'],
             ['jumlah_mushaf_a5', 'Ya*', 'Jumlah mushaf ukuran A5. *Jumlah wajib ada: minimal salah satu dari A5/A6/Iqra lebih dari 0.', '100'],
             ['jumlah_mushaf_a6', 'Ya*', 'Jumlah mushaf ukuran A6. Isi 0 bila tidak ada.', '0'],
             ['jumlah_iqra', 'Ya*', 'Jumlah buku Iqra. Isi 0 bila tidak ada.', '0'],
