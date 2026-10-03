@@ -39,8 +39,16 @@ class PackingAssignmentService
         DB::beginTransaction();
 
         try {
-            // Get all active warehouse users
-            $warehouseUsers = User::permission('warehouse.dashboard')
+            // Hanya user yang BENAR-BENAR boleh memindai yang diberi tugas harian.
+            //
+            // Sebelumnya di sini dipakai `warehouse.dashboard`, padahal izin itu
+            // adalah tiket masuk SELURUH area gudang (termasuk halaman pemantauan
+            // untuk manager). Akibatnya manager distribusi ikut menerima tugas
+            // packing setiap hari, lengkap dengan tombol "Mulai Packing" di
+            // dasbornya — padahal endpoint start-scanning menolak mereka dengan 403.
+            // Tugas yang tidak bisa dikerjakan bukan tugas; gate-nya adalah izin
+            // memindai, bukan izin melihat.
+            $warehouseUsers = User::permission('warehouse.packing.scan')
                 ->where('is_active', true)
                 ->get();
 

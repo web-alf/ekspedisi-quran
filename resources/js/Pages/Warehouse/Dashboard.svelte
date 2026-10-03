@@ -7,6 +7,15 @@
   import SharedBoxCollaboration from '../../Components/SharedBoxCollaboration.svelte';
   import SealReadyBoxes from '../../Components/SealReadyBoxes.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
+  import { hasPermission } from '../../utils/permissions.js';
+
+  // Boleh memulai/melanjutkan packing? Endpoint /start-scanning dijaga izin
+  // warehouse.packing.scan, jadi tanpa izin itu tombolnya hanya akan menghasilkan
+  // 403 di konsol browser. Halaman ini sendiri dijaga warehouse.dashboard, izin
+  // yang juga dimiliki manager untuk memantau — jadi izin itu tidak cukup untuk
+  // menyimpulkan bahwa tombolnya boleh ditampilkan. Tombol yang pasti gagal lebih
+  // buruk daripada tidak ada tombol sama sekali: pengguna mengira aplikasinya rusak.
+  $: canStartPacking = hasPermission('warehouse.packing.scan');
   
   // Props - FIXED: Added missing props
   export let todayTask = null;
@@ -297,7 +306,7 @@
                   <p class="text-green-800 font-semibold text-base sm:text-lg mb-1">Selamat! Tugas hari ini telah selesai!</p>
                   <p class="text-sm sm:text-base text-green-600">Total: <span class="font-semibold">{todayTask.total_selesai} mushaf</span> berhasil dipacking</p>
                 </div>
-              {:else}
+              {:else if canStartPacking}
                 <button
                   on:click={startScanning}
                   disabled={isStartingTask}
@@ -314,6 +323,19 @@
                     {todayTask.status === 'assigned' ? 'Mulai Packing' : 'Lanjutkan Packing'}
                   {/if}
                 </button>
+              {:else}
+                <!-- Menerima tugas tetapi tidak berwenang memindai: ini kondisi
+                     yang membingungkan, jadi dijelaskan alih-alih tombol yang
+                     pasti gagal. -->
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 sm:p-6">
+                  <div class="mb-2 flex justify-center">
+                    <HeroIcon name="lock-closed" class="w-9 h-9 sm:w-10 sm:h-10 text-slate-500" />
+                  </div>
+                  <p class="text-slate-800 font-semibold text-base sm:text-lg mb-1">Pemantauan saja</p>
+                  <p class="text-sm sm:text-base text-slate-600">
+                    Peran Anda tidak mencakup pemindaian. Tugas ini dikerjakan oleh petugas gudang.
+                  </p>
+                </div>
               {/if}
             </div>
           {:else}
