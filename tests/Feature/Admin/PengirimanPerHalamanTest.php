@@ -75,6 +75,33 @@ it('menghormati pilihan ukuran halaman dari pengguna', function (int $ukuran) {
         );
 })->with([10, 20, 50, 100, 200]);
 
+it('menerapkan ukuran halaman yang sama di halaman Generate QR', function () {
+    // Halaman ini menampilkan data pengiriman yang sama lewat ?mode=generate-qr,
+    // tetapi dulu dipatok 500 baris. Kalau tidak disamakan, pilihan "Baris per
+    // halaman" akan terasa tidak berfungsi begitu pengguna masuk ke mode ini.
+    for ($i = 0; $i < 12; $i++) {
+        Pengiriman::factory()->create(['no_resi' => 'EQ-2026-'.str_pad((string) (90000 + $i), 5, '0', STR_PAD_LEFT)]);
+    }
+
+    $this->actingAs(perHalamanAdmin())
+        ->get('/admin/pengiriman?mode=generate-qr')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/Pengiriman/GenerateQR')
+            ->where('perPage', 20)
+            ->where('pengiriman.per_page', 20)
+        );
+
+    $this->actingAs(perHalamanAdmin())
+        ->get('/admin/pengiriman?mode=generate-qr&per_page=10')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/Pengiriman/GenerateQR')
+            ->where('perPage', 10)
+            ->where('pengiriman.per_page', 10)
+        );
+});
+
 it('menolak ukuran halaman di luar daftar, kembali ke bawaan', function () {
     // Tanpa penjagaan ini, ?per_page=100000 bisa menarik seluruh 26.000 baris
     // sekaligus dan menggantungkan server.

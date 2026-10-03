@@ -10,6 +10,8 @@
   // Props
   export let pengiriman = [];
   export let filters = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
   export const statusList = [];
   export const jenisQuranList = [];
   export const wakifList = [];
@@ -90,6 +92,24 @@
     if (endDate) params.end_date = endDate;
     if (qrStatus) params.qr_status = qrStatus;
     // ✅ ENHANCEMENT: Include number range filters
+    if (numberFrom) params.number_from = numberFrom;
+    if (numberTo) params.number_to = numberTo;
+    if (perPage) params.per_page = perPage;
+
+    router.get('/admin/pengiriman', params, {
+      preserveState: true,
+      preserveScroll: true
+    });
+  }
+
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya tidak terlempar ke halaman
+  // yang melewati batas.
+  function gantiPerHalaman() {
+    const params = { mode: 'generate-qr', per_page: perPage };
+    if (searchQuery) params.search = searchQuery;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (qrStatus) params.qr_status = qrStatus;
     if (numberFrom) params.number_from = numberFrom;
     if (numberTo) params.number_to = numberTo;
 
@@ -1103,12 +1123,28 @@
         {/if}
 
         <!-- Pagination -->
-        {#if pengiriman && pengiriman.last_page > 1}
+        {#if pengiriman}
           <div class="mt-6 px-4 sm:px-6 py-4 border-t border-gray-200">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div class="text-sm text-gray-500 text-center sm:text-left">
-                Menampilkan {pengiriman.from} - {pengiriman.to} dari {pengiriman.total} hasil
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div class="text-sm text-gray-500 text-center sm:text-left">
+                  Menampilkan {pengiriman.from ?? 0} - {pengiriman.to ?? 0} dari {pengiriman.total} hasil
+                </div>
+                <div class="flex items-center justify-center sm:justify-start gap-2">
+                  <label for="per_page_qr" class="text-sm text-gray-500 whitespace-nowrap">Baris per halaman</label>
+                  <select
+                    id="per_page_qr"
+                    bind:value={perPage}
+                    on:change={gantiPerHalaman}
+                    class="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {#each perPageOptions as opsi}
+                      <option value={opsi}>{opsi}</option>
+                    {/each}
+                  </select>
+                </div>
               </div>
+              {#if pengiriman.last_page > 1}
               <div class="flex justify-center sm:justify-end space-x-1">
                 <!-- Previous -->
                 {#if pengiriman.prev_page_url}
@@ -1118,6 +1154,7 @@
                       if (searchQuery) params.search = searchQuery;
                       if (startDate) params.start_date = startDate;
                       if (endDate) params.end_date = endDate;
+                      if (perPage) params.per_page = perPage;
                       if (qrStatus) params.qr_status = qrStatus;
                       // ✅ ENHANCEMENT: Include number range filters in pagination
                       if (numberFrom) params.number_from = numberFrom;
@@ -1144,6 +1181,7 @@
                       if (searchQuery) params.search = searchQuery;
                       if (startDate) params.start_date = startDate;
                       if (endDate) params.end_date = endDate;
+                      if (perPage) params.per_page = perPage;
                       if (qrStatus) params.qr_status = qrStatus;
                       // ✅ ENHANCEMENT: Include number range filters in pagination
                       if (numberFrom) params.number_from = numberFrom;
@@ -1162,6 +1200,7 @@
                   </button>
                 {/if}
               </div>
+              {/if}
             </div>
           </div>
         {/if}

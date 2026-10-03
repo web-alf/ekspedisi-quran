@@ -753,7 +753,14 @@ class PengirimanController extends Controller
         $query->orderBy('no_resi', 'desc');
 
         // ✅ ENHANCEMENT: Handle row number filtering for 500 rows pagination
-        $perPage = 500;
+        // Ukuran halaman dipilih pengguna, sama seperti daftar pengiriman utama.
+        // Dulu dipatok 500 baris sekaligus — terlalu berat, dan pengguna tidak punya
+        // cara memperkecilnya. Halaman ini menampilkan data pengiriman yang sama,
+        // jadi ukuran halamannya harus seragam.
+        $perPage = (int) $request->input('per_page', self::UKURAN_HALAMAN_BAWAAN);
+        if (! in_array($perPage, self::UKURAN_HALAMAN, true)) {
+            $perPage = self::UKURAN_HALAMAN_BAWAAN;
+        }
         $page = 1;
 
         if ($request->filled('number_from') && $request->filled('number_to')) {
@@ -918,7 +925,9 @@ class PengirimanController extends Controller
 
         return Inertia::render('Admin/Pengiriman/GenerateQR', [
             'pengiriman' => $pengiriman,
-            'filters' => $request->only(['search', 'start_date', 'end_date', 'qr_status', 'number_from', 'number_to']),
+            'filters' => $request->only(['search', 'start_date', 'end_date', 'qr_status', 'number_from', 'number_to', 'per_page']),
+            'perPage' => $perPage,
+            'perPageOptions' => self::UKURAN_HALAMAN,
             'statusList' => StatusPengiriman::active()->select('id', 'nama', 'slug', 'warna')->get(),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'stats' => [
