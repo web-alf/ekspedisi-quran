@@ -79,7 +79,8 @@ Route::get('/', function () {
         $mapData = MushafRequest::where('status', 'completed')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->select('id', 'nama_lembaga', 'provinsi', 'kota_kabupaten', 'latitude', 'longitude', 'status',
+            ->select('id', 'nama_lembaga', 'provinsi', 'kota_kabupaten', 'kecamatan', 'kelurahan_desa',
+                'kode_pos', 'latitude', 'longitude', 'status',
                 'jumlah_mushaf', 'jumlah_mushaf_a5', 'jumlah_mushaf_a6', 'jumlah_iqra',
                 'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved', 'jumlah_mushaf_a6_approved', 'jumlah_iqra_approved',
                 'kategori_lembaga')
@@ -91,10 +92,18 @@ Route::get('/', function () {
                     'nama_lembaga' => $item->nama_lembaga,
                     'provinsi' => $item->provinsi,
                     'kota_kabupaten' => $item->kota_kabupaten,
+                    // Kecamatan dan kelurahan ikut dikirim: pin peta menampilkan
+                    // detail sampai tingkat desa, bukan hanya kabupaten.
+                    'kecamatan' => $item->kecamatan,
+                    'kelurahan_desa' => $item->kelurahan_desa,
+                    'kode_pos' => $item->kode_pos,
                     'lat' => (float) $item->latitude,
                     'lng' => (float) $item->longitude,
                     'status' => 'completed',
                     'jumlah_mushaf' => $item->approved_breakdown['total'],
+                    'jumlah_mushaf_a5' => $item->approved_breakdown['a5'],
+                    'jumlah_mushaf_a6' => $item->approved_breakdown['a6'],
+                    'jumlah_iqra' => $item->approved_breakdown['iqra'],
                     'kategori' => $item->kategori_lembaga,
                     'nama_penerima' => $item->nama_lembaga,
                 ];
