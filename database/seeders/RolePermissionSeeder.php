@@ -308,19 +308,21 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::MUSHAF_REQUESTS_REJECT->value,
             PermissionEnum::MUSHAF_REQUESTS_PROCESS->value,
 
-            // Certificates (tanpa delete)
-            PermissionEnum::CERTIFICATES_READ->value,
-            PermissionEnum::CERTIFICATES_CREATE->value,
-            PermissionEnum::CERTIFICATES_UPDATE->value,
-            PermissionEnum::CERTIFICATES_GENERATE->value,
-            PermissionEnum::CERTIFICATES_DOWNLOAD->value,
+            // Certificates — SENGAJA TIDAK DIBERIKAN kepada manager.
+            //
+            // Sertifikat adalah dokumen pertanggungjawaban wakaf. Dulu manager
+            // memegang certificates.read/create/update/generate/download, sehingga
+            // menu "Sertifikat" tampil di sidebar-nya (AdminLayout memfilter menu
+            // berdasarkan izin certificates.read) dan seluruh alur sertifikat
+            // terbuka baginya. Pengelolaan sertifikat bukan bagian alur kerja
+            // manager distribusi (permintaan → pengiriman → pemantauan gudang).
+            //
+            // Aman dicabut: izin certificates.* hanya dipakai oleh rute sertifikat
+            // itu sendiri; tidak ada halaman lain (Pengiriman, Box Tracking) yang
+            // bergantung padanya. Template sertifikat TETAP tidak diberikan agar
+            // seluruh grup menu "Sertifikat" hilang sekaligus, bukan separuh.
 
-            // Certificate templates (tanpa delete)
-            PermissionEnum::TEMPLATES_READ->value,
-            PermissionEnum::TEMPLATES_CREATE->value,
-            PermissionEnum::TEMPLATES_UPDATE->value,
-            PermissionEnum::TEMPLATES_SET_DEFAULT->value,
-            PermissionEnum::TEMPLATES_TOGGLE->value,
+            // Certificate templates — juga tidak diberikan, lihat catatan di atas.
 
             // Wakaf batch (tanpa delete)
             PermissionEnum::WAKAF_BATCH_READ->value,

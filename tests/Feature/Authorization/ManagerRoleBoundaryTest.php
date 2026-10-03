@@ -66,9 +66,19 @@ it('tetap memberi manager wewenang baca dan ubah', function () {
         PermissionEnum::SHIPMENTS_READ->value,
         PermissionEnum::SHIPMENTS_UPDATE->value,
         PermissionEnum::MUSHAF_REQUESTS_APPROVE->value,
-        PermissionEnum::CERTIFICATES_GENERATE->value,
     ] as $expected) {
         expect($perms)->toContain($expected);
+    }
+
+    // certificates.* dan templates.* sengaja DICABUT dari manager: sertifikat
+    // adalah dokumen pertanggungjawaban wakaf dan bukan bagian alur kerja manager
+    // distribusi. Dulu tes ini justru menuntut manager memilikinya.
+    foreach ([
+        PermissionEnum::CERTIFICATES_GENERATE->value,
+        PermissionEnum::CERTIFICATES_READ->value,
+        PermissionEnum::TEMPLATES_READ->value,
+    ] as $revoked) {
+        expect($perms)->not->toContain($revoked);
     }
 
     // donatur.* sengaja DICABUT dari manager: pengelolaan data donatur tetap milik
@@ -104,6 +114,40 @@ it('menolak manager membuka halaman permissions', function () {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
     $this->actingAs($manager)->get('/admin/permissions')->assertForbidden();
+});
+
+it('menolak manager membuka halaman sertifikat', function () {
+    // Sertifikat adalah dokumen pertanggungjawaban wakaf; pengelolaannya bukan
+    // bagian alur kerja manager distribusi (permintaan -> pengiriman -> pantau
+    // gudang). Dulu manager memegang certificates.read sehingga menu "Sertifikat"
+    // muncul di sidebar-nya padahal tidak seharusnya ada.
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->actingAs($manager)->get('/admin/certificates')->assertForbidden();
+    $this->actingAs($manager)->get('/admin/certificate-templates')->assertForbidden();
+});
+
+it('tidak memberi manager satu pun izin sertifikat maupun template', function () {
+    // Memastikan MENU-nya juga hilang: AdminLayout memfilter menu berdasarkan
+    // izin, jadi mencabut certificates.read sekaligus menghilangkan grup
+    // "Sertifikat" dari sidebar — bukan sekadar menolak URL-nya.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $perms = $manager->permissions->pluck('name');
+
+    foreach ([
+        PermissionEnum::CERTIFICATES_READ->value,
+        PermissionEnum::CERTIFICATES_CREATE->value,
+        PermissionEnum::CERTIFICATES_UPDATE->value,
+        PermissionEnum::CERTIFICATES_GENERATE->value,
+        PermissionEnum::CERTIFICATES_DOWNLOAD->value,
+        PermissionEnum::TEMPLATES_READ->value,
+        PermissionEnum::TEMPLATES_CREATE->value,
+        PermissionEnum::TEMPLATES_UPDATE->value,
+    ] as $dicabut) {
+        expect($perms)->not->toContain($dicabut);
+    }
 });
 
 it('menolak manager membuka halaman donatur, tetapi mengizinkan mushaf request', function () {
