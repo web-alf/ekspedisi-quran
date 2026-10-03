@@ -1399,11 +1399,13 @@
             <!-- Ukuran halaman: berapa baris yang ditampilkan sekali lihat -->
             <div class="flex items-center justify-center sm:justify-start gap-2">
               <label for="per_page_filter" class="text-sm text-gray-500 whitespace-nowrap">Baris per halaman</label>
+              <!-- shrink-0 + lebar tetap: tanpa ini select-nya diperas oleh flex
+                   sampai angka dan panah bawaan browser saling menumpuk. -->
               <select
                 id="per_page_filter"
                 bind:value={perPage}
                 on:change={gantiPerHalaman}
-                class="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="shrink-0 w-[4.75rem] pl-3 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 {#each perPageOptions as opsi}
                   <option value={opsi}>{opsi}</option>
