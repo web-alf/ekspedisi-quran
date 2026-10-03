@@ -55,6 +55,7 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
         'jumlah_mushaf_a6',
         'jumlah_iqra',
         'urgensi',
+        'urgensi_request',
         'sumber_info',
     ];
 
@@ -94,6 +95,7 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
     public function array(): array
     {
         return [
+            // Contoh 1 — alamat dipecah per kolom, koordinat diisi sendiri.
             [
                 'TPQ Contoh Al Falah',
                 'Nama Penanggung Jawab',
@@ -109,12 +111,38 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
                 '',
                 -8.0868357,
                 112.2396983,
-                'https://maps.app.goo.gl/contohSaja',
+                'https://maps.app.goo.gl/contohBarisSatu',
                 100,
                 0,
                 0,
                 'sedang',
+                'Banyak Al-Qur\'an yang sudah rusak dan perlu diganti',
                 'WhatsApp',
+            ],
+            // Contoh 2 — hanya mengisi satu kolom alamat + tautan peta; kolom
+            // wilayah sengaja dikosongkan karena akan diuraikan otomatis.
+            [
+                'MI Contoh Nurul Huda',
+                'Nama Pengurus Kedua',
+                '081298765432',
+                'Sekretaris',
+                'Sekolah/Madrasah',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                'Jl. Contoh Raya No. 2, Kec. Garum, Blitar',
+                '',
+                '',
+                'https://maps.app.goo.gl/contohBarisDua',
+                0,
+                50,
+                0,
+                'tinggi',
+                'Untuk pembelajaran tahun ajaran baru',
+                'Instagram',
             ],
         ];
     }
@@ -146,7 +174,8 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
                     'wrapText' => true,
                 ],
             ],
-            2 => [
+            // Dua baris contoh; diberi warna supaya jelas harus dihapus.
+            '2:3' => [
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => 'E8F5E9'],
@@ -180,7 +209,8 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
             'Q' => 14, // jumlah_mushaf_a6
             'R' => 12, // jumlah_iqra
             'S' => 12, // urgensi
-            'T' => 18, // sumber_info
+            'T' => 44, // urgensi_request
+            'U' => 18, // sumber_info
         ];
     }
 
@@ -217,22 +247,33 @@ class MushafRequestTemplateExport implements FromArray, WithColumnWidths, WithEv
             ['nama_penanggung_jawab_1', 'Ya', 'Nama orang yang bisa dihubungi.', 'Latifah'],
             ['nomor_hp', 'Ya', 'Nomor HP/WhatsApp aktif. Boleh ditulis 08xx atau 62xx.', '081234567890'],
             ['jabatan_penanggung_jawab_1', 'Tidak', 'Jabatan pengurus 1. Bila kosong diisi "Penanggung Jawab".', 'Ketua'],
-            ['kategori_lembaga', 'Ya', 'Pilih salah satu (tulis persis): '.implode(' / ', self::KATEGORI), 'TPQ/TPA/Madin'],
+            ['kategori_lembaga', 'Tidak', 'Pilih salah satu: '.implode(' / ', self::KATEGORI).'. Bila kosong diisi "Lembaga Lainnya".', 'TPQ/TPA/Madin'],
             ['provinsi', 'Tidak', 'Nama provinsi. Kosongkan bila ingin diuraikan otomatis dari link_gmaps.', 'Jawa Timur'],
             ['kota_kabupaten', 'Tidak', 'Nama kabupaten/kota. Kosongkan bila ingin diuraikan otomatis.', 'Kabupaten Blitar'],
             ['kecamatan', 'Tidak', 'Nama kecamatan, tanpa awalan "Kec.". Bila diisi, dipakai apa adanya.', 'Garum'],
             ['kelurahan_desa', 'Tidak', 'Nama kelurahan/desa. Isi hanya bila yakin — salah isi tidak akan terdeteksi.', 'Contoh Kelurahan'],
-            ['kode_pos', 'Tidak', 'Kode pos 5 digit.', '66181'],
+            ['kode_pos', 'Tidak', 'Kode pos, maksimal 10 karakter.', '66181'],
             ['alamat_detail', 'Ya', 'Jalan, nomor rumah, RT/RW, nama perumahan/lingkungan.', 'Jl. Contoh No. 1, RT.2/RW.5'],
-            ['alamat_lengkap', 'Tidak', 'Alamat lengkap dalam satu baris. Isi ini saja bila tidak mau memecah alamat per kolom wilayah.', 'Jl. Contoh No. 1, Garum, Blitar'],
+            ['alamat_lengkap', 'Tidak', 'Alamat lengkap dalam satu baris. Isi ini bila tidak mau memecah alamat per kolom wilayah.', 'Jl. Contoh No. 1, Garum, Blitar'],
             ['latitude', 'Tidak', 'Koordinat lintang. Kosongkan bila link_gmaps sudah diisi.', '-8.0868357'],
             ['longitude', 'Tidak', 'Koordinat bujur. Kosongkan bila link_gmaps sudah diisi.', '112.2396983'],
             ['link_gmaps', 'Tidak', 'Tautan lokasi dari Google Maps. Bentuk pendek (maps.app.goo.gl) juga bisa.', 'https://maps.app.goo.gl/xxxx'],
-            ['jumlah_mushaf_a5', 'Ya', 'Jumlah mushaf ukuran A5.', '100'],
-            ['jumlah_mushaf_a6', 'Tidak', 'Jumlah mushaf ukuran A6. Isi 0 bila tidak ada.', '0'],
-            ['jumlah_iqra', 'Tidak', 'Jumlah buku Iqra. Isi 0 bila tidak ada.', '0'],
+            ['jumlah_mushaf_a5', 'Ya*', 'Jumlah mushaf ukuran A5. *Jumlah wajib ada: minimal salah satu dari A5/A6/Iqra lebih dari 0.', '100'],
+            ['jumlah_mushaf_a6', 'Ya*', 'Jumlah mushaf ukuran A6. Isi 0 bila tidak ada.', '0'],
+            ['jumlah_iqra', 'Ya*', 'Jumlah buku Iqra. Isi 0 bila tidak ada.', '0'],
             ['urgensi', 'Tidak', 'Tingkat urgensi: rendah / sedang / tinggi / mendesak. Kosong = sedang.', 'sedang'],
+            ['urgensi_request', 'Tidak', 'Ceritakan kenapa mengajukan permintaan Qur\'an. Tampil di halaman detail sebagai "Urgensi Permintaan".', "Qur'an kami rusak terkena banjir"],
             ['sumber_info', 'Tidak', 'Dari mana permohonan ini diketahui.', 'WhatsApp'],
+
+            ['', '', '', ''],
+            ['PENTING', '', '', ''],
+            ['Hapus baris contoh', '', 'Dua baris di atas (berwarna hijau) hanya CONTOH. HAPUS keduanya sebelum berkas di-import, atau akan ikut masuk sebagai data.', ''],
+            ['Baris kosong', '', 'Baris kosong diabaikan. Jumlah baris boleh berapa saja.', ''],
+            ['Satu baris = satu lembaga', '', 'Jangan menggabungkan dua lembaga dalam satu baris (mis. dipisah koma).', ''],
+            ['Jangan ubah nama kolom', '', 'Nama kolom pada baris 1 lembar "Data" dipakai untuk mencocokkan data. Mengubahnya membuat baris gagal.', ''],
+            ['Hanya lembar Data', '', 'Import hanya membaca lembar "Data". Lembar ini beserta lembar lain diabaikan.', ''],
+            ['Bila gagal', '', 'Baris yang gagal TIDAK ikut masuk. Setelah import, penyebabnya ditampilkan: baris ke berapa dan kenapa.', ''],
+            ['Nomor unik', '', 'Nomor permintaan (REQ-...) dibuat otomatis. Jangan diisi.', ''],
         ];
 
         $sheet->fromArray($baris, null, 'A1');

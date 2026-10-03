@@ -48,7 +48,7 @@ it('memuat kolom untuk setiap field yang wajib diisi form Informasi Lembaga', fu
         'alamat_detail' => 'alamat_detail',
         'latitude' => 'latitude',
         'longitude' => 'longitude',
-        'urgensi_request' => 'urgensi',
+        'urgensi_request' => 'urgensi_request',
         'sumber_info' => 'sumber_info',
     ];
 
@@ -106,7 +106,8 @@ it('menaruh baris contoh di lembar Data dan panduannya di lembar terpisah', func
     $import = new MushafRequestImport;
     Excel::import($import, $berkas);
 
-    expect(MushafRequest::count())->toBe(1)
+    // Dua baris contoh pada lembar Data.
+    expect(MushafRequest::count())->toBe(2)
         ->and($import->getResults()['error_count'])->toBe(0);
 
     Storage::disk('local')->delete('tpl.xlsx');

@@ -236,7 +236,7 @@ it('mengisi kolom alamat pada template yang diimpor apa adanya', function () {
     $import = new MushafRequestImport($this->resolver);
     Excel::import($import, $berkas);
 
-    expect($import->getResults()['success_count'])->toBe(1);
+    expect($import->getResults()['success_count'])->toBe(2);
 
     $req = MushafRequest::first();
 
@@ -250,12 +250,12 @@ it('mengisi kolom alamat pada template yang diimpor apa adanya', function () {
         ->and((float) $req->latitude)->toBe(-8.0868357)
         ->and((float) $req->longitude)->toBe(112.2396983);
 
-    // Yang penting: tautan peta CONTOH tidak pernah diikuti, dan tidak ada
-    // reverse geocoding sama sekali — barisnya sudah punya koordinat sendiri.
-    // (Daftar wilayah tetap dipanggil sekali untuk melengkapi provinsi_id dan
-    // kawan-kawan, dan itu memang perlu.)
-    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'maps.app.goo.gl'));
-    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'nominatim'));
+    // Dua baris contoh memakai jalur yang BERBEDA, dan itu memang yang diuji:
+    // baris yang sudah punya koordinat tidak menyentuh layanan peta sama sekali,
+    // sedangkan baris yang mengosongkan kolom wilayah diuraikan (tautannya
+    // diikuti, lalu reverse geocoding dijalankan).
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'contohBarisSatu'));
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'contohBarisDua'));
 
     unlink($berkas);
 });
