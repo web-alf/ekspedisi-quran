@@ -274,7 +274,7 @@ class RolePermissionSeeder extends Seeder
         // di-review, di-diff, dan dipulihkan lewat seeder.
         $manager = Role::firstOrCreate(
             ['name' => RoleEnum::MANAGER->value],
-            ['display_name' => 'Manager', 'guard_name' => 'web']
+            ['display_name' => 'Manager Distribusi', 'guard_name' => 'web']
         );
         $manager->syncPermissions([
             // Dashboard
@@ -336,27 +336,44 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::SUPERVISOR_PERFORMANCE_REPORTS->value,
             PermissionEnum::SYSTEM_MONITOR->value,
 
-            // Warehouse (mengawasi operasi, termasuk lihat & kelola box)
+            // Warehouse — MEMANTAU saja, bukan MENJALANKAN.
+            //
+            // Konteks: manager dulu memegang SELURUH 15 izin warehouse.*, persis
+            // sama dengan Staff Gudang. Artinya manager bisa mengemas, menyegel,
+            // dan MEMBONGKAR kerdus yang sudah tersegel — padahal perannya
+            // mengawasi distribusi, bukan mengerjakan operasinya.
+            //
+            // Perbandingan peran: supervisor juga "Gudang", tapi hanya memantau
+            // (supervisor.* + warehouse.tasks.view + warehouse.boxes.view +
+            // warehouse.performance.view, tanpa izin operasional). Manager
+            // sekarang mengikuti pola yang sama.
+            //
+            // Diambil dari manager (operasional — mengubah keadaan fisik):
+            //   warehouse.packing.scan        memindai & memasukkan mushaf ke kerdus
+            //   warehouse.packing.seal        menyegel kerdus
+            //   warehouse.boxes.seal          menyegel kerdus (jalur lain)
+            //   warehouse.box.update_any      mengubah isi kerdus siapa pun
+            //   warehouse.box.update_sealed   menembus kerdus tersegel (bongkar!)
+            //   warehouse.tasks.update        membatalkan & mengulang job
+            //   warehouse.qr.generate         membuat QR baru
+            //   warehouse.qr.bulk_generate    membuat QR massal
+            //   warehouse.qr.scan             memindai QR kerdus
+            //
+            // Tetap diberikan (memantau & membaca):
+            //   warehouse.dashboard, warehouse.performance.view,
+            //   warehouse.packing.view, warehouse.boxes.view,
+            //   warehouse.tasks.view, warehouse.qr.verify, qr.*
             PermissionEnum::WAREHOUSE_DASHBOARD->value,
             PermissionEnum::WAREHOUSE_PERFORMANCE_VIEW->value,
             PermissionEnum::WAREHOUSE_PACKING_VIEW->value,
-            PermissionEnum::WAREHOUSE_PACKING_SCAN->value,
-            PermissionEnum::WAREHOUSE_PACKING_SEAL->value,
             PermissionEnum::WAREHOUSE_BOXES_VIEW->value,
-            PermissionEnum::WAREHOUSE_BOXES_SEAL->value,
-            PermissionEnum::WAREHOUSE_BOX_UPDATE_ANY->value,
-            PermissionEnum::WAREHOUSE_BOX_UPDATE_SEALED->value,
             PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
-            PermissionEnum::WAREHOUSE_TASKS_UPDATE->value,
 
             // QR
             PermissionEnum::QR_GENERATE->value,
             PermissionEnum::QR_SCAN->value,
             PermissionEnum::QR_VERIFY->value,
-            PermissionEnum::WAREHOUSE_QR_GENERATE->value,
-            PermissionEnum::WAREHOUSE_QR_SCAN->value,
             PermissionEnum::WAREHOUSE_QR_VERIFY->value,
-            PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value,
 
             // Status
             PermissionEnum::STATUS_UPDATE->value,

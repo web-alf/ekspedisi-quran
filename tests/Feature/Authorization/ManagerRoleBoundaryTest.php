@@ -177,3 +177,78 @@ it('Gate before tidak memberi keleluasaan pada role non super-admin', function (
 
     expect($courier->can('permission.yang.belum.pernah.dibuat'))->toBeFalse();
 });
+
+it('memberi manager nama peran "Manager Distribusi", bukan "Manager"', function () {
+    // Display name sebelumnya "Manager", kembar dengan supervisor yang bernama
+    // "Supervisor Gudang" dan warehouse yang bernama "Staff Gudang" — tidak jelas
+    // siapa mengelola apa. Nama ini murni kosmetik: tidak ada kode yang
+    // membandingkan display_name, jadi aman diubah tanpa menyentuh izin.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+
+    expect($manager->display_name)->toBe('Manager Distribusi');
+});
+
+it('mencabut izin operasional gudang dari manager, tetapi menyisakan izin memantau', function () {
+    // Manager dulu memegang SELURUH 15 izin warehouse.*, persis sama dengan Staff
+    // Gudang: bisa mengemas, menyegel, DAN membongkar kerdus tersegel. Perannya
+    // mengawasi distribusi, bukan mengerjakan operasinya — jadi izin yang mengubah
+    // keadaan fisik dicabut.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $perms = $manager->permissions->pluck('name');
+
+    // Operasional: mengubah keadaan fisik.
+    foreach ([
+        PermissionEnum::WAREHOUSE_PACKING_SCAN->value,
+        PermissionEnum::WAREHOUSE_PACKING_SEAL->value,
+        PermissionEnum::WAREHOUSE_BOXES_SEAL->value,
+        PermissionEnum::WAREHOUSE_BOX_UPDATE_ANY->value,
+        PermissionEnum::WAREHOUSE_BOX_UPDATE_SEALED->value,
+        PermissionEnum::WAREHOUSE_TASKS_UPDATE->value,
+        PermissionEnum::WAREHOUSE_QR_GENERATE->value,
+        PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value,
+        PermissionEnum::WAREHOUSE_QR_SCAN->value,
+    ] as $operational) {
+        expect($perms)->not->toContain($operational);
+    }
+
+    // Memantau: tetap dimiliki supaya halaman gudang masih terbuka.
+    foreach ([
+        PermissionEnum::WAREHOUSE_DASHBOARD->value,
+        PermissionEnum::WAREHOUSE_PACKING_VIEW->value,
+        PermissionEnum::WAREHOUSE_BOXES_VIEW->value,
+        PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
+        PermissionEnum::WAREHOUSE_PERFORMANCE_VIEW->value,
+        PermissionEnum::WAREHOUSE_QR_VERIFY->value,
+    ] as $readOnly) {
+        expect($perms)->toContain($readOnly);
+    }
+});
+
+it('menolak manager memindai dan menyegel kerdus, tetapi tetap mengizinkan memantau', function () {
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    // Tidak boleh lagi mengubah keadaan fisik kerdus.
+    expect($manager->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeFalse();
+    expect($manager->can(PermissionEnum::WAREHOUSE_PACKING_SEAL->value))->toBeFalse();
+    expect($manager->can(PermissionEnum::WAREHOUSE_BOXES_SEAL->value))->toBeFalse();
+    expect($manager->can(PermissionEnum::WAREHOUSE_BOX_UPDATE_SEALED->value))->toBeFalse();
+
+    // Halaman gudang tetap terbuka, hanya untuk melihat.
+    $this->actingAs($manager)->get('/admin/warehouse')->assertSuccessful();
+    $this->actingAs($manager)->get('/admin/warehouse/packing')->assertSuccessful();
+    $this->actingAs($manager)->get('/admin/box-tracking')->assertSuccessful();
+});
+
+it('menolak manager mengirim pemindaian ke endpoint packing', function () {
+    // Penjaga sebenarnya: walau tombolnya ditekan atau permintaan dikirim manual,
+    // endpoint harus menolak.
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->actingAs($manager)
+        ->postJson('/admin/warehouse/packing/scan', ['qr_data' => 'EQ-2026-00001'])
+        ->assertForbidden();
+});
