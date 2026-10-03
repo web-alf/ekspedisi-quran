@@ -13,6 +13,19 @@
   // tidak melihat pesan apa pun.
   import { showError, showWarning } from '../../../stores/toast.js';
   import { canonicalProvince, provinceFromGeoJson } from '../../../utils/provinceName.js';
+  import {
+    pisahkanTitikRusak,
+    sebaranPerProvinsi,
+    lembagaPerProvinsi,
+    kelompokkanPerPiksel,
+    buatIkonPin,
+    isiPopupKelompok,
+    warnaKategori,
+    labelKategori,
+    WARNA_KATEGORI,
+    formatAngka,
+    JARAK_GABUNG_PIKSEL,
+  } from '../../../utils/mapMarkers.js';
   
   // Props from Inertia
   export let perPage = 20;
@@ -23,21 +36,85 @@
   export const flash = {};
   export const settings = {};
   
-  // Add CSS for location markers
+  // Gaya untuk pin lokasi di atas peta.
+  //
+  // Ukuran pin TIDAK diatur di sini — ditentukan oleh buatIkonPin() supaya bisa
+  // diperkecil tanpa memotong gambarnya. Kalau ukuran ditulis di dua tempat,
+  // aturan yang satu menimpa yang lain dan ujung pin terpotong.
   const markerStyle = '<' + 'style>' + `
-      .location-marker {
-        transition: transform 0.2s, filter 0.2s;
-      }
-      
-      .location-marker:hover {
-        transform: scale(1.2) !important;
-        filter: brightness(1.1) drop-shadow(0 4px 12px rgba(235, 52, 52, 0.4));
-        z-index: 1000;
-      }
-      
-      .location-marker div {
+      .pin {
+        position: relative;
         cursor: pointer;
+        transform-origin: 50% 100%;
+        transition: filter 0.2s;
       }
+      .pin svg { display: block; }
+      .pin:hover { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45)); z-index: 1000; }
+      .pin:hover svg { transform: scale(1.16); transform-origin: 50% 100%; }
+      .pin .lubang {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+      .pin .angka {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+      }
+
+      /* Isi popup pin */
+      .leaflet-popup-content { font-size: 13px; line-height: 1.45; }
+      .pop-kat {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10.5px;
+        font-weight: 700;
+        margin-bottom: 5px;
+        color: #fff;
+      }
+      .pop-judul { font-weight: 700; font-size: 13.5px; margin-bottom: 5px; }
+      .pop-b { display: flex; gap: 6px; }
+      .pop-l { color: #6b7280; min-width: 78px; font-size: 11.5px; }
+      .pop-pisah { height: 1px; background: #e5e7eb; margin: 7px 0; }
+      .pop-total { font-weight: 700; }
+      .pop-pecah { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+      .pop-pecah span {
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 10.5px;
+      }
+      .pop-lembaga { margin-bottom: 6px; }
+      .pop-lembaga .alamat { color: #6b7280; font-size: 11px; }
+      .pop-koord { margin-top: 7px; font-size: 10.5px; color: #6b7280; }
+
+      /* Legenda kategori pin (di bawah peta) */
+      .legenda-kategori {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #4b5563;
+      }
+      .legenda-kategori .butir { display: flex; align-items: center; gap: 5px; }
+      .legenda-kategori .tanda {
+        width: 9px;
+        height: 13px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 1.5px solid rgba(0, 0, 0, 0.18);
+      }
+      .legenda-kategori b { color: #111827; font-weight: 600; }
   ` + '</' + 'style>';
   
   // Inject styles
@@ -99,7 +176,17 @@
   let map;
   let isMapInitialized = false;
   let provinceLayer;
+  let markerLayer;
   let L = null; // Will hold Leaflet module
+
+  // Pin digambar sedikit lebih kecil dari ukuran penuhnya agar warna provinsi di
+  // bawahnya tetap terbaca. Diukur dalam piksel layar.
+  const SKALA_PIN = 0.78;
+
+  // Hasil pemisahan titik: diisi sekali saat peta disiapkan, lalu dipakai ulang
+  // oleh lapisan provinsi maupun lapisan pin.
+  let titikSah = [];
+  let titikRusak = [];
   
   onMount(async () => {
     // Load Leaflet dynamically and initialize the map
@@ -173,6 +260,82 @@
                           '#FFEDA0';
   }
   
+  /**
+   * Susun kembali pin setiap peta selesai bergerak.
+   *
+   * Inilah yang menyatukan kedua perilaku: pin tampil sendiri-sendiri saat peta
+   * cukup besar, dan bergabung sendiri saat ruangnya sempit.
+   */
+  function gambarPin() {
+    if (!markerLayer) return [];
+
+    markerLayer.clearLayers();
+
+    const kelompok = kelompokkanPerPiksel(
+      titikSah,
+      (lat, lng) => map.latLngToContainerPoint([lat, lng]),
+      JARAK_GABUNG_PIKSEL
+    );
+
+    kelompok.forEach((k) => {
+      const utama = k.anggota[0];
+      const ikon = buatIkonPin(warnaKategori(utama.kategori), SKALA_PIN, k.anggota.length);
+
+      const penanda = L.marker([k.lat, k.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: ikon.html,
+          iconSize: [ikon.lebar, ikon.tinggi],
+          iconAnchor: ikon.jangkar,
+          popupAnchor: [0, -ikon.jangkar[1]],
+          tooltipAnchor: [ikon.lebar / 2, -ikon.jangkar[1]],
+        }),
+      }).bindPopup(isiPopupKelompok(k), { maxWidth: 320 });
+
+      penanda.bindTooltip(
+        k.anggota.length === 1
+          ? `${utama.nama} · ${formatAngka(utama.jumlah)} mushaf`
+          : `${k.anggota.length} lembaga berdekatan · ${formatAngka(k.jumlah)} mushaf`,
+        { direction: 'top', offset: [0, -30] }
+      );
+
+      penanda.addTo(markerLayer);
+    });
+
+    return kelompok;
+  }
+
+  /** Pasang lapisan pin dan legenda kategorinya. */
+  function pasangPin() {
+    if (!map || !L) return;
+
+    markerLayer = L.layerGroup().addTo(map);
+    gambarPin();
+
+    map.on('zoomend moveend', gambarPin);
+
+    addKategoriLegend();
+  }
+
+  /** Legenda warna pin per kategori lembaga, di bawah peta. */
+  function addKategoriLegend() {
+    const wadah = document.getElementById('peta-kategori-legend');
+    if (!wadah || wadah.dataset.terisi === '1') return;
+
+    wadah.innerHTML =
+      '<b>Kategori:</b>' +
+      Object.keys(WARNA_KATEGORI)
+        .map(
+          (k) =>
+            `<span class="butir"><span class="tanda" style="background:${warnaKategori(k)}"></span>` +
+            `${labelKategori(k)}</span>`
+        )
+        .join('') +
+      '<span class="butir"><span class="tanda" style="background:#9ca3af"></span>Lainnya</span>';
+
+    wadah.dataset.terisi = '1';
+  }
+
   // Fungsi untuk mendapatkan teks status
   function getStatusText(status) {
     const statusMap = {
@@ -256,15 +419,24 @@
     
     // Filter data for completed distributions only
     const completedData = Array.isArray(mapData) ? mapData.filter(item => item.status === 'completed') : [];
-    
-    // Calculate total distribution by province
+
+    // titikSah/titikRusak diisi ke variabel modul, bukan variabel lokal: lapisan
+    // provinsi dan lapisan pin harus memakai daftar yang sama.
+    //
+    // Titik berkoordinat rusak dibuang SEKALI di sini, sehingga angka pada pin
+    // tidak mungkin berbeda dengan angka pada provinsi.
+    ({ sah: titikSah, rusak: titikRusak } = pisahkanTitikRusak(completedData));
+
+    if (titikRusak.length > 0) {
+      console.warn(
+        `[peta] ${titikRusak.length} titik dibuang karena koordinatnya di luar wilayah Indonesia:`,
+        titikRusak.map(t => `${t.nama} (${t.lat}, ${t.lng})`)
+      );
+    }
+
     // Kunci provinsi dinormalkan agar ejaan berbeda tetap menyatu
-    const distributionByProvince = {};
-    completedData.forEach(item => {
-      const province = canonicalProvince(item.provinsi);
-      if (!province) return;
-      distributionByProvince[province] = (distributionByProvince[province] || 0) + item.jumlah_mushaf;
-    });
+    const distributionByProvince = sebaranPerProvinsi(titikSah, canonicalProvince);
+    const jumlahLembagaPerProvinsi = lembagaPerProvinsi(titikSah, canonicalProvince);
     
     // Load GeoJSON provinsi Indonesia
     fetch('/data/geojson/indonesia-province-simple.json')
@@ -301,7 +473,7 @@
             
             // Calculate additional stats for this province (nama dinormalkan juga)
             const provinceData = completedData.filter(item => canonicalProvince(item.provinsi) === provinceName);
-            const totalLembaga = new Set(provinceData.map(item => item.nama_penerima)).size;
+            const totalLembaga = jumlahLembagaPerProvinsi[provinceName] || 0;
             const totalShipments = provinceData.length;
             
             // Add hover tooltip (keep the original hover functionality)
@@ -375,7 +547,10 @@
             });
           }
         }).addTo(map);
-        
+
+        // Pin lokasi di atas lapisan provinsi
+        pasangPin();
+
         // Tambahkan legenda untuk distribusi di luar peta
         addDistributionLegend();
       })
@@ -815,6 +990,9 @@
             </div>
           </div>
           
+          <!-- Legenda kategori pin: diisi oleh addKategoriLegend() -->
+          <div id="peta-kategori-legend" class="legenda-kategori"></div>
+
           <!-- Legend will be added here by JavaScript -->
         </div>
       </div>
