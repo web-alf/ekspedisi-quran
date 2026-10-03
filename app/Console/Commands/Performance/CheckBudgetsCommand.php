@@ -94,6 +94,29 @@ class CheckBudgetsCommand extends Command
     {
         $this->info('Checking database performance budgets...');
 
+        // Pemanasan sebelum mengukur.
+        //
+        // Pengukuran pertama di dalam proses ikut membayar biaya yang tidak ada
+        // hubungannya dengan performa kueri: membuka koneksi, menyusun rencana
+        // eksekusi, dan mengisi buffer pool InnoDB yang masih dingin. Di VPS
+        // 1 vCPU biaya itu jauh di atas anggaran — terbukti dari log produksi
+        // 2026-10-02 17:00 UTC: simple_count terukur 213 ms terhadap ambang 25 ms
+        // (8,5x), dan pada tengah malam mesin sedang mengerjakan tugas lain,
+        // jadi lebih parah lagi.
+        //
+        // Yang dianggarkan adalah performa steady-state, jadi setiap bentuk kueri
+        // dijalankan sekali tanpa dihitung lebih dulu.
+        Pengiriman::count();
+
+        Pengiriman::with(['donatur', 'jenisQuran', 'status'])
+            ->limit(10)
+            ->get();
+
+        DB::table('pengiriman')
+            ->select('status_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('status_id')
+            ->get();
+
         // Test simple count query
         $start = microtime(true);
         Pengiriman::count();
@@ -150,6 +173,15 @@ class CheckBudgetsCommand extends Command
     private function checkCacheBudgets(): void
     {
         $this->info('Checking cache performance budgets...');
+
+        // Pemanasan, alasan sama seperti checkDatabaseBudgets(): operasi cache
+        // pertama di dalam proses ikut membayar pembukaan koneksi cache store
+        // (CACHE_STORE=database). Log produksi 2026-10-02 17:00 UTC mencatat
+        // cache_hit 5,5 ms terhadap ambang 5 ms dan cache_miss 275 ms terhadap
+        // ambang 100 ms — keduanya didominasi biaya awal itu, bukan cache-nya.
+        Cache::put('budget_warmup', 'warm', 60);
+        Cache::get('budget_warmup');
+        Cache::forget('budget_warmup');
 
         // Test cache hit time
         Cache::put('budget_test', 'test_data', 300);

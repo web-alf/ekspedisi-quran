@@ -62,7 +62,7 @@ it('memakai ambang waktu query di atas derau pengukuran server', function () {
     // menangkap kemunduran nyata.
     $berkas = file_get_contents(app_path('Console/Commands/Performance/CheckBudgetsCommand.php'));
 
-    preg_match("/'simple_count_max_time' => \\\$strict \\? (\d+) : (\d+)/", $berkas, $m);
+    preg_match("/'simple_count_max_time' => \\\$strict \? (\d+) : (\d+)/", $berkas, $m);
 
     expect($m)->not->toBeEmpty('ambang simple_count tidak ditemukan');
 
@@ -73,4 +73,42 @@ it('memakai ambang waktu query di atas derau pengukuran server', function () {
         ->and($longgar)->toBeGreaterThanOrEqual(25)
         // Tetap ada jaring: jangan sampai dilonggarkan sampai tak berguna.
         ->and($longgar)->toBeLessThanOrEqual(100);
+});
+
+it('menghangatkan kueri DB sebelum mengukur', function () {
+    // Akar kegagalan tiap tengah malam: pengukuran pertama di dalam proses ikut
+    // membayar pembukaan koneksi + buffer pool dingin. Log produksi
+    // 2026-10-02 17:00 UTC: simple_count terukur 213 ms terhadap ambang 25 ms
+    // (8,5x), complex_join 77,7 ms terhadap 50 ms. Yang dianggarkan adalah
+    // performa steady-state, jadi tiap bentuk kueri dijalankan dulu tanpa dihitung.
+    $sumber = file_get_contents(app_path('Console/Commands/Performance/CheckBudgetsCommand.php'));
+
+    $awal = strpos($sumber, 'private function checkDatabaseBudgets');
+    $ukur = strpos($sumber, 'Simple count query time', $awal);
+
+    expect($awal)->not->toBeFalse()
+        ->and($ukur)->not->toBeFalse();
+
+    $pemanasan = substr($sumber, $awal, $ukur - $awal);
+
+    expect($pemanasan)->toContain('Pengiriman::count()')
+        ->and($pemanasan)->toContain('limit(10)')
+        ->and($pemanasan)->toContain('groupBy');
+});
+
+it('menghangatkan operasi cache sebelum mengukur', function () {
+    // Sama: operasi cache pertama membuka koneksi cache store. Log produksi
+    // mencatat cache_miss 275 ms terhadap ambang 100 ms.
+    $sumber = file_get_contents(app_path('Console/Commands/Performance/CheckBudgetsCommand.php'));
+
+    $awal = strpos($sumber, 'private function checkCacheBudgets');
+    $ukur = strpos($sumber, 'Test cache hit time', $awal);
+
+    expect($awal)->not->toBeFalse()
+        ->and($ukur)->not->toBeFalse();
+
+    $pemanasan = substr($sumber, $awal, $ukur - $awal);
+
+    expect($pemanasan)->toContain("Cache::put('budget_warmup'")
+        ->and($pemanasan)->toContain("Cache::get('budget_warmup')");
 });
