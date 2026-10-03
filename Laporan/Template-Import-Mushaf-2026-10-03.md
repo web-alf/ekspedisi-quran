@@ -17,7 +17,24 @@ Kolom lain yang tidak ada di template pun tidak akan pernah terisi
 (`kategori_lembaga` selalu jatuh ke "Lembaga Lainnya", `sumber_info` selalu
 "Import Excel", `urgensi_request` selalu hasil terkaan).
 
-## Template baru: 20 kolom
+## Koreksi setelah berkas diperiksa baris per baris
+
+Pemeriksaan awal hanya membaca daftar kolomnya lewat program, dan **dua hal
+terlewat** — ditemukan saat berkasnya benar-benar dibuka:
+
+1. **Kolom `urgensi_request` belum ada.** Form "Informasi Lembaga" meminta
+   *cerita* kenapa mengajukan permohonan, sedangkan template hanya punya kolom
+   `urgensi` (tingkat). Akibatnya hasil import **masih** mengisi cerita itu dengan
+   `"sedang"` — persis masalah yang seharusnya sudah diperbaiki. Kini ada.
+2. **Lembar panduan tidak memberi tahu bahwa baris contoh harus DIHAPUS**,
+   sehingga "TPQ Contoh Al Falah" akan ikut terimport sebagai permintaan asli.
+
+Sekaligus: **dua** baris contoh yang menunjukkan dua jalur berbeda (satu mengisi
+semua kolom termasuk koordinat, satu hanya satu kolom alamat + tautan peta), dan
+catatan tambahan: satu baris satu lembaga, jangan ubah nama kolom, hanya lembar
+Data yang dibaca, nomor REQ dibuat otomatis, tautan peta pada contoh hanya peraga.
+
+## Template baru: 21 kolom
 
 Dipetakan ke kolom tabel yang benar-benar ada (kolom yang berbeda nama
 dipetakan oleh pengimpor):
@@ -66,38 +83,43 @@ tidak bisa ditarik kembali.
 ## Verifikasi produksi (permintaan HTTP nyata, di dalam transaksi yang dibatalkan)
 
 ```
-Template diunduh  : status 200, application/vnd.openxmlformats-...sheet, 9.698 byte
+Template diunduh  : status 200, application/vnd.openxmlformats-...sheet
 Lembar            : [0] Data  <- dibaca saat import
                     [1] Panduan Kolom  <- tidak dibaca
 Dibuka pada       : Data
-20 kolom          : nama_lembaga … sumber_info
-Panduan           : 20 kolom dijelaskan
-
+21 kolom          : nama_lembaga … urgensi_request, sumber_info
+Panduan           : 30 baris, termasuk peringatan hapus baris contoh  -> ADA
 Data pemohon di dalam template: TIDAK ADA
 
-Impor template    : berhasil 1, gagal 0
-  provinsi        = Jawa Timur
-  kota_kabupaten  = Kabupaten Blitar
-  kecamatan       = Garum
-  kelurahan_desa  = Contoh Kelurahan
-  latitude/longitude terisi: YA / YA
-  kategori_lembaga= TPQ/TPA/Madin
-  sumber_info     = WhatsApp
-  jumlah a5/a6/iqra = 100 / 0 / 0, jenis [A5]
+Impor template    : berhasil 2, gagal 0
+  baris 1 (semua kolom diisi):
+    provinsi = Jawa Timur, kota = Kabupaten Blitar, kecamatan = Garum
+    kelurahan = Contoh Kelurahan, kode_pos = 66181
+    latitude/longitude terisi: YA
+    urgensi_request = "Banyak Al-Qur'an yang sudah rusak dan perlu diganti"
+  baris 2 (hanya alamat + tautan peta):
+    alamat_detail terisi, wilayah kosong karena tautannya contoh palsu
 
 baris sebelum uji: 34  sesudah rollback: 34   (tidak ada yang tertulis)
+
+--- Rantai penguraian diuji dengan tautan NYATA dari produksi ---
+Jaringan keluar  : nominatim 200, emsifa 200
+Tautan nyata     : -8.0868357, 112.2396983  (berhasil diperluas)
+Penguraian       : JAWA TIMUR / 35, KABUPATEN BLITAR / 3505,
+                   GARUM / 3505160, kode_pos 66182
+Sumber data      : 34 provinsi, 38 kab. Jatim, 22 kec. Kab. Blitar  (terisi)
 ```
 
 ## Uji
 
 | Berkas | Hasil |
 |---|---|
-| `TemplateSesuaiInformasiLembagaTest` (13 tes, baru) | lulus · bukti-gagal 3/13 dan 1/13 |
+| `TemplateSesuaiInformasiLembagaTest` (13 tes, baru) | lulus · bukti-gagal 3/13, 1/13, dan 1/13 (kolom urgensi_request) |
 | `MushafAddressAutoFillTest` (14) | lulus, termasuk penjagaan anti-data-pribadi |
 | `MushafRequestImportTest` (25) | lulus |
 | `DianosaImportGagalSebagianTest` (4) | lulus · bukti-gagal 2/4 |
 | `UmpanBalikImportTest` (3) | lulus · bukti-gagal 2/3 |
-| **Total `tests/Feature/Imports/`** | **65 lulus (301 assertion)** |
+| **Total `tests/Feature/Imports/`** | **65 lulus (302 assertion)** |
 | Vitest | 89 lulus |
 
 ## Belum selesai
