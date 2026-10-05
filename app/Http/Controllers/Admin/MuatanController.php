@@ -614,8 +614,8 @@ class MuatanController extends Controller
     /**
      * Boleh menyelesaikan distribusi?
      *
-     * Role distribusi dan super-admin. Kurir — walau punya izin muatan.scan dan
-     * shipments.update-status — TIDAK.
+     * Role distribusi, manager distribusi (yang memverifikasi), dan super-admin.
+     * Kurir — walau punya izin muatan.scan dan shipments.update-status — TIDAK.
      */
     private function bolehMenyelesaikan(?User $user): bool
     {
@@ -628,7 +628,8 @@ class MuatanController extends Controller
         }
 
         // Sabuk pengaman kedua: kalau izin muatan.complete suatu saat ikut
-        // diberikan ke kurir, perannya tetap menghalangi.
+        // diberikan ke kurir, perannya tetap menghalangi. Kurir mengantar barang;
+        // yang menyatakan barang sudah diterima adalah pemeriksa, bukan pengantar.
         return ! $user->hasRole(RoleEnum::COURIER->value);
     }
 
@@ -639,10 +640,10 @@ class MuatanController extends Controller
         }
 
         if ($user->hasRole(RoleEnum::COURIER->value)) {
-            return 'Kurir hanya boleh memindahkan status perjalanan. Menyelesaikan distribusi (status Diterima) adalah wewenang role distribusi.';
+            return 'Kurir hanya boleh memindahkan status perjalanan. Menyelesaikan distribusi (status Diterima) adalah wewenang Distribusi dan Manager Distribusi.';
         }
 
-        return 'Anda tidak berwenang menyelesaikan distribusi.';
+        return 'Menyelesaikan distribusi adalah wewenang Distribusi dan Manager Distribusi.';
     }
 
     /**

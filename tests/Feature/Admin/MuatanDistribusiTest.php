@@ -77,6 +77,20 @@ beforeEach(function () {
     );
     $superAdmin->syncPermissions($izin);
 
+    // Manager Distribusi: HANYA muatan.read + muatan.complete (sesuai migrasi
+    // 2026_10_06_000500). Bukan muatan.create/update/delete/scan — menyiapkan
+    // muatan dan memindai barang adalah pekerjaan operasional, bukan pengawas.
+    $manager = Role::firstOrCreate(
+        ['name' => RoleEnum::MANAGER->value],
+        ['display_name' => 'Manager Distribusi', 'guard_name' => 'web']
+    );
+    $manager->syncPermissions([
+        PermissionEnum::MUATAN_READ->value,
+        PermissionEnum::MUATAN_COMPLETE->value,
+        PermissionEnum::SHIPMENTS_READ->value,
+        PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
+    ]);
+
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
     foreach (['selesai-packing' => 5, 'pengiriman' => 6] as $slug => $urutan) {
@@ -248,7 +262,96 @@ it('mengizinkan kurir memindahkan status PERJALANAN', function () {
     expect($resi->fresh()->status->slug)->toBe('pengiriman');
 });
 
-// --- Kurir: Kelola Donatur dihapus ---
+it('MENGIZINKAN manager distribusi menyelesaikan distribusi', function () {
+    // Distribusi butuh VERIFIKASI MANUAL sebelum dinyatakan tuntas, dan manager
+    // distribusi adalah yang memverifikasi. Tanpa wewenang ini, satu-satunya yang
+    // bisa menutup muatan hanya super-admin.
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $resi = collect([resiSiapDiantar('pengiriman'), resiSiapDiantar('pengiriman')]);
+    foreach ($resi as $r) {
+        MuatanItem::factory()->create(['muatan_id' => $muatan->id, 'pengiriman_id' => $r->id]);
+    }
+
+    $this->actingAs($manager)
+        ->postJson(route('admin.muatan.selesaikan', $muatan))
+        ->assertSuccessful()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('berhasil', 2);
+
+    foreach ($resi as $r) {
+        expect($r->fresh()->status->slug)->toBe('diterima');
+    }
+
+    expect($muatan->fresh()->selesai)->toBeTrue();
+});
+
+it('menampilkan muatan kepada manager untuk dipantau', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+
+    Muatan::factory()->untukKurir($kurir)->create();
+    Muatan::factory()->untukKurir($kurir)->create();
+
+    $props = $this->actingAs($manager)
+        ->get(route('admin.muatan.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    // Melihat SEMUA muatan (bukan hanya miliknya) — manager memantau.
+    expect($props['muatan']['data'])->toHaveCount(2)
+        ->and($props['hanyaMiliknya'])->toBeFalse();
+});
+
+it('TIDAK memberi manager wewenang operasional muatan', function () {
+    // Manager memantau dan memverifikasi; menyiapkan muatan dan memindai barang
+    // adalah pekerjaan gudang dan kurir.
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+
+    expect($manager->can(PermissionEnum::MUATAN_CREATE->value))->toBeFalse()
+        ->and($manager->can(PermissionEnum::MUATAN_UPDATE->value))->toBeFalse()
+        ->and($manager->can(PermissionEnum::MUATAN_DELETE->value))->toBeFalse()
+        ->and($manager->can(PermissionEnum::MUATAN_SCAN->value))->toBeFalse();
+});
+
+it('menolak manager memindai barang masuk muatan', function () {
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+    $resi = resiSiapDiantar();
+
+    $this->actingAs($manager)
+        ->postJson(route('admin.muatan.scan', $muatan), ['no_resi' => $resi->no_resi])
+        ->assertForbidden();
+
+    expect($muatan->fresh()->total_resi)->toBe(0);
+});
+
+it('menyebut Distribusi dan Manager Distribusi pada pesan penolakan', function () {
+    // Pesan yang hanya menyebut "role distribusi" akan menyesatkan setelah
+    // manager ikut berwenang. Diuji lewat endpoint sungguhan: kurir diberi izin
+    // muatan.complete supaya permintaannya lolos middleware dan sampai ke
+    // pemeriksaan peran di controller, tempat pesannya dibuat.
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $kurir->givePermissionTo(PermissionEnum::MUATAN_COMPLETE->value);
+
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+    MuatanItem::factory()->create([
+        'muatan_id' => $muatan->id,
+        'pengiriman_id' => resiSiapDiantar('pengiriman')->id,
+    ]);
+
+    $pesan = $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.selesaikan', $muatan))
+        ->assertForbidden()
+        ->json('message');
+
+    expect($pesan)->toContain('Distribusi')
+        ->and($pesan)->toContain('Manager Distribusi')
+        ->and($pesan)->not->toContain('wewenang role distribusi');
+});
 
 it('mencabut izin donatur dari kurir', function () {
     $kurir = penggunaDenganRole(RoleEnum::COURIER->value);

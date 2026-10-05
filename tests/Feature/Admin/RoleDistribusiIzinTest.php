@@ -149,6 +149,65 @@ it('mendaftarkan role distribusi di konstanta peran frontend', function () {
         ->and($roles)->toContain("MANAGER: 'manager'");
 });
 
+it('memberi manager distribusi izin menyelesaikan distribusi lewat migrasi', function () {
+    // Distribusi butuh verifikasi manual; manager distribusi yang memverifikasi.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+
+    expect($manager->permissions->pluck('name'))->toContain(PermissionEnum::MUATAN_COMPLETE->value)
+        ->and($manager->permissions->pluck('name'))->toContain(PermissionEnum::MUATAN_READ->value);
+});
+
+it('TIDAK memberi manager wewenang operasional muatan', function () {
+    // Manager memantau dan memverifikasi; menyiapkan muatan dan memindai barang
+    // adalah pekerjaan operasional gudang dan kurir.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $izin = $manager->permissions->pluck('name');
+
+    expect($izin)->not->toContain(PermissionEnum::MUATAN_CREATE->value)
+        ->and($izin)->not->toContain(PermissionEnum::MUATAN_UPDATE->value)
+        ->and($izin)->not->toContain(PermissionEnum::MUATAN_DELETE->value)
+        ->and($izin)->not->toContain(PermissionEnum::MUATAN_SCAN->value);
+});
+
+it('TIDAK memberi kurir izin menyelesaikan distribusi walau manager dapat', function () {
+    // Perubahan untuk manager tidak boleh merembet ke kurir.
+    $kurir = Role::where('name', RoleEnum::COURIER->value)->first();
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+
+    expect($manager->permissions->pluck('name'))->toContain(PermissionEnum::MUATAN_COMPLETE->value)
+        ->and($kurir->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_COMPLETE->value);
+});
+
+it('menyembunyikan menu Tugas Kurir dari manager', function () {
+    // Menu "Tugas Kurir" adalah menu khusus kurir. AdminLayout memunculkan
+    // dropdown bila induk ATAU salah satu anaknya cocok, jadi bila induknya ikut
+    // memuat izin yang dipegang manager (mushaf-requests.read), menu itu muncul
+    // untuk manager dan role lain padahal isinya bukan untuk mereka.
+    $sumber = File::get(resource_path('js/Layouts/AdminLayout.svelte'));
+
+    // Ambil blok menu Tugas Kurir saja.
+    $mulai = strpos($sumber, "label: 'Tugas Kurir'");
+    expect($mulai)->not->toBeFalse();
+
+    $blok = substr($sumber, $mulai, 700);
+    $induk = substr($blok, 0, strpos($blok, 'children:'));
+
+    expect($induk)->toContain("requiredPermissions: ['muatan.scan']")
+        ->and($induk)->not->toContain('mushaf-requests.read');
+});
+
+it('mengembalikan izin manager lewat down()', function () {
+    $migrasi = require database_path('migrations/2026_10_06_000500_grant_muatan_complete_to_manager.php');
+
+    $migrasi->down();
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+
+    expect($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_COMPLETE->value)
+        ->and($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_READ->value);
+});
+
 it('menjaga menu Kelola Donatur tetap terdaftar untuk role lain', function () {
     $sumber = File::get(resource_path('js/Layouts/AdminLayout.svelte'));
 

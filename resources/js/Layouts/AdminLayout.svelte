@@ -123,7 +123,13 @@
         label: 'Tugas Kurir',
         route: null,
         dropdown: true,
-        requiredPermissions: ['muatan.scan', 'mushaf-requests.read'],
+        // Sengaja HANYA 'muatan.scan', bukan daftar yang di-ATAU-kan.
+        // AdminLayout memunculkan dropdown ini bila induk ATAU salah satu anaknya
+        // cocok; karena 'Permintaan Disetujui' memakai izin yang juga dipegang
+        // manager dan role lain, menyertakannya di sini membuat menu khusus KURIR
+        // ini ikut muncul untuk mereka. Anak 'Permintaan Disetujui' tetap punya
+        // izinnya sendiri, jadi kurir (yang punya keduanya) sudah tercakup.
+        requiredPermissions: ['muatan.scan'],
         children: [
           {
             label: 'Scan Barang',

@@ -329,6 +329,23 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::WAKAF_BATCH_CREATE->value,
             PermissionEnum::WAKAF_BATCH_UPDATE->value,
 
+            // Muatan & distribusi.
+            //
+            // Manager diberi HANYA dua izin, dan sengaja hanya dua:
+            //   muatan.read      — melihat seluruh muatan untuk memantau
+            //   muatan.complete  — menyelesaikan distribusi (verifikasi manual)
+            //
+            // Menyelesaikan distribusi butuh verifikasi manual sebelum dinyatakan
+            // tuntas, dan manager distribusi adalah yang memverifikasi. Tanpa ini,
+            // pekerjaan rutin itu hanya bisa dilakukan super-admin.
+            //
+            // TIDAK diberikan: muatan.create/update/delete/scan. Menyiapkan muatan
+            // dan memindai barang adalah pekerjaan operasional gudang dan kurir,
+            // bukan pengawas — pola yang sama dengan izin warehouse.* manager yang
+            // di atas juga sengaja hanya membaca.
+            PermissionEnum::MUATAN_READ->value,
+            PermissionEnum::MUATAN_COMPLETE->value,
+
             // Supervisor & monitoring
             PermissionEnum::SUPERVISOR_DASHBOARD->value,
             PermissionEnum::SUPERVISOR_WAREHOUSE_MONITOR->value,
