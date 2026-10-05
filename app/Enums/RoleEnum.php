@@ -10,4 +10,5 @@ enum RoleEnum: string
     case WAREHOUSE = 'warehouse';
     case SUPERVISOR = 'supervisor';
     case COURIER = 'courier';
+    case DISTRIBUSI = 'distribusi';
 }

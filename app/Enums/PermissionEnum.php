@@ -104,6 +104,14 @@ enum PermissionEnum: string
     case STATUS_UPDATE = 'status.update';
     case STATUS_TRACK = 'status.track';
 
+    // Muatan & distribusi (kurir mengantar, role distribusi menyelesaikan)
+    case MUATAN_READ = 'muatan.read';
+    case MUATAN_CREATE = 'muatan.create';
+    case MUATAN_UPDATE = 'muatan.update';
+    case MUATAN_DELETE = 'muatan.delete';
+    case MUATAN_SCAN = 'muatan.scan';
+    case MUATAN_COMPLETE = 'muatan.complete';
+
     // Wakaf batch
     case WAKAF_BATCH_CREATE = 'wakaf-batch.create';
     case WAKAF_BATCH_READ = 'wakaf-batch.read';

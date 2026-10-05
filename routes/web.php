@@ -10,14 +10,17 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DonaturController;
 use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\GalleryController;
-use App\Http\Controllers\Admin\LandingContent\ContactSettingsController;
+use App\Http\Controllers\Admin\KurirPermintaanController;
 // use App\Http\Controllers\Admin\SettingController; // Removed - All settings now under Landing Content
+use App\Http\Controllers\Admin\KurirScanController;
+use App\Http\Controllers\Admin\LandingContent\ContactSettingsController;
 use App\Http\Controllers\Admin\LandingContent\GeneralSettingsController;
 use App\Http\Controllers\Admin\LandingContent\LandingSettingsController;
 use App\Http\Controllers\Admin\LandingContent\LegalSettingsController;
 use App\Http\Controllers\Admin\LandingContent\SeoSettingsController;
 use App\Http\Controllers\Admin\LandingContent\SocialSettingsController;
 use App\Http\Controllers\Admin\MonitoringDashboardController;
+use App\Http\Controllers\Admin\MuatanController;
 use App\Http\Controllers\Admin\PengirimanController;
 use App\Http\Controllers\Admin\PengirimanTrackingController;
 use App\Http\Controllers\Admin\PermissionController;
@@ -596,6 +599,58 @@ Route::middleware(['auth'])->group(function () {
             ->only(['index', 'show'])
             ->parameters(['mushaf-requests' => 'mushafRequest'])
             ->middleware(['permission:mushaf-requests.read']);
+
+        // 🚚 Management Muatan & Distribusi
+        // Muatan = sekumpulan resi yang diantar satu kurir dalam satu perjalanan.
+        Route::prefix('muatan')->name('muatan.')->group(function () {
+            Route::get('/', [MuatanController::class, 'index'])
+                ->middleware('permission:muatan.read')
+                ->name('index');
+            Route::get('/buat', [MuatanController::class, 'create'])
+                ->middleware('permission:muatan.create')
+                ->name('create');
+            Route::post('/', [MuatanController::class, 'store'])
+                ->middleware('permission:muatan.create')
+                ->name('store');
+            Route::get('/{muatan}', [MuatanController::class, 'show'])
+                ->middleware('permission:muatan.read')
+                ->name('show');
+            Route::get('/{muatan}/ubah', [MuatanController::class, 'edit'])
+                ->middleware('permission:muatan.update')
+                ->name('edit');
+            Route::put('/{muatan}', [MuatanController::class, 'update'])
+                ->middleware('permission:muatan.update')
+                ->name('update');
+            Route::delete('/{muatan}', [MuatanController::class, 'destroy'])
+                ->middleware('permission:muatan.delete')
+                ->name('destroy');
+
+            // Pindai resi masuk muatan — kurir maupun role distribusi saat menyiapkan
+            Route::post('/{muatan}/pindai', [MuatanController::class, 'scanItem'])
+                ->middleware('permission:muatan.scan')
+                ->name('scan');
+
+            Route::post('/{muatan}/tambah-resi', [MuatanController::class, 'syncItems'])
+                ->middleware('permission:muatan.update')
+                ->name('sync-items');
+
+            Route::delete('/{muatan}/item/{item}', [MuatanController::class, 'removeItem'])
+                ->middleware('permission:muatan.delete')
+                ->name('remove-item');
+
+            // Kurir: pindahkan status perjalanan (bukan "diterima")
+            Route::post('/{muatan}/status-perjalanan', [MuatanController::class, 'ubahStatusPerjalanan'])
+                ->middleware('permission:muatan.scan')
+                ->name('status-perjalanan');
+
+            // Role distribusi (dan super-admin) saja: selesaikan distribusi.
+            // Penjagaan sesungguhnya ada di controller; middleware di sini adalah
+            // lapis pertama.
+            Route::post('/{muatan}/selesaikan', [MuatanController::class, 'selesaikanDistribusi'])
+                ->middleware('permission:muatan.complete')
+                ->name('selesaikan');
+        });
+
         Route::patch('mushaf-requests/{mushafRequest}/status', [App\Http\Controllers\Admin\MushafRequestController::class, 'updateStatus'])
             ->middleware('permission:mushaf-requests.update|mushaf-requests.approve|mushaf-requests.reject')
             ->name('mushaf-requests.update-status');
@@ -991,15 +1046,48 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/invalidate', [CacheController::class, 'invalidate'])->name('invalidate');
                 Route::get('/service/{service}/stats', [CacheController::class, 'serviceStats'])->name('service.stats');
             });
-    });
 
-    // CS specific routes (if needed later)
-    Route::middleware('permission:donatur.read')->prefix('cs')->name('cs.')->group(function () {
-        // Add CS specific routes here if needed
-    });
+        // CS specific routes (if needed later)
+        Route::middleware('permission:donatur.read')->prefix('cs')->name('cs.')->group(function () {
+            // Add CS specific routes here if needed
+        });
 
-    // Courier specific routes (if needed later)
-    Route::middleware('permission:shipments.read')->prefix('courier')->name('courier.')->group(function () {
-        // Add courier specific routes here if needed
+        // 🛵 Halaman khusus KURIR
+        //
+        // Semua yang boleh dilakukan kurir dalam satu tempat: memindai barang yang
+        // dibawanya, melihat calon permintaan yang sudah disetujui (untuk tahu mana
+        // yang siap diantar), dan membuka muatannya.
+        //
+        // Kurir TIDAK boleh mengelola donatur dan TIDAK boleh menyelesaikan
+        // distribusi — penegakannya ada di MuatanController, bukan sekadar di menu.
+        //
+        // Grup ini berada DI DALAM grup `admin` supaya rutenya menjadi admin/kurir/*
+        // dan nama rutenya admin.kurir.* — seragam dengan menu lain di sidebar.
+        Route::middleware('permission:muatan.read')->prefix('kurir')->name('kurir.')->group(function () {
+            Route::get('/', function () {
+                return redirect()->route('admin.kurir.muatan');
+            })->name('dashboard');
+
+            // Muatan yang dibawa kurir ini
+            Route::get('/muatan', [MuatanController::class, 'index'])
+                ->middleware('permission:muatan.read')
+                ->name('muatan');
+
+            // Pindai barang: per-pcs (no_resi) maupun per-box (kode_kerdus)
+            Route::get('/pindai', [KurirScanController::class, 'index'])
+                ->middleware('permission:muatan.scan')
+                ->name('pindai');
+            Route::post('/pindai/pcs', [KurirScanController::class, 'scanPcs'])
+                ->middleware('permission:muatan.scan')
+                ->name('pindai.pcs');
+            Route::post('/pindai/box', [KurirScanController::class, 'scanBox'])
+                ->middleware('permission:muatan.scan')
+                ->name('pindai.box');
+
+            // Calon permintaan mushaf yang sudah disetujui
+            Route::get('/permintaan-disetujui', [KurirPermintaanController::class, 'index'])
+                ->middleware('permission:mushaf-requests.read')
+                ->name('permintaan-disetujui');
+        });
     });
 });

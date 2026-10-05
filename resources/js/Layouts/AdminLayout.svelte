@@ -107,10 +107,35 @@
           }
         ]
       },
-      {
+      { 
         label: 'Permintaan Mushaf',
         route: '/admin/mushaf-requests',
         requiredPermissions: ['mushaf-requests.read']
+      },
+      {
+        // Satu menu untuk kurir DAN role distribusi — bukan dua menu yang isinya
+        // sama. Kurir melihat muatannya sendiri; role distribusi melihat semua.
+        label: 'Muatan & Distribusi',
+        route: '/admin/muatan',
+        requiredPermissions: ['muatan.read']
+      },
+      {
+        label: 'Tugas Kurir',
+        route: null,
+        dropdown: true,
+        requiredPermissions: ['muatan.scan', 'mushaf-requests.read'],
+        children: [
+          {
+            label: 'Scan Barang',
+            route: '/admin/kurir/pindai',
+            requiredPermissions: ['muatan.scan']
+          },
+          {
+            label: 'Permintaan Disetujui',
+            route: '/admin/kurir/permintaan-disetujui',
+            requiredPermissions: ['mushaf-requests.read']
+          }
+        ]
       },
       { 
         label: 'Manajemen Gudang', 
@@ -457,6 +482,13 @@
       'Pengemasan': 'archive-box',
       'Sertifikat': 'academic-cap',
       'Permintaan Mushaf': 'book-open',
+      // Ikon truk untuk muatan: ini menu soal MENGANGKUT barang, bukan mengemas.
+      // Sengaja beda dari 'Pengemasan' (kardus) supaya keduanya tidak terbaca
+      // sebagai hal yang sama.
+      'Muatan & Distribusi': 'truck',
+      'Tugas Kurir': 'id-card',
+      'Scan Barang': 'qr-code',
+      'Permintaan Disetujui': 'badge-check',
       'Manajemen Gudang': 'building-office-2',
       'Manajemen Pengguna': 'user-group',
       'Konten Landing': 'paint-brush',

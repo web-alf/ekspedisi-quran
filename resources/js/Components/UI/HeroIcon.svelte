@@ -73,6 +73,8 @@
   import IconPencilSquare from 'lucide-svelte/icons/square-pen';
   import IconPhone from 'lucide-svelte/icons/phone';
   import IconPhoto from 'lucide-svelte/icons/image';
+  import IconBadgeCheck from 'lucide-svelte/icons/badge-check';
+  import IconIdCard from 'lucide-svelte/icons/id-card';
   import IconPlay from 'lucide-svelte/icons/play';
   import IconPlus from 'lucide-svelte/icons/plus';
   import IconPrinter from 'lucide-svelte/icons/printer';
@@ -133,6 +135,8 @@
     'cpu-chip': IconCpuChip,
     'cube': IconCube,
     'archive-box': IconArchiveBox,
+    'badge-check': IconBadgeCheck,
+    'id-card': IconIdCard,
     'document-chart-bar': IconDocumentChartBar,
     'document-text': IconDocumentText,
     'envelope': IconEnvelope,
