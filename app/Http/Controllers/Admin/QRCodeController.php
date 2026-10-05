@@ -4,16 +4,18 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengiriman;
+use App\Services\QrCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-// use Intervention\Image\ImageManager;
-// use Intervention\Image\Drivers\Gd\Driver;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class QRCodeController extends Controller
 {
-    private $storagePath = 'public/qr-codes';
+    /**
+     * Logika pembuatan QR ada di QrCodeService supaya tombol manual dan
+     * perintah artisan `qr:generate-missing` menghasilkan QR yang identik.
+     */
+    public function __construct(private QrCodeService $qr) {}
 
     /**
      * Generate QR Code for pengiriman
@@ -22,7 +24,7 @@ class QRCodeController extends Controller
     {
         try {
             // Check if QR Code already exists - prevent regeneration
-            if ($pengiriman->qr_code_path && Storage::exists($pengiriman->qr_code_path)) {
+            if ($this->qr->sudahAda($pengiriman)) {
                 if (request()->expectsJson()) {
                     return response()->json([
                         'success' => false,
@@ -33,11 +35,9 @@ class QRCodeController extends Controller
                 return back()->withErrors(['error' => 'QR Code untuk resi '.$pengiriman->no_resi.' sudah ada.']);
             }
 
-            // Generate comprehensive QR data
-            $qrData = $this->buildQRData($pengiriman);
-
-            // Generate QR Code image
-            $qrCodePath = $this->generateQRImage($pengiriman, $qrData);
+            // Generate QR Code image (data & setelan ada di service)
+            $qrCodePath = $this->qr->buatDanSimpan($pengiriman);
+            $qrData = $this->qr->dataUntuk($pengiriman);
 
             // Update pengiriman record
             $pengiriman->update([
@@ -160,7 +160,7 @@ class QRCodeController extends Controller
             foreach ($pengirimanList as $pengiriman) {
                 try {
                     // Check if QR Code already exists - skip if exists
-                    if ($pengiriman->qr_code_path && Storage::exists($pengiriman->qr_code_path)) {
+                    if ($this->qr->sudahAda($pengiriman)) {
                         $results[] = [
                             'id' => $pengiriman->id,
                             'no_resi' => $pengiriman->no_resi,
@@ -173,11 +173,9 @@ class QRCodeController extends Controller
                         continue;
                     }
 
-                    // Generate comprehensive QR data
-                    $qrData = $this->buildQRData($pengiriman);
-
-                    // Generate QR Code image
-                    $qrCodePath = $this->generateQRImage($pengiriman, $qrData);
+                    // Generate QR Code image (data & setelan ada di service)
+                    $qrCodePath = $this->qr->buatDanSimpan($pengiriman);
+                    $qrData = $this->qr->dataUntuk($pengiriman);
 
                     // Update pengiriman record
                     $pengiriman->update([
@@ -273,93 +271,6 @@ class QRCodeController extends Controller
                 ] : null,
             ], 500);
         }
-    }
-
-    /**
-     * Build ultra-simple QR data - RESI ONLY LIKE OTHER EXPEDITIONS
-     */
-    private function buildQRData(Pengiriman $pengiriman)
-    {
-        // Ultra simple - just the resi number like most expeditions
-        $qrData = $pengiriman->no_resi;
-
-        \Log::info('Ultra-simple QR data built successfully', [
-            'pengiriman_id' => $pengiriman->id,
-            'no_resi' => $pengiriman->no_resi,
-            'data_length' => strlen($qrData),
-        ]);
-
-        return $qrData;
-    }
-
-    /**
-     * Generate QR Code image and save it to storage - ENHANCED VERSION
-     */
-    private function generateQRImage(Pengiriman $pengiriman, $qrData)
-    {
-        try {
-            // Ensure storage directory exists
-            if (! Storage::exists($this->storagePath)) {
-                Storage::makeDirectory($this->storagePath);
-            }
-
-            // Generate image content with optimized settings for easy scanning
-            $qrImage = QrCode::format('svg')
-                ->size(300) // Smaller size since data is much simpler
-                ->margin(1) // Minimal margin
-                ->errorCorrection('L') // Low error correction for maximum simplicity
-                ->generate($qrData); // Direct string, no JSON encoding
-
-            // Define file path with timestamp for uniqueness
-            $timestamp = now()->format('YmdHis');
-            $filename = "QR-{$pengiriman->no_resi}-{$timestamp}.svg";
-            $filePath = "{$this->storagePath}/{$filename}";
-
-            // Save to storage
-            Storage::put($filePath, $qrImage);
-
-            // Verify file was created successfully
-            if (! Storage::exists($filePath)) {
-                throw new \Exception('QR file was not created successfully');
-            }
-
-            \Log::info('QR image generated successfully', [
-                'pengiriman_id' => $pengiriman->id,
-                'no_resi' => $pengiriman->no_resi,
-                'file_path' => $filePath,
-                'file_size' => Storage::size($filePath),
-            ]);
-
-            return $filePath;
-
-        } catch (\Exception $e) {
-            \Log::error('QR image generation failed', [
-                'pengiriman_id' => $pengiriman->id,
-                'no_resi' => $pengiriman->no_resi,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw new \Exception('Failed to generate QR image: '.$e->getMessage());
-        }
-    }
-
-    /**
-     * Generate security signature - ENHANCED VERSION
-     */
-    private function generateSignature(string $noResi, ?string $date = null)
-    {
-        $date = $date ?: date('Y-m-d');
-        $appKey = config('app.key');
-
-        if (! $appKey) {
-            throw new \Exception('Application key not found for QR signature generation');
-        }
-
-        // Create more secure signature
-        $signatureData = $noResi.'|'.$appKey.'|'.$date.'|ekspedisi_quran';
-
-        return hash('sha256', $signatureData);
     }
 
     /**

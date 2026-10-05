@@ -34,12 +34,9 @@ beforeEach(function () {
 it('allows bulk qr generation when user has warehouse permission', function () {
     $pengiriman = Pengiriman::factory()->create();
 
-    QrCode::shouldReceive('format')->once()->andReturnSelf();
-    QrCode::shouldReceive('size')->once()->andReturnSelf();
-    QrCode::shouldReceive('margin')->once()->andReturnSelf();
-    QrCode::shouldReceive('errorCorrection')->once()->andReturnSelf();
-    QrCode::shouldReceive('generate')->once()->andReturn('fake-qr-data');
-
+    // Tidak ada mock QrCode di sini: controller sekarang memakai QrCodeService,
+    // dan mem-mock facade-nya memicu "Cannot redeclare ..." di Mockery sekaligus
+    // membuat tes tidak menguji pembuatan QR yang sebenarnya.
     $response = $this->actingAs($this->userWithWarehousePermission)
         ->postJson('/admin/qr/bulk-generate', [
             'pengiriman_ids' => [$pengiriman->id],
@@ -48,7 +45,17 @@ it('allows bulk qr generation when user has warehouse permission', function () {
     $response->assertOk()
         ->assertJson([
             'success' => true,
+            'summary' => ['success' => 1, 'errors' => 0],
         ]);
+
+    $pengiriman->refresh();
+
+    // Berkasnya benar-benar dibuat, dan isi QR-nya hanya nomor resi —
+    // format yang sama dengan yang dibaca pemindai gudang.
+    expect($pengiriman->qr_code_path)->not->toBeNull()
+        ->and($pengiriman->qr_code_data)->toBe($pengiriman->no_resi);
+
+    Storage::assertExists($pengiriman->qr_code_path);
 });
 
 it('denies bulk qr generation when user lacks permissions', function () {

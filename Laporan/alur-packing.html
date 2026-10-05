@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Alur Packing &amp; Pertanggungjawaban — EkspedisiQ</title>
+<style>
+  :root{
+    --line:#e2e8f0;
+    --line-strong:#cbd5e1;
+    --ink:#0f172a;
+    --ink-2:#475569;
+    --ink-3:#94a3b8;
+    --bg:#ffffff;
+    --wash:#f8fafc;
+    --accent:#5e6ad2;
+    --accent-wash:#eef0fb;
+    --warn:#b4443a;
+    --ok:#2f7d5f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+    width:1180px;padding:40px 44px 34px;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;
+    padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:30px}
+  h1{font-size:25px;font-weight:640;letter-spacing:-.02em}
+  header p{font-size:12.5px;color:var(--ink-2);margin-top:7px}
+  .stamp{text-align:right;font-size:11px;color:var(--ink-3);line-height:1.75;white-space:nowrap}
+  .stamp b{display:inline-block;font-size:11.5px;color:var(--ok);font-weight:600;
+    border:1px solid var(--line);border-radius:100px;padding:3px 11px;margin-bottom:6px}
+
+  h2{font-size:11px;font-weight:640;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:15px}
+
+  /* ---------- alur ---------- */
+  .flow{display:flex;align-items:stretch;gap:0}
+  .step{flex:1;border:1px solid var(--line);border-radius:9px;padding:13px 14px 14px;background:var(--bg)}
+  .step .no{font-size:10px;font-weight:640;color:var(--accent);letter-spacing:.08em}
+  .step h3{font-size:14.5px;font-weight:620;margin:6px 0 3px;letter-spacing:-.01em}
+  .step .role{font-size:11.5px;color:var(--ink-2);line-height:1.5}
+  .step .who{font-size:11px;color:var(--ink-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+  .step.key{border-color:var(--accent);background:var(--accent-wash)}
+  .step.key .no{color:var(--accent)}
+  .arrow{display:flex;align-items:center;justify-content:center;width:34px;flex:0 0 34px;
+    color:var(--line-strong);font-size:17px}
+
+  /* ---------- penghambat ---------- */
+  .blocker{margin-top:14px;border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:9px;padding:15px 18px;background:var(--wash)}
+  .blocker .tag{font-size:10px;font-weight:640;letter-spacing:.09em;text-transform:uppercase;color:var(--warn)}
+  .blocker h3{font-size:14.5px;font-weight:620;margin:7px 0 6px}
+  .blocker p{font-size:12.5px;color:var(--ink-2);line-height:1.68}
+  .blocker code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+    background:#eef2f7;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  .split{display:flex;gap:16px;margin-top:12px}
+  .split>div{flex:1;border:1px solid var(--line);border-radius:7px;padding:10px 12px;background:var(--bg)}
+  .split .lbl{font-size:10.5px;font-weight:640;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  .split .val{font-size:12.5px;color:var(--ink-2);line-height:1.55}
+  .yes{color:var(--ok);font-weight:620}
+  .no{color:var(--warn);font-weight:620}
+
+  /* ---------- hasil ---------- */
+  .stats{display:flex;gap:14px;margin:26px 0 20px}
+  .stat{flex:1;border:1px solid var(--line);border-radius:9px;padding:14px 16px}
+  .stat .n{font-size:27px;font-weight:660;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+  .stat .n small{font-size:13px;font-weight:500;color:var(--ink-3)}
+  .stat .l{font-size:11.5px;color:var(--ink-2);margin-top:8px;line-height:1.45}
+  .good{border-color:var(--accent)}
+  .good .n{color:var(--accent)}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:10.5px;font-weight:640;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-3);padding:0 10px 8px 0;border-bottom:1px solid var(--line-strong)}
+  td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);color:var(--ink-2)}
+  td.hi{color:var(--ink);font-weight:560}
+  td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+
+  .cap{display:flex;gap:12px;margin-top:16px}
+  .cap div{flex:1;border:1px solid var(--line);border-radius:7px;padding:10px 12px;text-align:center}
+  .cap .k{font-size:11.5px;color:var(--ink-2);font-weight:560}
+  .cap .v{font-size:17px;font-weight:640;margin-top:4px;color:var(--ink)}
+
+  footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Alur Packing &amp; Pertanggungjawaban</h1>
+    <p>dash.ekspedisiquran.com — diverifikasi dengan putaran packing nyata di produksi</p>
+  </div>
+  <div class="stamp">
+    <b>Terbukti berjalan</b><br>
+    6 Oktober 2026<br>
+    3 resi · 1 kerdus
+  </div>
+</header>
+
+<h2>Alur resmi — siapa mengerjakan apa</h2>
+<div class="flow">
+  <div class="step">
+    <div class="no">LANGKAH 1</div>
+    <h3>Supervisor Gudang</h3>
+    <div class="role">Menetapkan target harian</div>
+    <div class="who">3 pengguna · hanya dia yang berwenang</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step">
+    <div class="no">LANGKAH 2</div>
+    <h3>Surat Tugas</h3>
+    <div class="role">Otomatis 06:00, atau manual</div>
+    <div class="who">Tercatat: <code>assigned_by</code></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step">
+    <div class="no">LANGKAH 3</div>
+    <h3>Staf Gudang</h3>
+    <div class="role">Mengerjakan — bebas pilih QR</div>
+    <div class="who">18–20 pengguna · satu-satunya</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step key">
+    <div class="no">LANGKAH 4</div>
+    <h3>Pindai QR</h3>
+    <div class="role">1 QR = 1 resi = 1 mushaf</div>
+    <div class="who">Masuk kerdus sesuai jenis</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step key">
+    <div class="no">LANGKAH 5</div>
+    <h3>Jejak Pelaku</h3>
+    <div class="role">Tercatat atas nama pengerja</div>
+    <div class="who">Kolom <code>packed_by</code></div>
+  </div>
+</div>
+
+<div class="blocker">
+  <div class="tag">Penghambat yang ditemukan</div>
+  <h3>Staf gudang bisa memindai — tetapi tidak bisa <em>membuat</em> barang siap dipindai</h3>
+  <p>Pindai hanya menerima resi berstatus <code>packing</code>. Namun 26.096 dari 26.111 resi masih
+  <code>pemesanan</code>, dan wewenang memindahkan status itu tidak dipegang staf gudang. Selama
+  ini tak ada yang menjembatani — sehingga alur berhenti di langkah pertama.</p>
+  <div class="split">
+    <div>
+      <div class="lbl">Yang mengerjakan packing</div>
+      <div class="val"><b>Staf Gudang</b> (18 orang)<br>izin ubah status: <span class="no">tidak punya</span></div>
+    </div>
+    <div>
+      <div class="lbl">Yang boleh mengubah status</div>
+      <div class="val">super-admin · manager · kurir · distribusi<br>izin memindai: <span class="no">tidak ada yang punya</span></div>
+    </div>
+    <div>
+      <div class="lbl">Akibatnya</div>
+      <div class="val">Resi berstatus <code>packing</code> <b>0</b> dari 26.111<br><span class="no">alur tak pernah mulai</span></div>
+    </div>
+  </div>
+</div>
+
+<h2 style="margin-top:30px">Hasil putaran packing nyata</h2>
+<div class="stats">
+  <div class="stat good">
+    <div class="n">3</div>
+    <div class="l">resi berhasil dipindai<br>lewat endpoint sungguhan</div>
+  </div>
+  <div class="stat good">
+    <div class="n">3</div>
+    <div class="l">baris <code>packing_items</code> terbentuk<br>sebelumnya <b>0</b> sepanjang riwayat</div>
+  </div>
+  <div class="stat good">
+    <div class="n">1</div>
+    <div class="l">kerdus dibuat otomatis<br><span style="font-family:ui-monospace;font-size:11px">KB-20261006-003-A5-01</span></div>
+  </div>
+  <div class="stat">
+    <div class="n">3<small>/20</small></div>
+    <div class="l">isi kerdus A5<br>kapasitas sesuai jenis</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:130px">No. Resi</th>
+      <th style="width:190px">Kerdus</th>
+      <th style="width:150px">Pengerja</th>
+      <th style="width:70px">Urutan</th>
+      <th>Status akhir</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="mono hi">EQ-2026-21530</td>
+      <td class="mono">KB-20261006-003-A5-01</td>
+      <td class="hi">Staff Gudang <span style="color:var(--ink-3)">(id 3)</span></td>
+      <td>1</td>
+      <td>Proses Packing</td>
+    </tr>
+    <tr>
+      <td class="mono hi">EQ-2026-21531</td>
+      <td class="mono">KB-20261006-003-A5-01</td>
+      <td class="hi">Staff Gudang <span style="color:var(--ink-3)">(id 3)</span></td>
+      <td>2</td>
+      <td>Proses Packing</td>
+    </tr>
+    <tr>
+      <td class="mono hi">EQ-2026-21532</td>
+      <td class="mono">KB-20261006-003-A5-01</td>
+      <td class="hi">Staff Gudang <span style="color:var(--ink-3)">(id 3)</span></td>
+      <td>3</td>
+      <td>Proses Packing</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="cap">
+  <div><div class="k">Al-Quran A5</div><div class="v">20 eks</div></div>
+  <div><div class="k">Al-Quran A6</div><div class="v">40 eks</div></div>
+  <div><div class="k">Buku Iqro 1–6</div><div class="v">160 eks</div></div>
+  <div><div class="k">Satu kerdus</div><div class="v">satu jenis</div></div>
+</div>
+
+<footer>
+  <span>EkspedisiQ · verifikasi produksi 6 Okt 2026 · data uji dibiarkan untuk diperiksa di UI</span>
+  <span>3 resi · 1 kerdus · jejak pelaku terbentuk</span>
+</footer>
+
+</body>
+</html>
