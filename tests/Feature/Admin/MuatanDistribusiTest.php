@@ -388,7 +388,13 @@ it('hanya menawarkan kurir bawahan pada daftar pilihan manager', function () {
 it('menolak manager menugaskan kurir di luar timnya', function () {
     // Daftar di layar sudah disaring, tetapi permintaan bisa dikirim langsung
     // dengan id kurir manager lain — jadi penegakannya harus di server.
+    //
+    // Manager di sini SUDAH punya bawahan, karena itulah keadaan yang membuat
+    // batas tim berlaku: manager yang belum ditugasi bawahan sama sekali masih
+    // bebas memilih (lihat KurirDiBawahManagerTest), supaya pekerjaannya tidak
+    // terhenti sebelum penugasan diisi.
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    kurirBawahan($manager);
     $managerLain = penggunaDenganRole(RoleEnum::MANAGER->value);
     $orangLain = kurirBawahan($managerLain);
 

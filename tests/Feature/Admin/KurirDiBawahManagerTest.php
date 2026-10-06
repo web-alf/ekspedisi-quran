@@ -266,6 +266,82 @@ it('tidak mengubah perilaku untuk role di luar kurir dan manager', function () {
         ->assertSuccessful();
 });
 
+it('menawarkan seluruh kurir kepada manager yang belum punya bawahan', function () {
+    // Tanpa ini, manager yang belum ditugasi bawahan sama sekali melihat daftar
+    // KOSONG dan tidak bisa membuat muatan apa pun — pekerjaannya terhenti hanya
+    // karena penugasan belum diisi, bukan karena ia tidak berwenang.
+    $manager = managerDistribusi();
+    $kurirA = kurirDiBawah();
+    $kurirB = kurirDiBawah();
+
+    expect($manager->bawahan()->count())->toBe(0);
+
+    $props = actingAs($manager)
+        ->get(route('admin.muatan.create'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    $id = collect($props['kurirList'])->pluck('id');
+
+    expect($id)->toContain($kurirA->id)
+        ->and($id)->toContain($kurirB->id);
+});
+
+it('menyempitkan daftar ke bawahan begitu manager punya bawahan', function () {
+    // Pembatasan tetap berlaku penuh setelah ada bawahan — itulah keadaan yang
+    // diinginkan, dan hanya keadaan "belum ditugaskan" yang dikecualikan.
+    $manager = managerDistribusi();
+    $anakBuah = kurirDiBawah($manager);
+    $orangLain = kurirDiBawah();
+
+    $props = actingAs($manager)
+        ->get(route('admin.muatan.create'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    $id = collect($props['kurirList'])->pluck('id');
+
+    expect($id)->toContain($anakBuah->id)
+        ->and($id)->not->toContain($orangLain->id);
+});
+
+it('membiarkan manager tanpa bawahan menugaskan kurir mana pun', function () {
+    // Sisi server harus sepakat dengan daftar di layar: kalau layar menawarkan
+    // seluruh kurir sementara validasi menolaknya, manager hanya melihat galat.
+    $manager = managerDistribusi();
+    $kurir = kurirDiBawah();
+
+    actingAs($manager)
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 2,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(Muatan::where('kurir_id', $kurir->id)->exists())->toBeTrue();
+});
+
+it('tetap menolak kurir di luar tim setelah manager punya bawahan', function () {
+    // Penjaga sebaliknya: pengecualian "belum punya bawahan" tidak boleh
+    // melemahkan batas tim begitu bawahan sudah ada.
+    $manager = managerDistribusi();
+    kurirDiBawah($manager);
+    $orangLain = kurirDiBawah();
+
+    actingAs($manager)
+        ->from(route('admin.muatan.create'))
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $orangLain->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 1,
+        ])
+        ->assertSessionHasErrors('kurir_id');
+
+    expect(Muatan::where('kurir_id', $orangLain->id)->exists())->toBeFalse();
+});
+
 it('melaporkan muatan tanpa pemilik sebagai daftar kosong bagi kurir', function () {
     // Kurir tidak boleh "melihat tapi tidak bisa membuka": daftarnya ikut
     // disaring, jadi yang tampil selalu yang boleh dibuka.

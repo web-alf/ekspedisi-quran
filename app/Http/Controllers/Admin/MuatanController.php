@@ -159,10 +159,18 @@ class MuatanController extends Controller
         // Manager hanya menugaskan kurir bawahannya. Tanpa ini, manager bisa
         // menugaskan kurir manager lain hanya dengan mengirim id-nya langsung,
         // walau daftar di layar sudah disaring.
-        if ($request->user()->adalahManager() && ! in_array($kurir->id, $request->user()->idBawahan(), true)) {
-            return back()->withErrors([
-                'kurir_id' => 'Kurir itu bukan bagian dari tim Anda.',
-            ]);
+        //
+        // Manager yang belum punya bawahan sama sekali dikecualikan — sama seperti
+        // daftar di layar — supaya pekerjaannya tidak terhenti sebelum penugasan
+        // diisi. Begitu ia punya bawahan, batas ini berlaku penuh.
+        if ($request->user()->adalahManager()) {
+            $bawahan = $request->user()->bawahan()->pluck('id')->all();
+
+            if ($bawahan !== [] && ! in_array($kurir->id, $bawahan, true)) {
+                return back()->withErrors([
+                    'kurir_id' => 'Kurir itu bukan bagian dari tim Anda.',
+                ]);
+            }
         }
 
         $muatan = DB::transaction(function () use ($validated, $request) {
@@ -989,8 +997,17 @@ class MuatanController extends Controller
         // Manager menugaskan kurir BAWAHANNYA, bukan sembarang kurir. Daftar ini
         // juga yang dipakai validasi store(), jadi kurir di luar lingkup tidak
         // bisa ditugaskan walau id-nya dikirim langsung.
+        //
+        // Akan tetapi manager yang BELUM punya bawahan sama sekali tetap diberi
+        // seluruh kurir: kalau tidak, daftarnya kosong dan ia tidak bisa membuat
+        // muatan apa pun — pekerjaannya terhenti sebelum penugasan diisi.
+        // Pembatasan berlaku begitu ia punya bawahan.
         if ($user !== null && $user->adalahManager()) {
-            $query->whereIn('id', $user->idBawahan());
+            $bawahan = $user->bawahan()->pluck('id')->all();
+
+            if ($bawahan !== []) {
+                $query->whereIn('id', $bawahan);
+            }
         }
 
         return $query
