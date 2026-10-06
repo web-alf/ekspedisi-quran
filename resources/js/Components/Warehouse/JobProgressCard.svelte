@@ -218,7 +218,7 @@
         {#if status === 'pending' || status === 'processing'}
             <button
                 type="button"
-                onclick={cancelJob}
+                on:click={cancelJob}
                 class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
             >
                 Cancel
@@ -228,7 +228,7 @@
         {#if status === 'failed'}
             <button
                 type="button"
-                onclick={retryJob}
+                on:click={retryJob}
                 class="inline-flex items-center px-3 py-1.5 border border-blue-300 text-sm font-medium rounded text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
                 Retry

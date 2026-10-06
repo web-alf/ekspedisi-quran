@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\DailyPackingTask;
 use App\Models\PackingBox;
 use App\Models\PackingNotification;
+use App\Models\SharedBoxAssignment;
+use App\Models\User;
 use App\Services\PackingAssignmentService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,7 +30,7 @@ class DashboardController extends Controller
             $user = auth()->user();
 
             // Check if user has permission to access warehouse dashboard
-            if (!$user->can('warehouse.dashboard')) {
+            if (! $user->can('warehouse.dashboard')) {
                 return redirect()->route('admin.dashboard')
                     ->with('error', 'Akses ditolak. Anda tidak memiliki permission untuk mengakses halaman ini.');
             }
@@ -317,7 +319,7 @@ class DashboardController extends Controller
         }
 
         // Get shared box allocations for this user
-        $sharedAllocations = \App\Models\SharedBoxAssignment::where('daily_packing_task_id', $task->id)
+        $sharedAllocations = SharedBoxAssignment::where('daily_packing_task_id', $task->id)
             ->where('user_id', $userId)
             ->with(['packingBox.jenisQuran:id,nama_jenis,kode_jenis'])
             ->get()
@@ -349,7 +351,7 @@ class DashboardController extends Controller
     private function getSharedBoxesForCollaboration($user): array
     {
         // Get all shared boxes where this user has allocations OR that are related to their daily tasks
-        $sharedBoxIds = \App\Models\SharedBoxAssignment::where('user_id', $user->id)
+        $sharedBoxIds = SharedBoxAssignment::where('user_id', $user->id)
             ->whereDate('created_at', today())
             ->pluck('packing_box_id')
             ->unique();
@@ -358,7 +360,7 @@ class DashboardController extends Controller
             return [];
         }
 
-        $sharedBoxes = \App\Models\PackingBox::whereIn('id', $sharedBoxIds)
+        $sharedBoxes = PackingBox::whereIn('id', $sharedBoxIds)
             ->where('assignment_type', 'shared')
             ->with([
                 'jenisQuran:id,nama_jenis,kode_jenis',
@@ -429,18 +431,18 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        // Get shared boxes that this user is involved in or can see
+        // Supervisor/super-admin melihat seluruh kerdus bersama; staf lain hanya
+        // yang dia ikut kerjakan. Sebelumnya cabang "lihat semua" memakai
+        // ->role() pada query builder mentah — metode itu tidak ada, sehingga
+        // halaman ini selalu gagal 500 saat dibuka.
+        $lihatSemua = $user->can('supervisor.warehouse.monitor');
+
         $sharedBoxes = PackingBox::where('assignment_type', 'shared')
             ->where('status', '!=', 'sealed')
-            ->whereHas('sharedBoxAssignments', function ($query) use ($user) {
-                // Either user is a contributor OR user is supervisor who can see all
-                $query->where('user_id', $user->id)
-                    ->orWhereExists(function ($subQuery) use ($user) {
-                        $subQuery->select(DB::raw(1))
-                            ->from('users')
-                            ->where('id', $user->id)
-                            ->role(['supervisor', 'super-admin']);
-                    });
+            ->when(! $lihatSemua, function ($query) use ($user) {
+                $query->whereHas('sharedBoxAssignments', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
             })
             ->with([
                 'jenisQuran:id,nama_jenis,kode_jenis',
@@ -450,7 +452,7 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($box) {
                 $assignments = $box->sharedBoxAssignments;
-                $boxProgress = \App\Models\SharedBoxAssignment::getTotalProgressForBox($box);
+                $boxProgress = SharedBoxAssignment::getTotalProgressForBox($box);
 
                 return array_merge([
                     'id' => $box->id,
@@ -487,8 +489,9 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        // Get initial shared boxes data
-        $sharedBoxes = $this->getSharedBoxesStatus()->getData()->shared_boxes;
+        // Ambil data awal lewat method yang sama dengan endpoint status, supaya
+        // halaman dan auto-refresh-nya tidak pernah berbeda isi.
+        $sharedBoxes = $this->getSharedBoxesStatus()->getData(true)['shared_boxes'];
 
         return Inertia::render('Warehouse/SharedCollaboration', [
             'sharedBoxes' => $sharedBoxes,
@@ -623,7 +626,7 @@ class DashboardController extends Controller
 
             // Add shared box specific data
             if ($box->assignment_type === 'shared') {
-                $boxProgress = \App\Models\SharedBoxAssignment::getTotalProgressForBox($box);
+                $boxProgress = SharedBoxAssignment::getTotalProgressForBox($box);
                 $boxData = array_merge($boxData, [
                     'total_allocated' => $boxProgress['total_allocated'],
                     'total_completed' => $boxProgress['total_completed'],
@@ -702,7 +705,7 @@ class DashboardController extends Controller
             }
 
             // Trigger completion workflow
-            $result = \App\Models\SharedBoxAssignment::triggerCompletionWorkflow($box);
+            $result = SharedBoxAssignment::triggerCompletionWorkflow($box);
 
             return response()->json($result);
 
@@ -749,7 +752,7 @@ class DashboardController extends Controller
             }
 
             // Check if box is ready for sealing
-            $completionStatus = \App\Models\SharedBoxAssignment::getBoxCompletionStatus($box);
+            $completionStatus = SharedBoxAssignment::getBoxCompletionStatus($box);
 
             if (! $completionStatus['can_proceed_to_seal']) {
                 return response()->json([
@@ -767,7 +770,7 @@ class DashboardController extends Controller
             ]);
 
             // Create notifications for supervisors
-            $supervisors = \App\Models\User::permission('supervisor.warehouse.monitor')->get();
+            $supervisors = User::permission('supervisor.warehouse.monitor')->get();
 
             foreach ($supervisors as $supervisor) {
                 PackingNotification::create([
@@ -820,7 +823,7 @@ class DashboardController extends Controller
                 ->with(['jenisQuran:id,nama_jenis,kode_jenis', 'sharedBoxAssignments.user:id,name']);
 
             // Filter based on user permissions - supervisors can see all boxes
-            if (!$user->can('supervisor.warehouse.monitor')) {
+            if (! $user->can('supervisor.warehouse.monitor')) {
                 // Regular users can only see their own boxes or shared boxes they contributed to
                 $query->where(function ($q) use ($user) {
                     $q->where('assigned_user_id', $user->id)
@@ -831,7 +834,7 @@ class DashboardController extends Controller
             }
 
             $boxes = $query->get()->map(function ($box) {
-                $completionStatus = \App\Models\SharedBoxAssignment::getBoxCompletionStatus($box);
+                $completionStatus = SharedBoxAssignment::getBoxCompletionStatus($box);
 
                 return [
                     'id' => $box->id,

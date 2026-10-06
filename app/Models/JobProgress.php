@@ -37,6 +37,18 @@ class JobProgress extends Model
     ];
 
     /**
+     * Accessor turunan yang ikut diserialisasi ke frontend (halaman Job Monitor
+     * memakainya langsung, tanpa menghitung ulang di JS).
+     *
+     * @var array<int, string>
+     */
+    protected $appends = [
+        'status_display',
+        'duration_formatted',
+        'success_rate',
+    ];
+
+    /**
      * Relationships
      */
     public function user()
