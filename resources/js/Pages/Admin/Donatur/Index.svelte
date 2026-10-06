@@ -85,9 +85,20 @@
   }
   
   async function handleDelete(donation) {
-    const confirmed = await dialog.confirmDelete(`donatur ${donation.nama_donatur}`);
+    // Sama seperti di halaman detail: sebutkan apa yang ikut terhapus dan minta kode
+    // donaturnya diketik. Menghapus dari daftar sama permanennya dengan dari detail.
+    const confirmed = await dialog.confirmDeletePermanen({
+      nama: `donatur ${donation.nama_donatur} (${donation.kode_donatur})`,
+      rincian: [
+        `${donation.total_wakaf_items ?? 0} item wakaf`,
+        `${donation.total_pengiriman ?? 0} resi`,
+      ],
+      ketikUntuk: donation.kode_donatur
+    });
     if (confirmed) {
-      router.delete(`/admin/donatur/${donation.id}`, {
+      const url = `/admin/donatur/${donation.id}?konfirmasi_kode=${encodeURIComponent(donation.kode_donatur)}`;
+
+      router.delete(url, {
         onSuccess: () => {
           toast.success('Donatur berhasil dihapus');
         },

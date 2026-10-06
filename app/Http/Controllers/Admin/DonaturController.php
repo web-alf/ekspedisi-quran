@@ -17,6 +17,7 @@ use App\Models\WakafBatch;
 use App\Models\WakafItem;
 use App\Services\DonaturImportService;
 use App\Services\OnDemandCertificateService;
+use App\Support\KodeDonatur;
 use App\Support\PerPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -724,6 +725,10 @@ class DonaturController extends Controller
         try {
             DB::beginTransaction();
 
+            // Ambil ulang dengan kunci baris supaya dua permintaan hapus yang datang
+            // bersamaan tidak sama-sama lolos pemeriksaan lalu saling menimpa.
+            $donatur = Donatur::whereKey($donatur->getKey())->lockForUpdate()->firstOrFail();
+
             // Log deletion attempt
             logger()->info('=== ATTEMPTING TO DELETE DONATUR ===', [
                 'donatur_id' => $donatur->id,
@@ -731,6 +736,20 @@ class DonaturController extends Controller
                 'wakaf_items_count' => $donatur->wakafItems()->count(),
                 'pengiriman_count' => $donatur->pengiriman()->count(),
             ]);
+
+            // Tolak bila kode donatur yang diketik tidak cocok. Ini pagar di sisi server:
+            // halaman sudah memintanya, tapi permintaan bisa saja dikirim langsung tanpa
+            // lewat halaman, dan tanpa pemeriksaan ini pagar di layar bisa dilewati.
+            // Diperiksa HANYA bila benar-benar dikirim, supaya jalur lama yang tidak
+            // mengirimkannya tetap berjalan seperti sebelumnya.
+            if (request()->has('konfirmasi_kode')
+                && ! KodeDonatur::kodeSama(request()->input('konfirmasi_kode'), $donatur->kode_donatur)) {
+                DB::rollback();
+
+                return back()->withErrors([
+                    'error' => 'Kode donatur yang diketik tidak cocok. Penghapusan dibatalkan.',
+                ]);
+            }
 
             // Check if any pengiriman is not cancelled (only allow deletion if all are Batal)
             $nonCancelledItems = $donatur->wakafItems()

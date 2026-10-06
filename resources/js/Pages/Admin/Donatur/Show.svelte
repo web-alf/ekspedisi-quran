@@ -51,9 +51,32 @@
     }
     
     async function handleDelete() {
-        const confirmed = await dialog.confirmDelete(`donatur ${donatur.nama_donatur}`);
+        // Hapus donatur tidak menyisakan arsip apa pun: donatur, seluruh item wakaf, dan
+        // seluruh resinya hilang bersamaan. Konfirmasinya karena itu menyebutkan angkanya
+        // dan mewajibkan kode donatur diketik, supaya yang menekan tahu persis datanya.
+        const jumlahItem = donatur.wakaf_items?.length || 0;
+        const jumlahResi = donatur.pengiriman?.length || 0;
+
+        const rincian = [
+            `${jumlahItem} item wakaf`,
+            `${jumlahResi} resi`,
+        ];
+        if (totalQuran > 0) {
+            rincian.push(`catatan donasi ${donatur.donation_count || 1}x`);
+        }
+
+        const confirmed = await dialog.confirmDeletePermanen({
+            nama: `donatur ${donatur.nama_donatur} (${donatur.kode_donatur})`,
+            rincian,
+            ketikUntuk: donatur.kode_donatur
+        });
+
         if (confirmed) {
-            router.delete(`/admin/donatur/${donatur.id}`, {
+            // Metode DELETE tidak mengirim "body", jadi parameter disisipkan ke alamat.
+            // Dipakai bersama jalur lama oleh server sebagai pagar kedua.
+            const url = `/admin/donatur/${donatur.id}?konfirmasi_kode=${encodeURIComponent(donatur.kode_donatur)}`;
+
+            router.delete(url, {
                 onSuccess: () => {
                     toast.success('Donatur berhasil dihapus');
                     // Redirect to index after successful deletion

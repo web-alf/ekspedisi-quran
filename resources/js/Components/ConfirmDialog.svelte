@@ -11,8 +11,18 @@
   export let confirmText = 'OK';
   export let cancelText = 'Cancel';
   export let confirmOnly = false; // Show only confirm button, no cancel
+  export let requireText = null; // Jika diisi, pengguna wajib mengetik teks ini persis
 
   const dispatch = createEventDispatcher();
+
+  // Untuk tindakan yang menghapus data permanen tanpa arsip, tombol Hapus tidak cukup
+  // hanya "diklik" — pengguna harus mengetik kode donaturnya. Tujuannya bukan membuat
+  // sulit, tapi memastikan yang menekan tahu data mana yang sedang dihapus.
+  let ketik = '';
+  $: cocok = !requireText || ketik.trim() === requireText;
+  $: if (!show) {
+    ketik = '';
+  }
 
   // Type configurations
   const configs = {
@@ -45,6 +55,9 @@
   $: config = configs[type] || configs.warning;
 
   function handleConfirm() {
+    if (!cocok) {
+      return;
+    }
     dispatch('confirm');
     show = false;
   }
@@ -105,6 +118,23 @@
                   <p class="text-sm text-gray-500">
                     {message}
                   </p>
+
+                  {#if requireText}
+                    <div class="mt-3">
+                      <label for="confirm-require-text" class="block text-xs font-medium text-gray-700 mb-1">
+                        Ketik <span class="font-mono font-semibold text-gray-900">{requireText}</span> untuk mengonfirmasi
+                      </label>
+                      <input
+                        id="confirm-require-text"
+                        type="text"
+                        bind:value={ketik}
+                        autocomplete="off"
+                        spellcheck="false"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder={requireText}
+                      />
+                    </div>
+                  {/if}
                 </div>
               </div>
             </div>
@@ -115,7 +145,8 @@
             <!-- Confirm Button -->
             <button
               type="button"
-              class="inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm {config.confirmBtn} focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto"
+              disabled={!cocok}
+              class="inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm {config.confirmBtn} focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed sm:ml-3 sm:w-auto"
               on:click={handleConfirm}
             >
               {confirmText}

@@ -1,7 +1,7 @@
 <script>
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { dialog } from '../stores/dialog.js';
-  
+
   function handleConfirm() {
     if ($dialog.onConfirm) {
       $dialog.onConfirm();
@@ -23,6 +23,7 @@
   confirmText={$dialog.confirmText}
   cancelText={$dialog.cancelText}
   confirmOnly={$dialog.confirmOnly}
+  requireText={$dialog.requireText}
   on:confirm={handleConfirm}
   on:cancel={handleCancel}
 />

@@ -9,6 +9,7 @@ export const dialog = writable({
   confirmText: 'OK',
   cancelText: 'Cancel',
   confirmOnly: false,
+  requireText: null,
   onConfirm: null,
   onCancel: null
 });
@@ -24,6 +25,7 @@ export function showConfirm(options = {}) {
       confirmText: options.confirmText || 'OK',
       cancelText: options.cancelText || 'Cancel',
       confirmOnly: options.confirmOnly || false,
+      requireText: options.requireText || null,
       onConfirm: () => {
         hideDialog();
         resolve(true);
@@ -72,6 +74,28 @@ export function confirmDelete(itemName = 'item ini') {
     type: 'danger',
     confirmText: 'Hapus',
     cancelText: 'Batal'
+  });
+}
+
+/**
+ * Konfirmasi hapus untuk data yang tidak punya arsip sama sekali.
+ *
+ * `rincian` menyebutkan APA yang akan ikut terhapus, dan `ketikUntuk` mewajibkan
+ * pengguna mengetik kode donaturnya. Tanpa keduanya, menghapus donatur terasa
+ * sama ringannya dengan menutup notifikasi — padahal isinya lenyap permanen.
+ */
+export function confirmDeletePermanen({ nama, rincian = [], ketikUntuk = null }) {
+  const daftar = rincian.length > 0
+    ? ' Ikut terhapus: ' + rincian.join(', ') + '.'
+    : '';
+
+  return showConfirm({
+    title: 'Hapus Permanen',
+    message: `Data ${nama} akan dihapus PERMANEN dan tidak bisa dikembalikan.${daftar}`,
+    type: 'danger',
+    confirmText: 'Hapus Permanen',
+    cancelText: 'Batal',
+    requireText: ketikUntuk
   });
 }
 
