@@ -3,10 +3,19 @@
     import { router } from '@inertiajs/svelte';
     import { toast, dialog } from '../../../utils/notifications.js';
     import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+    import { can } from '../../../utils/permissions.js';
     
     // Required props
     export let donatur;
     export let certificateUrls = [];
+    
+    // Halaman ini juga dibuka role yang hanya BOLEH MEMBACA (mis. Staff Gudang
+    // memegang donatur.read untuk melihat tujuan kirim). Tombol yang mengubah data
+    // harus mengikuti izin, bukan sekadar peran — kalau tidak, tombolnya tampil
+    // tetapi aksinya ditolak server, dan pengguna mengira itu kerusakan.
+    $: bolehUbah = can.donatur.update();
+    $: bolehHapus = can.donatur.delete();
+    $: adaAksi = bolehUbah || bolehHapus;
     
     // Format helper for general dates (with day and time)
     function formatDate(dateString) {
@@ -93,23 +102,27 @@
                         ← Kembali
                     </button>
                     
-                    <button
-                        on:click={handleEdit}
-                        class="px-4 py-2 text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                        Edit
-                    </button>
+                    {#if bolehUbah}
+                        <button
+                            on:click={handleEdit}
+                            class="px-4 py-2 text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            Edit
+                        </button>
+                    {/if}
                     
-                    <button
-                        on:click={handleDelete}
-                        class="px-4 py-2 text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700 transition-colors {hasActiveShipments ? 'opacity-75' : ''}"
-                        title={hasActiveShipments ? 'Donatur memiliki pengiriman aktif - perlu dibatalkan terlebih dahulu' : 'Hapus donatur dan semua data terkait'}
-                    >
-                        Hapus
-                        {#if hasActiveShipments}
-                            <span class="ml-1 text-yellow-200">⚠️</span>
-                        {/if}
-                    </button>
+                    {#if bolehHapus}
+                        <button
+                            on:click={handleDelete}
+                            class="px-4 py-2 text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700 transition-colors {hasActiveShipments ? 'opacity-75' : ''}"
+                            title={hasActiveShipments ? 'Donatur memiliki pengiriman aktif - perlu dibatalkan terlebih dahulu' : 'Hapus donatur dan semua data terkait'}
+                        >
+                            Hapus
+                            {#if hasActiveShipments}
+                                <span class="ml-1 text-yellow-200">⚠️</span>
+                            {/if}
+                        </button>
+                    {/if}
                 </div>
             </div>
         </div>
@@ -324,38 +337,44 @@
                     </div>
                 </div>
 
-                <!-- Actions -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Aksi</h3>
-                    
-                    <div class="space-y-3">
-                        <button
-                            on:click={handleEdit}
-                            class="w-full px-4 py-2 text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                            Edit Donatur
-                        </button>
+                <!-- Actions — seluruh kartunya hilang bila pengguna tidak berwenang
+                     mengubah maupun menghapus, supaya tidak ada kotak kosong. -->
+                {#if adaAksi}
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Aksi</h3>
                         
-                        
-                        <div>
-                            <button
-                                on:click={handleDelete}
-                                class="w-full px-4 py-2 text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700 transition-colors {hasActiveShipments ? 'opacity-75' : ''}"
-                                title={hasActiveShipments ? 'Donatur memiliki pengiriman aktif - perlu dibatalkan terlebih dahulu' : 'Hapus donatur dan semua data terkait'}
-                            >
-                                Hapus Donatur
-                                {#if hasActiveShipments}
-                                    <span class="ml-2 text-yellow-200">⚠️</span>
-                                {/if}
-                            </button>
-                            {#if hasActiveShipments}
-                                <p class="mt-1 text-xs text-orange-600">
-                                    ⚠️ Donatur memiliki pengiriman aktif. Ubah status menjadi "Batal" terlebih dahulu.
-                                </p>
+                        <div class="space-y-3">
+                            {#if bolehUbah}
+                                <button
+                                    on:click={handleEdit}
+                                    class="w-full px-4 py-2 text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    Edit Donatur
+                                </button>
+                            {/if}
+                            
+                            {#if bolehHapus}
+                                <div>
+                                    <button
+                                        on:click={handleDelete}
+                                        class="w-full px-4 py-2 text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700 transition-colors {hasActiveShipments ? 'opacity-75' : ''}"
+                                        title={hasActiveShipments ? 'Donatur memiliki pengiriman aktif - perlu dibatalkan terlebih dahulu' : 'Hapus donatur dan semua data terkait'}
+                                    >
+                                        Hapus Donatur
+                                        {#if hasActiveShipments}
+                                            <span class="ml-2 text-yellow-200">⚠️</span>
+                                        {/if}
+                                    </button>
+                                    {#if hasActiveShipments}
+                                        <p class="mt-1 text-xs text-orange-600">
+                                            ⚠️ Donatur memiliki pengiriman aktif. Ubah status menjadi "Batal" terlebih dahulu.
+                                        </p>
+                                    {/if}
+                                </div>
                             {/if}
                         </div>
                     </div>
-                </div>
+                {/if}
             </div>
         </div>
     </div>
