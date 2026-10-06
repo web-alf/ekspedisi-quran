@@ -8,22 +8,27 @@
   
   export let user;
   export let roles = {};
+  export let managerList = [];
   export let auth = {};
   export const errors = {};
   export const flash = {};
-  
+
   // Check if this is the current user
   $: isCurrentUser = user.id === auth.user?.id;
-  
+
   let form = useForm({
     name: user.name || '',
     email: user.email || '',
     password: '',
     password_confirmation: '',
     role: user.role || '',
+    manager_id: user.manager_id || '',
     is_active: user.is_active !== undefined ? user.is_active : true
   });
-  
+
+  // Sama seperti di form tambah: atasan hanya masuk akal untuk kurir.
+  $: roleKurir = $form.role === 'courier';
+
   function handleSubmit(e) {
     e.preventDefault();
     
@@ -168,6 +173,35 @@
             </p>
           {/if}
         </div>
+
+        <!-- Manager / Atasan Field — hanya untuk kurir -->
+        {#if roleKurir}
+          <div>
+            <label for="manager_id" class="block text-sm font-medium text-gray-700 mb-2">
+              Manager Distribusi
+            </label>
+            <select
+              id="manager_id"
+              bind:value={$form.manager_id}
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] transition duration-200"
+              class:border-red-500={$form.errors.manager_id}
+            >
+              <option value="">Belum ditugaskan</option>
+              {#each managerList as manager}
+                <option value={manager.id}>{manager.name}</option>
+              {/each}
+            </select>
+            <p class="mt-1 text-xs text-gray-500">
+              Kurir ini berada di bawah manager yang dipilih. Manager tersebut yang menugaskan muatan dan memantau pengirimannya.
+            </p>
+            {#if $form.errors.manager_id}
+              <p class="mt-2 text-sm text-red-600 flex items-center">
+                <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />
+                {$form.errors.manager_id}
+              </p>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Password Section -->
         <div class="border-t border-gray-200 pt-6">

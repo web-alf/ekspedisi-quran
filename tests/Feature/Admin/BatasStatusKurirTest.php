@@ -296,20 +296,42 @@ it('menggabungkan batas manager dan batas kurir, bukan saling menggantikan', fun
     // begitu penggunanya bukan kurir, sehingga batas manager ikut hilang dan
     // manager melihat pilihan tahap awal (pemesanan s/d packing) yang datanya
     // sendiri tidak pernah muncul untuk dia.
+    //
+    // "Batal" ikut muncul karena manager mengerjakan perjalanan kurir
+    // bawahannya, termasuk mencatat resi yang gagal diantar.
     $manager = pengguna(RoleEnum::MANAGER->value);
     $manager->givePermissionTo(PermissionEnum::SHIPMENTS_READ->value);
 
     expect(collect(PengirimanStageVisibility::visibleProgressStatuses($manager))->pluck('slug')->sort()->values()->all())
-        ->toBe(['diterima', 'pengiriman', 'selesai-packing']);
+        ->toBe(['batal', 'diterima', 'pengiriman', 'selesai-packing']);
 });
 
-it('menggabungkan kedua batas bila seseorang berperan manager sekaligus kurir', function () {
-    // Irisan kedua daftar: tahap yang boleh DILIHAT manager DAN boleh DIPILIH
-    // kurir. Tanpa penggabungan, salah satu batas akan hilang begitu saja.
+it('tidak menghilangkan wewenang kurir bila seseorang juga berperan manager', function () {
+    // Seseorang yang memegang kedua peran mendapat GABUNGAN wewenangnya:
+    // sebagai kurir ia boleh memindahkan perjalanan (pengiriman/batal), sebagai
+    // manager ia juga menangani tahap yang datanya ia lihat (selesai-packing,
+    // diterima). Yang penting: salah satu peran tidak diam-diam menghapus yang
+    // lain — itu yang dulu terjadi pada penyusunan daftar secara irisan.
     $keduanya = pengguna(RoleEnum::MANAGER->value);
     $keduanya->assignRole(RoleEnum::COURIER->value);
     $keduanya->givePermissionTo(PermissionEnum::SHIPMENTS_READ->value);
 
-    expect(collect(PengirimanStageVisibility::visibleProgressStatuses($keduanya))->pluck('slug')->all())
-        ->toBe(['pengiriman']);
+    expect(collect(PengirimanStageVisibility::visibleProgressStatuses($keduanya))->pluck('slug')->sort()->values()->all())
+        ->toBe(['batal', 'diterima', 'pengiriman', 'selesai-packing']);
+});
+
+it('manager TIDAK mendapat tahap gudang walau kini boleh memakai tahap kurir', function () {
+    // Inti perubahan "manager mengawasi kurir": manager memperoleh "Batal",
+    // bukan memperoleh tahap gudang. Kalau tes ini gagal, artinya wewenang
+    // manager ikut meluas ke pemesanan/produksi/packing — bukan yang dimaksud.
+    $manager = pengguna(RoleEnum::MANAGER->value);
+    $manager->givePermissionTo(PermissionEnum::SHIPMENTS_READ->value);
+
+    $slug = collect(PengirimanStageVisibility::visibleProgressStatuses($manager))->pluck('slug')->all();
+
+    expect($slug)->not->toContain('pemesanan')
+        ->and($slug)->not->toContain('produksi')
+        ->and($slug)->not->toContain('kedatangan')
+        ->and($slug)->not->toContain('packing')
+        ->and($slug)->toContain('batal');
 });

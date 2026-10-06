@@ -118,6 +118,21 @@ function penggunaDenganRole(string $role): User
     return $user;
 }
 
+/**
+ * Kurir yang benar-benar berada di bawah seorang manager.
+ *
+ * Sejak manager hanya melihat & menugaskan kurir bawahannya, kurir tanpa
+ * `manager_id` tidak lagi muncul di lingkup manager mana pun — jadi tes yang
+ * ingin manager "memantau kurirnya" harus menyatakan siapa atasannya.
+ */
+function kurirBawahan(User $manager): User
+{
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $kurir->forceFill(['manager_id' => $manager->id])->save();
+
+    return $kurir->fresh();
+}
+
 function resiSiapDiantar(string $slug = 'selesai-packing'): Pengiriman
 {
     return Pengiriman::factory()->create([
@@ -316,9 +331,9 @@ it('MENGIZINKAN manager distribusi menyelesaikan distribusi', function () {
     expect($muatan->fresh()->selesai)->toBeTrue();
 });
 
-it('menampilkan muatan kepada manager untuk dipantau', function () {
-    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+it('menampilkan muatan kurir bawahannya kepada manager untuk dipantau', function () {
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $kurir = kurirBawahan($manager);
 
     Muatan::factory()->untukKurir($kurir)->create();
     Muatan::factory()->untukKurir($kurir)->create();
@@ -328,9 +343,66 @@ it('menampilkan muatan kepada manager untuk dipantau', function () {
         ->assertSuccessful()
         ->viewData('page')['props'];
 
-    // Melihat SEMUA muatan (bukan hanya miliknya) — manager memantau.
+    // Melihat muatan BAWAHANNYA (bukan hanya miliknya sendiri) — manager memantau
+    // timnya, bukan seluruh perusahaan.
     expect($props['muatan']['data'])->toHaveCount(2)
         ->and($props['hanyaMiliknya'])->toBeFalse();
+});
+
+it('tidak memperlihatkan muatan kurir manager lain', function () {
+    // Batas lingkup manager: kalau ini gagal, keempat manager distribusi saling
+    // melihat pekerjaan satu sama lain dan pemisahan tim jadi tidak ada artinya.
+    $managerSaya = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $managerLain = penggunaDenganRole(RoleEnum::MANAGER->value);
+
+    Muatan::factory()->untukKurir(kurirBawahan($managerSaya))->create();
+    Muatan::factory()->untukKurir(kurirBawahan($managerLain))->create();
+    Muatan::factory()->untukKurir(kurirBawahan($managerLain))->create();
+
+    $props = $this->actingAs($managerSaya)
+        ->get(route('admin.muatan.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect($props['muatan']['data'])->toHaveCount(1);
+});
+
+it('hanya menawarkan kurir bawahan pada daftar pilihan manager', function () {
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $managerLain = penggunaDenganRole(RoleEnum::MANAGER->value);
+
+    $anakBuah = kurirBawahan($manager);
+    $orangLain = kurirBawahan($managerLain);
+
+    $props = $this->actingAs($manager)
+        ->get(route('admin.muatan.create'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    $idTerdaftar = collect($props['kurirList'])->pluck('id')->all();
+
+    expect($idTerdaftar)->toContain($anakBuah->id)
+        ->and($idTerdaftar)->not->toContain($orangLain->id);
+});
+
+it('menolak manager menugaskan kurir di luar timnya', function () {
+    // Daftar di layar sudah disaring, tetapi permintaan bisa dikirim langsung
+    // dengan id kurir manager lain — jadi penegakannya harus di server.
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $managerLain = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $orangLain = kurirBawahan($managerLain);
+
+    $this->actingAs($manager)
+        ->from(route('admin.muatan.create'))
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $orangLain->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 1,
+        ])
+        ->assertRedirect(route('admin.muatan.create'))
+        ->assertSessionHasErrors('kurir_id');
+
+    expect(Muatan::where('kurir_id', $orangLain->id)->exists())->toBeFalse();
 });
 
 it('memberi manager wewenang menyiapkan muatan: membuat dan memindai', function () {
@@ -348,7 +420,7 @@ it('memberi manager wewenang menyiapkan muatan: membuat dan memindai', function 
 
 it('mengizinkan manager memindai barang masuk muatan', function () {
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
-    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $kurir = kurirBawahan($manager);
     $muatan = Muatan::factory()->untukKurir($kurir)->create();
     $resi = resiSiapDiantar();
 
@@ -361,7 +433,7 @@ it('mengizinkan manager memindai barang masuk muatan', function () {
 
 it('mengizinkan manager membuat muatan sendiri', function () {
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
-    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $kurir = kurirBawahan($manager);
 
     $this->actingAs($manager)
         ->post(route('admin.muatan.store'), [

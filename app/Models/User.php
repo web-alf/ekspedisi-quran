@@ -3,15 +3,20 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\RoleEnum;
+use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, HasRoles, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -25,6 +30,7 @@ class User extends Authenticatable
         'role', // Keep for backward compatibility during migration
         'role_id',
         'is_active',
+        'manager_id',
     ];
 
     /**
@@ -73,12 +79,80 @@ class User extends Authenticatable
     }
 
     /**
+     * Manager distribusi yang membawahi pengguna ini.
+     *
+     * Ada supaya hubungan "kurir di bawah manager" melekat pada DATA, bukan pada
+     * asumsi bahwa semua manager membawahi semua kurir. Tanpa ini, keempat
+     * manager tidak bisa dibedakan satu sama lain.
+     */
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /**
+     * Pengguna yang berada di bawah manager ini.
+     */
+    public function bawahan(): HasMany
+    {
+        return $this->hasMany(User::class, 'manager_id');
+    }
+
+    /**
+     * Apakah pengguna ini manager distribusi.
+     */
+    public function adalahManager(): bool
+    {
+        return $this->hasRole(RoleEnum::MANAGER->value);
+    }
+
+    /**
+     * Apakah pengguna ini kurir.
+     */
+    public function adalahKurir(): bool
+    {
+        return $this->hasRole(RoleEnum::COURIER->value);
+    }
+
+    /**
+     * ID pengguna yang menjadi tanggung jawab pengguna ini.
+     *
+     * Manager mendapat bawahan langsungnya; selain manager mendapat dirinya
+     * sendiri — sehingga pemanggil bisa memakai satu daftar tanpa bercabang:
+     * manager melihat bawahannya, kurir melihat dirinya.
+     *
+     * @return array<int, int>
+     */
+    public function idBawahan(): array
+    {
+        if (! $this->adalahManager()) {
+            return [$this->id];
+        }
+
+        return $this->bawahan()->pluck('id')->push($this->id)->all();
+    }
+
+    /**
+     * Manager distribusi yang bisa dipilih sebagai atasan.
+     *
+     * @return Collection<int, User>
+     */
+    public static function daftarManager(): Collection
+    {
+        return static::query()
+            ->whereHas('roles', fn ($q) => $q->where('name', RoleEnum::MANAGER->value))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+    }
+
+    /**
      * Get user's role display name
      */
     public function getRoleDisplayAttribute()
     {
         $role = $this->roles->first();
-        if (!$role) {
+        if (! $role) {
             return 'No Role';
         }
 
@@ -93,7 +167,7 @@ class User extends Authenticatable
     public function getRolesDisplayAttribute()
     {
         // Use role's display_name or fallback to name
-        return $this->roles->map(function($role) {
+        return $this->roles->map(function ($role) {
             return $role->display_name ?? $role->name;
         })->toArray();
     }

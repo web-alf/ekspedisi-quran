@@ -135,6 +135,9 @@ class PengirimanStageVisibility
      *
      * Sengaja terpisah: menggabungkannya dengan appliesTo() akan ikut memotong
      * daftar resi kurir menjadi "pengiriman" saja.
+     *
+     * CATATAN: manager TIDAK termasuk di sini. Batas manajer adalah batas DATA
+     * (restricts), bukan batas pilihan — lihat visibleProgressStatuses().
      */
     public static function restrictsProgressChoice(?User $user): bool
     {
@@ -152,17 +155,25 @@ class PengirimanStageVisibility
     }
 
     /**
+     * Apakah user ini manager distribusi.
+     *
+     * Manager punya peran ganda: batas DATA-nya sempit (hanya tahap akhir), tetapi
+     * sebagai pengawas kurir ia juga mengerjakan perjalanan — termasuk mencatat
+     * resi yang gagal diantar ("Batal").
+     */
+    public static function adalahManager(?User $user): bool
+    {
+        return $user !== null && $user->hasRole(RoleEnum::MANAGER->value);
+    }
+
+    /**
      * Daftar status untuk dropdown/filter PEMINDAHAN STATUS.
      *
-     * Dipakai halaman detail Muatan ("Pindahkan Status Perjalanan"), filter status
-     * di daftar Pengiriman, dan halaman ubah status — tiga jalur yang dulu memuat
-     * daftarnya sendiri-sendiri sehingga bisa berbeda isi.
-     *
-     * Kurir dibatasi ke tahap perjalanan + batal. Role lain tidak dibatasi di sini:
-     * pembatasan data mereka sudah ditangani applyToQuery()/isVisible().
-     *
-     * Gagal-tertutup mengikuti aturan yang sama seperti manager: daftar kosong
-     * berarti tidak ada status yang bisa dipilih — bukan berarti boleh semua.
+     * Memakai PREDIKAT YANG SAMA dengan penegakan di server (bolehPilihStatus),
+     * supaya yang ditawarkan dan yang diterima tidak pernah berbeda. Dulu tiap
+     * jalur menyusun daftarnya sendiri, dan sempat juga dua batas diterapkan
+     * sebagai irisan — yang membuat manager kehilangan pilihan "Diterima" dan
+     * "Selesai Packing" padahal justru itu pekerjaannya.
      *
      * @return Collection<int, StatusPengiriman>
      */
@@ -173,42 +184,58 @@ class PengirimanStageVisibility
             ->select('id', 'nama', 'slug', 'warna')
             ->get();
 
-        // DUA batas berlaku di sini dan keduanya DIGABUNG, bukan saling
-        // menggantikan:
-        //
-        //   batas data (manager)   — tahap yang memang tidak boleh ia lihat
-        //   batas pilihan (kurir)  — tahap yang tidak boleh ia pindahkan
-        //
-        // Kalau batas data dilewati begitu saja, manager akan melihat pilihan
-        // tahap awal di filter padahal datanya sendiri tidak pernah muncul untuk
-        // dia — pilihan yang tidak mungkin dipakai.
-        if (static::restricts($user)) {
-            $allowed = static::allowedSlugs();
-            $statuses = $statuses->filter(fn ($s) => in_array($s->slug, $allowed, true))->values();
+        // Batas pilihan hanya berlaku untuk kurir dan manager; role lain memakai
+        // batas DATA-nya sendiri (restricts), bukan daftar ini.
+        if (! static::restrictsProgressChoice($user) && ! static::adalahManager($user)) {
+            return $statuses;
         }
 
-        if (static::restrictsProgressChoice($user)) {
-            $bolehDipilih = static::allowedProgressSlugs();
-            $statuses = $statuses->filter(fn ($s) => in_array($s->slug, $bolehDipilih, true))->values();
-        }
-
-        return $statuses;
+        return $statuses
+            ->filter(fn ($status) => static::bolehPilihStatus($user, $status))
+            ->values();
     }
 
     /**
      * Boleh memindahkan pengiriman ke status ini?
      *
-     * Dipakai server saat menerima permintaan perubahan status, supaya pembatasan
-     * tidak bergantung pada tampilan saja: kurir yang mengirim status_id tahap
-     * gudang langsung ke endpoint tetap ditolak.
+     * Ini SATU-SATUNYA sumber aturan tentang status yang boleh dipilih. Dipakai
+     * untuk menyusun pilihan di tampilan sekaligus untuk menolak permintaan di
+     * server, sehingga kurir yang mengirim status_id tahap gudang langsung ke
+     * endpoint tetap ditolak — dan pilihan yang tampil tidak pernah mengejutkan.
+     *
+     * Aturannya:
+     *   kurir    → tahap perjalanan saja (pengiriman, batal)
+     *   manager  → tahap perjalanan DItambah tahap yang datanya ia tangani
+     *              (termasuk "diterima", yang diselesaikan dengan verifikasi
+     *              manual). Tahap gudang tetap tertutup baginya.
+     *   lainnya  → tidak dibatasi di sini
      */
     public static function bolehPilihStatus(?User $user, StatusPengiriman $status): bool
     {
-        if (! static::restrictsProgressChoice($user)) {
+        if ($user === null) {
+            return false;
+        }
+
+        $kurirAtauManager = static::restrictsProgressChoice($user) || static::adalahManager($user);
+
+        if (! $kurirAtauManager) {
             return true;
         }
 
-        return in_array($status->slug, static::allowedProgressSlugs(), true);
+        // Tahap perjalanan selalu boleh — inilah yang dikerjakan kurir di jalan,
+        // dan yang diawasi manager.
+        if (in_array($status->slug, static::allowedProgressSlugs(), true)) {
+            return true;
+        }
+
+        // Manager juga menangani tahap yang datanya memang ia lihat. Ini yang
+        // membuat "Diterima Penerima" tetap bisa ia pilih untuk verifikasi
+        // manual, tanpa membuka tahap gudang untuknya.
+        if (static::adalahManager($user) && in_array($status->slug, static::allowedSlugs(), true)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -220,7 +247,7 @@ class PengirimanStageVisibility
             return null;
         }
 
-        return 'Kurir hanya boleh memindahkan status perjalanan pengiriman. '
+        return 'Status yang boleh dipindahkan hanya tahap perjalanan pengiriman. '
             ."Status \"{$status->nama}\" bukan bagian dari perjalanan.";
     }
 

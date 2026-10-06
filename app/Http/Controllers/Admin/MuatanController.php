@@ -13,6 +13,7 @@ use App\Models\StatusPengiriman;
 use App\Models\User;
 use App\Support\PengirimanStageVisibility;
 use App\Support\PerPage;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -65,9 +66,9 @@ class MuatanController extends Controller
             ])
             ->withCount('items');
 
-        if ($this->hanyaMiliknya($user)) {
-            $query->forKurir($user->id);
-        }
+        // Kurir melihat muatannya sendiri; manager melihat muatan bawahannya.
+        // Role lain (super-admin, gudang, supervisor) melihat semuanya.
+        $query = $this->lingkupMuatan($query, $user);
 
         if ($request->filled('kurir_id')) {
             $query->where('kurir_id', $request->integer('kurir_id'));
@@ -111,7 +112,7 @@ class MuatanController extends Controller
 
         return Inertia::render('Admin/Muatan/Index', PerPage::props($request) + [
             'muatan' => $muatan,
-            'kurirList' => $this->kurirList(),
+            'kurirList' => $this->kurirList($user),
             'filters' => $request->only(['search', 'kurir_id', 'tanggal']),
             'dapatMembuat' => $user->can(PermissionEnum::MUATAN_CREATE->value),
             'hanyaMiliknya' => $this->hanyaMiliknya($user),
@@ -121,7 +122,7 @@ class MuatanController extends Controller
     public function create(Request $request): Response
     {
         return Inertia::render('Admin/Muatan/Create', [
-            'kurirList' => $this->kurirList(),
+            'kurirList' => $this->kurirList($request->user()),
             // Resi yang sudah siap diantar dan belum masuk muatan mana pun.
             'resiSiap' => $this->resiBelumDimuat(),
         ]);
@@ -151,8 +152,17 @@ class MuatanController extends Controller
         // pemeriksaan ini, resi bisa "diantar" oleh akun gudang yang tidak pernah
         // berangkat.
         $kurir = User::find($validated['kurir_id']);
-        if (! $kurir || ! $kurir->hasRole(RoleEnum::COURIER->value)) {
+        if (! $kurir || ! $kurir->adalahKurir()) {
             return back()->withErrors(['kurir_id' => 'Pengguna yang dipilih bukan kurir.']);
+        }
+
+        // Manager hanya menugaskan kurir bawahannya. Tanpa ini, manager bisa
+        // menugaskan kurir manager lain hanya dengan mengirim id-nya langsung,
+        // walau daftar di layar sudah disaring.
+        if ($request->user()->adalahManager() && ! in_array($kurir->id, $request->user()->idBawahan(), true)) {
+            return back()->withErrors([
+                'kurir_id' => 'Kurir itu bukan bagian dari tim Anda.',
+            ]);
         }
 
         $muatan = DB::transaction(function () use ($validated, $request) {
@@ -263,7 +273,7 @@ class MuatanController extends Controller
                 'jumlah_lembaga' => $muatan->jumlah_lembaga,
                 'kurir_id' => $muatan->kurir_id,
             ],
-            'kurirList' => $this->kurirList(),
+            'kurirList' => $this->kurirList($request->user()),
         ]);
     }
 
@@ -773,27 +783,91 @@ class MuatanController extends Controller
     }
 
     /**
-     * Kurir hanya melihat muatannya sendiri.
+     * Apakah pengguna ini hanya boleh menyentuh muatan MILIKNYA sendiri.
+     *
+     * Kurir: ya. Manager: tidak — tapi ia dibatasi ke lingkup bawahan (lihat
+     * lingkupMuatan()).
      */
     private function hanyaMiliknya(?User $user): bool
+    {
+        return $user !== null && $user->adalahKurir();
+    }
+
+    /**
+     * ID kurir yang berada dalam lingkup pengguna ini.
+     *
+     * Manager distribusi membawahi sebagian kurir (kolom manager_id), jadi ia
+     * semestinya melihat muatan bawahannya tanpa harus melihat muatan kurir
+     * manager lain. Kurir cukup melihat dirinya sendiri.
+     *
+     * @return array<int, int>
+     */
+    private function lingkupKurir(?User $user): array
+    {
+        if ($user === null) {
+            return [];
+        }
+
+        if ($user->adalahManager()) {
+            return $user->idBawahan();
+        }
+
+        return [$user->id];
+    }
+
+    /**
+     * Batasi query muatan ke lingkup pengguna.
+     *
+     * Dipakai sebagai satu titik: baik kurir maupun manager sama-sama hanya
+     * melihat muatan dalam lingkupnya — kurir dirinya, manager bawahannya.
+     * Role lain (super-admin, gudang, supervisor) melihat semuanya.
+     *
+     * @param  Builder<Muatan>  $query
+     * @return Builder<Muatan>
+     */
+    private function lingkupMuatan(Builder $query, ?User $user): Builder
+    {
+        if ($user === null || ! ($user->adalahKurir() || $user->adalahManager())) {
+            return $query;
+        }
+
+        return $query->whereIn('kurir_id', $this->lingkupKurir($user));
+    }
+
+    /**
+     * Boleh melihat/mengubah muatan ini?
+     *
+     * Pembandingnya adalah KEPEMILIKAN DATA, bukan role semata: kurir A tidak
+     * boleh menyentuh muatan kurir B. Muatan yang belum ditugaskan ke kurir mana
+     * pun (kurir_id masih kosong) tidak dianggap milik siapa-siapa, jadi tidak
+     * bisa "diambil alih" hanya dengan menebak ID-nya.
+     */
+    private function bolehSentuh(?User $user, Muatan $muatan): bool
     {
         if ($user === null) {
             return false;
         }
 
-        // Pengawas tetap melihat semua; kurir tidak.
-        return $user->hasRole(RoleEnum::COURIER->value);
+        if (! ($user->adalahKurir() || $user->adalahManager())) {
+            return true;
+        }
+
+        if ($muatan->kurir_id === null) {
+            return false;
+        }
+
+        return in_array((int) $muatan->kurir_id, $this->lingkupKurir($user), true);
     }
 
     private function pastikanBolehLihat(Request $request, Muatan $muatan): void
     {
-        if ($this->hanyaMiliknya($request->user()) && (int) $muatan->kurir_id !== (int) $request->user()->id) {
-            abort(403, 'Anda hanya boleh melihat muatan milik Anda sendiri.');
+        if (! $this->bolehSentuh($request->user(), $muatan)) {
+            abort(403, 'Anda hanya boleh melihat muatan dalam lingkup Anda.');
         }
     }
 
     /**
-     * Kurir hanya boleh MENGUBAH muatannya sendiri.
+     * Kurir hanya boleh MENGUBAH muatan dalam lingkupnya.
      *
      * Wajib dipanggil di setiap aksi yang menyentuh isi muatan. Tanpa ini, kurir
      * yang menebak ID muatan kurir lain bisa memuat barang ke muatan orang lain
@@ -802,8 +876,8 @@ class MuatanController extends Controller
      */
     private function pastikanBolehKelola(Request $request, Muatan $muatan): void
     {
-        if ($this->hanyaMiliknya($request->user()) && (int) $muatan->kurir_id !== (int) $request->user()->id) {
-            abort(403, 'Anda hanya boleh mengubah muatan milik Anda sendiri.');
+        if (! $this->bolehSentuh($request->user(), $muatan)) {
+            abort(403, 'Anda hanya boleh mengubah muatan dalam lingkup Anda.');
         }
     }
 
@@ -906,11 +980,20 @@ class MuatanController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function kurirList(): array
+    private function kurirList(?User $user = null): array
     {
-        return User::query()
+        $query = User::query()
             ->whereHas('roles', fn ($q) => $q->where('name', RoleEnum::COURIER->value))
-            ->where('is_active', true)
+            ->where('is_active', true);
+
+        // Manager menugaskan kurir BAWAHANNYA, bukan sembarang kurir. Daftar ini
+        // juga yang dipakai validasi store(), jadi kurir di luar lingkup tidak
+        // bisa ditugaskan walau id-nya dikirim langsung.
+        if ($user !== null && $user->adalahManager()) {
+            $query->whereIn('id', $user->idBawahan());
+        }
+
+        return $query
             ->orderBy('name')
             ->get(['id', 'name', 'email'])
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])

@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
 use App\Models\Muatan;
 use App\Models\MuatanItem;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -269,9 +269,10 @@ class KurirScanController extends Controller
             }
 
             // Role distribusi/super-admin boleh memuat ke muatan mana pun saat
-            // menyiapkan; kurir hanya ke muatannya sendiri.
-            if ($user->hasRole(RoleEnum::COURIER->value) && (int) $muatan->kurir_id !== (int) $user->id) {
-                abort(403, 'Anda hanya boleh memuat barang ke muatan Anda sendiri.');
+            // menyiapkan; kurir hanya ke muatannya sendiri, manager hanya ke
+            // muatan kurir bawahannya.
+            if (! $this->bolehMuatKe($user, $muatan)) {
+                abort(403, 'Anda hanya boleh memuat barang ke muatan dalam lingkup Anda.');
             }
 
             return $muatan;
@@ -283,6 +284,26 @@ class KurirScanController extends Controller
             ->whereDate('tanggal_muatan', now()->toDateString())
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * Boleh memuat barang ke muatan ini?
+     *
+     * Kurir hanya ke muatannya sendiri; manager ke muatan kurir bawahannya.
+     * Muatan yang belum ditugaskan (kurir_id kosong) tidak dianggap milik siapa
+     * pun, sehingga tidak bisa diisi dengan menebak ID-nya.
+     */
+    private function bolehMuatKe(User $user, Muatan $muatan): bool
+    {
+        if (! ($user->adalahKurir() || $user->adalahManager())) {
+            return true;
+        }
+
+        if ($muatan->kurir_id === null) {
+            return false;
+        }
+
+        return in_array((int) $muatan->kurir_id, $user->idBawahan(), true);
     }
 
     /**

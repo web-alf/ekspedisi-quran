@@ -155,7 +155,7 @@ it('hanya menawarkan tiga status pada dropdown filter manager', function () {
         ->viewData('page')['props'];
 
     expect(collect($props['statusList'])->pluck('slug')->all())
-        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'diterima']);
+        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'diterima', 'batal']);
 });
 
 it('menolak manager membuka detail pengiriman tahap awal lewat URL langsung', function () {

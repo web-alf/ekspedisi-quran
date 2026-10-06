@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
 use App\Models\Sertifikat;
 use App\Models\User;
@@ -84,6 +85,7 @@ class UserController extends Controller
             'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
             }),
+            'managerList' => User::daftarManager(),
         ]);
     }
 
@@ -101,7 +103,13 @@ class UserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => ['required', 'exists:roles,name'],
+            'manager_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
+
+        // Atasan hanya masuk akal untuk akun lapangan (kurir). Manager tentu tidak
+        // membawahi manager lain di sini, dan role lain tidak diatur lewat jalur
+        // ini sama sekali — jadi penanda "di bawah siapa" cukup satu tingkat.
+        $atasan = $request->integer('manager_id') ?: null;
 
         $user = User::create([
             'name' => $request->name,
@@ -112,6 +120,12 @@ class UserController extends Controller
 
         // Assign role using Spatie
         $user->assignRole($request->role);
+
+        // Penugasan atasan dilakukan SETELAH role terpasang, supaya bisa
+        // diperiksa: hanya kurir yang punya atasan.
+        if ($atasan !== null) {
+            $user->forceFill(['manager_id' => $this->atasanSah($atasan, $request->role)])->save();
+        }
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User berhasil dibuat.');
@@ -132,6 +146,7 @@ class UserController extends Controller
             'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
             }),
+            'managerList' => User::daftarManager(),
             'auth' => [
                 'user' => [
                     'id' => auth()->id(),
@@ -157,6 +172,7 @@ class UserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
             'role' => ['required', 'exists:roles,name'],
             'is_active' => ['boolean'],
+            'manager_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         // Prevent admin from deactivating themselves
@@ -179,8 +195,34 @@ class UserController extends Controller
         // Update role using Spatie
         $user->syncRoles([$request->role]);
 
+        // Penanda atasan ikut berubah bersama role: kurir boleh punya atasan,
+        // role lain tidak. Termasuk saat role DIUBAH dari kurir ke yang lain —
+        // tanpa baris ini, sisa `manager_id` lama akan menggantung dan pengguna
+        // tetap masuk lingkup manager meski bukan kurir lagi.
+        $user->forceFill([
+            'manager_id' => $this->atasanSah($request->integer('manager_id') ?: null, $request->role),
+        ])->save();
+
         return redirect()->route('admin.users.index')
             ->with('success', 'User berhasil diupdate.');
+    }
+
+    /**
+     * Atasan yang sah untuk sebuah role.
+     *
+     * Hanya kurir yang punya atasan: dialah yang muatannya masuk lingkup manager.
+     * Menyimpan atasan pada role lain hanya akan menyesatkan — misalnya supervisor
+     * yang tidak pernah muncul di daftar muatan mana pun. Role non-kurir selalu
+     * dikembalikan sebagai null, sehingga memindahkan seseorang keluar dari kurir
+     * sekaligus melepas keterkaitannya.
+     */
+    private function atasanSah(?int $managerId, string $role): ?int
+    {
+        if ($managerId === null || $role !== RoleEnum::COURIER->value) {
+            return null;
+        }
+
+        return User::whereKey($managerId)->exists() ? $managerId : null;
     }
 
     /**
