@@ -1010,6 +1010,22 @@ class PengirimanController extends Controller
 
             try {
                 $nextStatuses = $this->getNextPossibleStatuses($currentStatus->id);
+
+                // Saring dengan wewenang pengguna, memakai sumber yang sama
+                // dengan halaman ubah status.
+                //
+                // Tanpa ini, endpoint ini MEMBOCORKAN seluruh tahap ke depan:
+                // kurir yang memindai resi akan ditawari tahap gudang, dan
+                // manager tahap yang bukan wewenangnya. Penolakan tetap ada di
+                // server saat menyimpan, tetapi menawarkan pilihan yang pasti
+                // ditolak membuat pengguna menebak-nebak.
+                $nextStatuses = $nextStatuses
+                    ->filter(fn ($status) => $status['id'] === null
+                        || PengirimanStageVisibility::bolehPilihStatus(
+                            auth()->user(),
+                            StatusPengiriman::find($status['id'])
+                        ))
+                    ->values();
             } catch (ModelNotFoundException $e) {
                 \Log::error('Status not found in getPengirimanStatusInfo', [
                     'no_resi' => $noResi,
@@ -1088,6 +1104,21 @@ class PengirimanController extends Controller
             }
 
             $oldStatus = $pengiriman->status_id;
+
+            // Wewenang atas TUJUAN statusnya, bukan hanya atas aksinya.
+            //
+            // Middleware rute hanya memastikan pengguna boleh mengubah status;
+            // ia tidak tahu status APA yang dituju. Tanpa pemeriksaan ini, kurir
+            // bisa memindahkan resi ke tahap gudang (produksi, packing, dst) —
+            // dan bahkan menandainya "diterima", padahal itu wewenang role
+            // distribusi/manager dengan verifikasi manual.
+            $statusTujuan = StatusPengiriman::find($request->status_id);
+            if ($statusTujuan && ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusTujuan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan),
+                ], 403);
+            }
 
             // Validate status transition
             $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
