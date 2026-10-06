@@ -264,9 +264,17 @@ class Donatur extends Model
      *                                                         donatur (perilaku create donatur baru). Untuk import/penambahan
      *                                                         bertahap, kirim jumlah delta dari baris yang diimport agar item
      *                                                         tidak berlipat ganda.
+     * @param  bool  $lanjutkanPenomoran
+     *                                    Bawaan true: nomor urut dilanjutkan dari item terakhir donatur ini, bukan
+     *                                    dimulai ulang dari 1. Ini penting karena item sering DITAMBAHKAN ke donatur
+     *                                    yang sudah ada (donasi rutin, impor ulang) — kalau nomornya mulai dari 1 lagi,
+     *                                    `sequence_in_type` bertabrakan dengan item lama, laporan jadi kabur, dan
+     *                                    pengiriman ganda ikut terbentuk. Untuk donatur yang baru dibuat perilakunya
+     *                                    sama saja, karena belum ada item sehingga titik mulainya 0.
+     *                                    Kirim false hanya bila memang ingin menomori ulang dari awal.
      * @return array<int, array<string, mixed>>
      */
-    public function generateWakafItems(?array $counts = null): array
+    public function generateWakafItems(?array $counts = null, bool $lanjutkanPenomoran = true): array
     {
         $items = [];
         $globalSequence = 1;
@@ -275,12 +283,25 @@ class Donatur extends Model
         $countA6 = $counts !== null ? (int) ($counts['a6'] ?? 0) : (int) ($this->attributes['total_a6_count'] ?? 0);
         $countIqra = $counts !== null ? (int) ($counts['iqra'] ?? 0) : (int) ($this->attributes['total_iqra_count'] ?? 0);
 
+        // Titik mulai penomoran. Untuk donasi rutin, lanjutkan dari yang sudah ada
+        // supaya tidak menimpa nomor lama; untuk donatur baru, mulai dari 1.
+        if ($lanjutkanPenomoran) {
+            $globalSequence = (int) $this->wakafItems()->max('global_sequence') + 1;
+            $mulaiA5 = (int) $this->wakafItems()->where('wakaf_type', 'A5')->max('sequence_in_type');
+            $mulaiA6 = (int) $this->wakafItems()->where('wakaf_type', 'A6')->max('sequence_in_type');
+            $mulaiIqra = (int) $this->wakafItems()->where('wakaf_type', 'IQRA')->max('sequence_in_type');
+        } else {
+            $mulaiA5 = 0;
+            $mulaiA6 = 0;
+            $mulaiIqra = 0;
+        }
+
         // Determine wakif name and doa based on prayer_mode
         $wakifName = ($this->prayer_mode === 'semua_donatur') ? $this->nama_donatur : null;
         $doaRequest = ($this->prayer_mode === 'semua_donatur') ? ($this->doa_untuk_semua ?? '') : '';
 
         // Generate A5 items - use the original database value, not computed
-        for ($i = 1; $i <= $countA5; $i++) {
+        for ($i = $mulaiA5 + 1; $i <= $mulaiA5 + $countA5; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'A5',
@@ -297,7 +318,7 @@ class Donatur extends Model
         }
 
         // Generate A6 items
-        for ($i = 1; $i <= $countA6; $i++) {
+        for ($i = $mulaiA6 + 1; $i <= $mulaiA6 + $countA6; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'A6',
@@ -314,7 +335,7 @@ class Donatur extends Model
         }
 
         // Generate IQRA items
-        for ($i = 1; $i <= $countIqra; $i++) {
+        for ($i = $mulaiIqra + 1; $i <= $mulaiIqra + $countIqra; $i++) {
             $items[] = [
                 'donatur_id' => $this->id,
                 'wakaf_type' => 'IQRA',

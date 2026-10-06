@@ -11,14 +11,22 @@ class WakafItemFactory extends Factory
 {
     protected $model = WakafItem::class;
 
+    /**
+     * Nomor urut harus UNIK per donatur + jenis (dijaga kunci di database). Nomor acak
+     * seperti sebelumnya menghasilkan tabrakan yang tidak mungkin terjadi pada data
+     * nyata — satu donatur tidak pernah punya dua item A5 bernomor 1 — sehingga tes
+     * gagal karena keadaan yang memang mustahil.
+     */
+    protected static int $urutan = 0;
+
     public function definition(): array
     {
         return [
             'donatur_id' => Donatur::factory(),
             'pengiriman_id' => null,
             'wakaf_type' => $this->faker->randomElement(['A5', 'A6', 'IQRA']),
-            'sequence_in_type' => $this->faker->numberBetween(1, 100),
-            'global_sequence' => $this->faker->numberBetween(1, 1000),
+            'sequence_in_type' => ++static::$urutan,
+            'global_sequence' => static::$urutan,
             'wakif_name' => $this->faker->name(),
             'doa_request' => $this->faker->optional()->sentence(),
             'relationship_to_donatur' => $this->faker->randomElement(['Diri sendiri', 'Keluarga', 'Teman', 'Saudara']),

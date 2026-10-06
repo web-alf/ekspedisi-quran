@@ -207,22 +207,35 @@ class DonaturController extends Controller
 
             if ($donatur) {
                 // Update existing donatur - ADD to existing quantities and INCREMENT donation count
+                //
+                // Dibedakan mana yang BARU ditambahkan barusan, terpisah dari total kumulatif.
+                // Angka inilah yang menentukan berapa item & pengiriman yang boleh dibuat:
+                // memakai total kumulatif membuat setiap donasi berikutnya menyalin ulang
+                // SELURUH item lama, sehingga item dan resi berlipat ganda.
+                $baruA5 = $currentA5;
+                $baruA6 = $currentA6;
+                $baruIqra = $currentIqra;
+
                 $donatur->update([
                     'nama_donatur' => $request->nama_donatur,
                     'no_hp' => $request->no_hp,
                     'email_donatur' => $request->email_donatur,
                     'alamat_donatur' => $request->alamat_donatur,
                     'donation_date' => $request->donation_date, // Keep latest date
-                    'total_a5_count' => $donatur->total_a5_count + $currentA5,
-                    'total_a6_count' => $donatur->total_a6_count + $currentA6,
-                    'total_iqra_count' => $donatur->total_iqra_count + $currentIqra,
+                    'total_a5_count' => $donatur->total_a5_count + $baruA5,
+                    'total_a6_count' => $donatur->total_a6_count + $baruA6,
+                    'total_iqra_count' => $donatur->total_iqra_count + $baruIqra,
                     'donation_count' => $donatur->donation_count + 1, // INCREMENT donation count
                     'jenis_wakaf_dipilih' => array_unique(array_merge($donatur->jenis_wakaf_dipilih ?? [], $request->jenis_wakaf_dipilih)),
                     'prayer_mode' => $request->prayer_mode,
                     'doa_untuk_semua' => $request->doa_untuk_semua,
                 ]);
             } else {
-                // Create new donatur
+                // Create new donatur — semuanya baru, jadi selisihnya sama dengan isian form
+                $baruA5 = $currentA5;
+                $baruA6 = $currentA6;
+                $baruIqra = $currentIqra;
+
                 $donatur = Donatur::create([
                     'kode_donatur' => $request->kode_donatur,
                     'nama_donatur' => $request->nama_donatur,
@@ -245,13 +258,30 @@ class DonaturController extends Controller
             $newWakafItems = [];
 
             if ($request->prayer_mode === 'customize_individual' && ! empty($request->wakif_details)) {
-                // Custom individual items
+                // Custom individual items.
+                //
+                // Nomor urut dari formulir dihitung dari 1, padahal donatur ini bisa saja
+                // sudah punya item dari donasi sebelumnya. Karena itu nomornya digeser
+                // sebanyak item yang sudah ada — kalau tidak, nomor lama tertimpa dan
+                // kunci unik menolak donasi yang sebenarnya sah.
+                $geserA5 = $donatur->wakafItems()->where('wakaf_type', 'A5')->max('sequence_in_type') ?? 0;
+                $geserA6 = $donatur->wakafItems()->where('wakaf_type', 'A6')->max('sequence_in_type') ?? 0;
+                $geserIqra = $donatur->wakafItems()->where('wakaf_type', 'IQRA')->max('sequence_in_type') ?? 0;
+                $geserGlobal = (int) $donatur->wakafItems()->max('global_sequence');
+
                 foreach ($request->wakif_details as $detail) {
+                    $geser = match ($detail['wakaf_type']) {
+                        'A5' => $geserA5,
+                        'A6' => $geserA6,
+                        'IQRA' => $geserIqra,
+                        default => 0,
+                    };
+
                     $wakafItem = WakafItem::create([
                         'donatur_id' => $donatur->id,
                         'wakaf_type' => $detail['wakaf_type'],
-                        'sequence_in_type' => $detail['sequence_in_type'],
-                        'global_sequence' => $detail['global_sequence'],
+                        'sequence_in_type' => (int) $detail['sequence_in_type'] + $geser,
+                        'global_sequence' => (int) $detail['global_sequence'] + $geserGlobal,
                         'wakif_name' => $detail['wakif_name'],
                         'doa_request' => $detail['doa_request'],
                         'relationship_to_donatur' => $detail['relationship_to_donatur'],
@@ -261,8 +291,14 @@ class DonaturController extends Controller
                     $newWakafItems[] = $wakafItem;
                 }
             } else {
-                // Default items (use generateWakafItems which respects prayer_mode)
-                $wakafItemsData = $donatur->generateWakafItems();
+                // HANYA sejumlah yang baru diisikan barusan — bukan total kumulatif — supaya
+                // donasi berikutnya milik orang yang sama tidak menyalin ulang item lama.
+                // Nomor urutnya dilanjutkan dari item terakhir donatur ini.
+                $wakafItemsData = $donatur->generateWakafItems([
+                    'a5' => $baruA5,
+                    'a6' => $baruA6,
+                    'iqra' => $baruIqra,
+                ]);
                 foreach ($wakafItemsData as $itemData) {
                     $wakafItem = WakafItem::create($itemData);
                     $newWakafItems[] = $wakafItem;
