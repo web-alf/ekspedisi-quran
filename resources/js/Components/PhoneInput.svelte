@@ -34,10 +34,30 @@
   }
 
   // Sync with external value changes (e.g. autocomplete)
+  //
+  // TelInput HANYA membaca prop `value` sekali saat dipasang (lewat onMount) dan tidak
+  // memantau perubahannya. Akibatnya nilai yang datang belakangan — mis. dari pengisian
+  // otomatis saat kode donatur dipilih — tidak pernah muncul di kotak isian, walau data
+  // formulirnya sudah terisi. `updateValue` adalah satu-satunya jalan masuk yang
+  // disediakan pustakanya, jadi harus dipanggil setiap kali nilainya berubah dari luar.
   let previousExternalValue = value;
+  let siapMenerimaPerubahan = false;
+
   $: if (value !== previousExternalValue) {
     previousExternalValue = value;
     parseExternalValue(value);
+
+    if (siapMenerimaPerubahan) {
+      telInputRef?.updateValue?.(telValue, country);
+    }
+  }
+
+  // Panggilan pertama saat dipasang sengaja dilewati: TelInput sudah menangani nilai
+  // awalnya sendiri lewat onMount, dan memanggilnya dua kali membuat kota isian berkedip.
+  $: {
+    if (!siapMenerimaPerubahan && telInputRef) {
+      siapMenerimaPerubahan = true;
+    }
   }
 
   $: filteredCountries = searchQuery.trim()
