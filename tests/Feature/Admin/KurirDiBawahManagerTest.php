@@ -266,6 +266,47 @@ it('tidak mengubah perilaku untuk role di luar kurir dan manager', function () {
         ->assertSuccessful();
 });
 
+it('tidak mengirim daftar kurir sama sekali kepada kurir', function () {
+    // Daftar kurir hanya untuk manager distribusi. Kurir tidak boleh menerimanya
+    // — bahkan namanya sendiri — karena prop itu ikut terkirim ke halaman dan
+    // bisa dibaca dari sumber halaman, bukan sekadar disembunyikan di layar.
+    $kurir = kurirDiBawah();
+    $kurirLain = kurirDiBawah();
+
+    $props = actingAs($kurir)
+        ->get(route('admin.muatan.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect($props['kurirList'])->toBe([]);
+
+    // Membuktikan tesnya tidak vakum: kalau daftarnya memang terisi, ia akan
+    // memuat kedua kurir ini.
+    expect(collect($props['kurirList'])->pluck('id')->all())->not->toContain($kurirLain->id);
+});
+
+it('mengirim daftar kurir kepada manager distribusi', function () {
+    // Penjaga sebaliknya: pembatasan tidak boleh ikut mengosongkan daftar bagi
+    // satu-satunya peran yang memang berhak melihatnya.
+    $manager = managerDistribusi();
+    $kurir = kurirDiBawah($manager);
+
+    $props = actingAs($manager)
+        ->get(route('admin.muatan.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect(collect($props['kurirList'])->pluck('id')->all())->toContain($kurir->id);
+});
+
+it('tidak memberi kurir akses ke halaman pengelolaan pengguna', function () {
+    // Tempat akun kurir terdaftar. Sudah tertutup oleh izin, tetapi dikunci juga
+    // karena inilah halaman yang paling gamblang menampilkan daftar pengguna.
+    $kurir = kurirDiBawah();
+
+    actingAs($kurir)->get(route('admin.users.index'))->assertForbidden();
+});
+
 it('menawarkan seluruh kurir kepada manager yang belum punya bawahan', function () {
     // Tanpa ini, manager yang belum ditugasi bawahan sama sekali melihat daftar
     // KOSONG dan tidak bisa membuat muatan apa pun — pekerjaannya terhenti hanya

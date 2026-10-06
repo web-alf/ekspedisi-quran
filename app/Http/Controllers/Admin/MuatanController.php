@@ -986,28 +986,39 @@ class MuatanController extends Controller
     }
 
     /**
+     * Daftar kurir yang boleh dilihat pengguna ini.
+     *
+     * HANYA manager distribusi yang boleh melihat daftar kurir; kurir tidak,
+     * bahkan dirinya sendiri. Daftar ini dipakai sebagai sumber nilai filter
+     * "Kurir" di halaman Muatan dan pilihan kurir saat membuat muatan, jadi
+     * mengembalikan daftar kosong berarti filter itu tidak dirender dan tidak ada
+     * nama kurir yang terkirim ke halaman — bukan sekadar disembunyikan di layar.
+     *
+     * Manager menugaskan kurir BAWAHANNYA, bukan sembarang kurir. Daftar ini
+     * juga yang dipakai validasi store(), jadi kurir di luar lingkup tidak bisa
+     * ditugaskan walau id-nya dikirim langsung.
+     *
+     * Akan tetapi manager yang BELUM punya bawahan sama sekali tetap diberi
+     * seluruh kurir: kalau tidak, daftarnya kosong dan ia tidak bisa membuat
+     * muatan apa pun — pekerjaannya terhenti sebelum penugasan diisi.
+     * Pembatasan berlaku begitu ia punya bawahan.
+     *
      * @return array<int, array<string, mixed>>
      */
     private function kurirList(?User $user = null): array
     {
+        if ($user === null || ! $user->adalahManager()) {
+            return [];
+        }
+
         $query = User::query()
             ->whereHas('roles', fn ($q) => $q->where('name', RoleEnum::COURIER->value))
             ->where('is_active', true);
 
-        // Manager menugaskan kurir BAWAHANNYA, bukan sembarang kurir. Daftar ini
-        // juga yang dipakai validasi store(), jadi kurir di luar lingkup tidak
-        // bisa ditugaskan walau id-nya dikirim langsung.
-        //
-        // Akan tetapi manager yang BELUM punya bawahan sama sekali tetap diberi
-        // seluruh kurir: kalau tidak, daftarnya kosong dan ia tidak bisa membuat
-        // muatan apa pun — pekerjaannya terhenti sebelum penugasan diisi.
-        // Pembatasan berlaku begitu ia punya bawahan.
-        if ($user !== null && $user->adalahManager()) {
-            $bawahan = $user->bawahan()->pluck('id')->all();
+        $bawahan = $user->bawahan()->pluck('id')->all();
 
-            if ($bawahan !== []) {
-                $query->whereIn('id', $bawahan);
-            }
+        if ($bawahan !== []) {
+            $query->whereIn('id', $bawahan);
         }
 
         return $query
