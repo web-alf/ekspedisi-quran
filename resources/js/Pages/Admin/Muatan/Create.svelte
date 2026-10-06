@@ -20,6 +20,7 @@
   let tanggal = new Date().toISOString().slice(0, 10);
   let namaMuatan = '';
   let catatan = '';
+  let jumlahLembaga = '';
   let terpilih = new Set();
   let cariResi = '';
   let memproses = false;
@@ -77,6 +78,7 @@
         tanggal_muatan: tanggal,
         nama_muatan: namaMuatan || null,
         catatan: catatan || null,
+        jumlah_lembaga: jumlahLembaga === '' ? null : Number(jumlahLembaga),
         pengiriman_ids: Array.from(terpilih),
       },
       {
@@ -161,6 +163,24 @@
               bind:value={catatan}
               class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
             />
+          </div>
+
+          <div>
+            <label for="jumlah_lembaga" class="block text-sm font-medium text-gray-700 mb-2">
+              Jumlah Lembaga (opsional)
+            </label>
+            <input
+              id="jumlah_lembaga"
+              type="number"
+              min="1"
+              bind:value={jumlahLembaga}
+              placeholder="mis. 5"
+              class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              Berapa lembaga yang akan dikunjungi muatan ini. Boleh dikosongkan.
+            </p>
+            {#if errors.jumlah_lembaga}<p class="text-xs text-red-600 mt-1">{errors.jumlah_lembaga}</p>{/if}
           </div>
         </div>
       </div>

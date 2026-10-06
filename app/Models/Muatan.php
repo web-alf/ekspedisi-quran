@@ -29,12 +29,14 @@ class Muatan extends Model
         'tanggal_muatan',
         'nama_muatan',
         'catatan',
+        'jumlah_lembaga',
         'total_resi',
         'total_mushaf',
     ];
 
     protected $casts = [
         'tanggal_muatan' => 'date',
+        'jumlah_lembaga' => 'integer',
         'total_resi' => 'integer',
         'total_mushaf' => 'integer',
     ];

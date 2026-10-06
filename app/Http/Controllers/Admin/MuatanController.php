@@ -7,6 +7,7 @@ use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
 use App\Models\Muatan;
 use App\Models\MuatanItem;
+use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\User;
@@ -99,6 +100,7 @@ class MuatanController extends Controller
             'nama_muatan' => $m->nama_muatan,
             'tanggal_muatan' => $m->tanggal_muatan?->format('Y-m-d'),
             'catatan' => $m->catatan,
+            'jumlah_lembaga' => $m->jumlah_lembaga,
             'kurir' => $m->kurir ? ['id' => $m->kurir->id, 'name' => $m->kurir->name] : null,
             'pembuat' => $m->pembuat?->name,
             'total_resi' => $m->total_resi,
@@ -135,11 +137,14 @@ class MuatanController extends Controller
             'tanggal_muatan' => ['required', 'date'],
             'nama_muatan' => ['nullable', 'string', 'max:255'],
             'catatan' => ['nullable', 'string', 'max:1000'],
+            'jumlah_lembaga' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'pengiriman_ids' => ['nullable', 'array'],
             'pengiriman_ids.*' => ['integer', 'exists:pengiriman,id'],
         ], [
             'kurir_id.required' => 'Kurir wajib dipilih',
             'tanggal_muatan.required' => 'Tanggal muatan wajib diisi',
+            'jumlah_lembaga.integer' => 'Jumlah lembaga harus berupa angka',
+            'jumlah_lembaga.min' => 'Jumlah lembaga minimal 1',
         ]);
 
         // Kurir yang dipilih harus benar-benar berperan sebagai kurir; tanpa
@@ -157,6 +162,7 @@ class MuatanController extends Controller
                 'tanggal_muatan' => $validated['tanggal_muatan'],
                 'nama_muatan' => $validated['nama_muatan'] ?? null,
                 'catatan' => $validated['catatan'] ?? null,
+                'jumlah_lembaga' => $validated['jumlah_lembaga'] ?? null,
             ]);
 
             foreach ($validated['pengiriman_ids'] ?? [] as $urutan => $pengirimanId) {
@@ -199,6 +205,7 @@ class MuatanController extends Controller
                 'nama_muatan' => $muatan->nama_muatan,
                 'tanggal_muatan' => $muatan->tanggal_muatan?->format('Y-m-d'),
                 'catatan' => $muatan->catatan,
+                'jumlah_lembaga' => $muatan->jumlah_lembaga,
                 'kurir' => $muatan->kurir ? ['id' => $muatan->kurir->id, 'name' => $muatan->kurir->name] : null,
                 'pembuat' => $muatan->pembuat?->name,
                 'total_resi' => $muatan->total_resi,
@@ -253,6 +260,7 @@ class MuatanController extends Controller
                 'nama_muatan' => $muatan->nama_muatan,
                 'tanggal_muatan' => $muatan->tanggal_muatan?->format('Y-m-d'),
                 'catatan' => $muatan->catatan,
+                'jumlah_lembaga' => $muatan->jumlah_lembaga,
                 'kurir_id' => $muatan->kurir_id,
             ],
             'kurirList' => $this->kurirList(),
@@ -268,6 +276,10 @@ class MuatanController extends Controller
             'tanggal_muatan' => ['required', 'date'],
             'nama_muatan' => ['nullable', 'string', 'max:255'],
             'catatan' => ['nullable', 'string', 'max:1000'],
+            'jumlah_lembaga' => ['nullable', 'integer', 'min:1', 'max:1000'],
+        ], [
+            'jumlah_lembaga.integer' => 'Jumlah lembaga harus berupa angka',
+            'jumlah_lembaga.min' => 'Jumlah lembaga minimal 1',
         ]);
 
         $kurir = User::find($validated['kurir_id']);
@@ -502,12 +514,116 @@ class MuatanController extends Controller
     }
 
     /**
-     * Tambah beberapa resi sekaligus ke muatan (dari daftar resi siap).
+     * Pindai per-box: isi kotak pindai adalah kode kerdus, bukan nomor resi.
+     *
+     * Memindai satu kerdus memuat SELURUH resi di dalamnya sekaligus — itulah
+     * gunanya memindai per-box: satu kerdus A5 bisa berisi 20 mushaf, dan
+     * memindainya satu per satu berarti 20 kali pindai untuk satu kerdus.
+     *
+     * Dipisah dari scanItem (bukan dideteksi otomatis dari isi kotak pindai)
+     * karena keduanya melakukan hal yang berbeda: yang satu menambah satu resi,
+     * yang satu lagi menambah seluruh isi kerdus. Menggabungkannya berarti satu
+     * salah baca menghasilkan puluhan resi termuat tanpa disadari.
      */
-    public function syncItems(Request $request, Muatan $muatan)
+    public function scanBox(Request $request, Muatan $muatan): JsonResponse
     {
         $this->pastikanBolehKelola($request, $muatan);
 
+        $validated = $request->validate([
+            'kode' => ['required', 'string'],
+        ]);
+
+        $kodeKerdus = $this->bersihkanKerdus($validated['kode']);
+
+        $box = PackingBox::with(['packingItems.pengiriman.status'])
+            ->where('kode_kerdus', $kodeKerdus)
+            ->first();
+
+        if (! $box) {
+            return response()->json([
+                'success' => false,
+                'message' => "Kerdus {$kodeKerdus} tidak ditemukan.",
+            ], 404);
+        }
+
+        $resinya = $box->packingItems
+            ->map(fn ($item) => $item->pengiriman)
+            ->filter()
+            ->values();
+
+        if ($resinya->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => "Kerdus {$kodeKerdus} belum berisi resi.",
+            ], 422);
+        }
+
+        $dimuat = 0;
+        $sudahDiMuatanIni = 0;
+        $diMuatanLain = [];
+        $belumSiap = [];
+
+        DB::transaction(function () use ($muatan, $resinya, $request, &$dimuat, &$sudahDiMuatanIni, &$diMuatanLain, &$belumSiap): void {
+            $urutan = (int) MuatanItem::where('muatan_id', $muatan->id)->max('urutan');
+
+            foreach ($resinya as $pengiriman) {
+                $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
+
+                if ($sudahAda) {
+                    if ((int) $sudahAda->muatan_id === (int) $muatan->id) {
+                        $sudahDiMuatanIni++;
+
+                        continue;
+                    }
+
+                    $diMuatanLain[] = $pengiriman->no_resi;
+
+                    continue;
+                }
+
+                // Satu kerdus bisa memuat resi dari beberapa tahap sekaligus.
+                // Resi yang belum siap DILEWATI dan dilaporkan, bukan menggagalkan
+                // seluruh kerdus — sisanya tetap harus bisa dimuat.
+                if (! $this->siapDimuat($pengiriman)) {
+                    $belumSiap[] = $pengiriman->no_resi.'.'.($pengiriman->status->slug ?? '-');
+
+                    continue;
+                }
+
+                $this->lampirkanResi($muatan, $pengiriman->id, $request->user()->id, ++$urutan);
+                $dimuat++;
+            }
+        });
+
+        $muatan->syncTotals();
+        $muatan->refresh();
+
+        $catatan = [];
+        if ($sudahDiMuatanIni > 0) {
+            $catatan[] = "{$sudahDiMuatanIni} sudah ada di muatan ini";
+        }
+        if ($diMuatanLain !== []) {
+            $catatan[] = count($diMuatanLain).' sudah dimuat di muatan lain ('.implode(', ', array_slice($diMuatanLain, 0, 3)).(count($diMuatanLain) > 3 ? ', ...' : '').')';
+        }
+        if ($belumSiap !== []) {
+            $catatan[] = count($belumSiap).' belum siap diantar ('.implode(', ', array_slice($belumSiap, 0, 3)).(count($belumSiap) > 3 ? ', ...' : '').')';
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $dimuat > 0
+                ? "Kerdus {$kodeKerdus}: {$dimuat} resi dimuat".($catatan !== [] ? '. Dilewati: '.implode('; ', $catatan).'.' : '.')
+                : "Tidak ada resi dari kerdus {$kodeKerdus} yang bisa dimuat".($catatan !== [] ? ': '.implode('; ', $catatan).'.' : '.'),
+            'dimuat' => $dimuat,
+            'total_resi' => $muatan->total_resi,
+            'total_mushaf' => $muatan->total_mushaf,
+            'jumlah_lembaga' => $muatan->jumlah_lembaga,
+        ]);
+    }
+
+    public function syncItems(Request $request, Muatan $muatan)
+    {
+        $this->pastikanBolehKelola($request, $muatan);
         $validated = $request->validate([
             'pengiriman_ids' => ['required', 'array'],
             'pengiriman_ids.*' => ['integer', 'exists:pengiriman,id'],
@@ -833,6 +949,28 @@ class MuatanController extends Controller
 
         if (preg_match('/EQ-\d{4}-\d{5}/', $teks, $m)) {
             return $m[0];
+        }
+
+        return $teks;
+    }
+
+    /**
+     * Ambil kode kerdus dari isi kotak pindai.
+     *
+     * Kode kerdus bisa datang sebagai teks polos maupun JSON dari pemindai lama,
+     * jadi keduanya diterima. Bentuknya KB-YYYYMMDD-USER-JENIS-NN.
+     */
+    private function bersihkanKerdus(string $mentah): string
+    {
+        $teks = trim(strip_tags($mentah));
+
+        $terurai = json_decode($teks, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($terurai)) {
+            $teks = (string) ($terurai['kode_kerdus'] ?? $terurai['box_code'] ?? $teks);
+        }
+
+        if (preg_match('/KB-[A-Z0-9\-]+/i', $teks, $m)) {
+            return strtoupper($m[0]);
         }
 
         return $teks;

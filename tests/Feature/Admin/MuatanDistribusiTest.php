@@ -2,8 +2,11 @@
 
 use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
+use App\Models\DailyPackingTask;
 use App\Models\Muatan;
 use App\Models\MuatanItem;
+use App\Models\PackingBox;
+use App\Models\PackingItem;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\User;
@@ -86,6 +89,8 @@ beforeEach(function () {
     );
     $manager->syncPermissions([
         PermissionEnum::MUATAN_READ->value,
+        PermissionEnum::MUATAN_CREATE->value,
+        PermissionEnum::MUATAN_SCAN->value,
         PermissionEnum::MUATAN_COMPLETE->value,
         PermissionEnum::SHIPMENTS_READ->value,
         PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
@@ -120,6 +125,29 @@ function resiSiapDiantar(string $slug = 'selesai-packing'): Pengiriman
         'status_id' => StatusPengiriman::where('slug', $slug)->value('id'),
         'alamat_tujuan' => 'Jl. Contoh No. 1, Surabaya',
     ]);
+}
+
+/**
+ * Kerdus berisi resi — keadaan yang dihasilkan gudang setelah packing.
+ *
+ * `packing_boxes.daily_packing_task_id` tidak punya nilai bawaan, jadi tugas
+ * harian harus dibuat lebih dulu; tanpa itu penyisipannya ditolak MySQL.
+ */
+function kerdusBerisi(array $resinya, string $kodeKerdus): PackingBox
+{
+    $box = PackingBox::factory()->create([
+        'kode_kerdus' => $kodeKerdus,
+        'daily_packing_task_id' => DailyPackingTask::factory()->create()->id,
+    ]);
+
+    foreach ($resinya as $resi) {
+        PackingItem::factory()->create([
+            'packing_box_id' => $box->id,
+            'pengiriman_id' => $resi->id,
+        ]);
+    }
+
+    return $box;
 }
 
 it('mendaftarkan role distribusi sebagai role tersendiri', function () {
@@ -305,18 +333,20 @@ it('menampilkan muatan kepada manager untuk dipantau', function () {
         ->and($props['hanyaMiliknya'])->toBeFalse();
 });
 
-it('TIDAK memberi manager wewenang operasional muatan', function () {
-    // Manager memantau dan memverifikasi; menyiapkan muatan dan memindai barang
-    // adalah pekerjaan gudang dan kurir.
+it('memberi manager wewenang menyiapkan muatan: membuat dan memindai', function () {
+    // Manager Distribusi bertanggung jawab atas distribusi dari hulu ke hilir:
+    // menyiapkan muatan, memindai barang masuk, lalu menyelesaikannya. Sebelumnya
+    // ia hanya bisa memantau dan memverifikasi, sehingga harus meminta orang lain
+    // menyiapkan muatannya — padahal itu justru bagian dari pekerjaannya.
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
 
-    expect($manager->can(PermissionEnum::MUATAN_CREATE->value))->toBeFalse()
-        ->and($manager->can(PermissionEnum::MUATAN_UPDATE->value))->toBeFalse()
-        ->and($manager->can(PermissionEnum::MUATAN_DELETE->value))->toBeFalse()
-        ->and($manager->can(PermissionEnum::MUATAN_SCAN->value))->toBeFalse();
+    expect($manager->can(PermissionEnum::MUATAN_CREATE->value))->toBeTrue()
+        ->and($manager->can(PermissionEnum::MUATAN_SCAN->value))->toBeTrue()
+        ->and($manager->can(PermissionEnum::MUATAN_READ->value))->toBeTrue()
+        ->and($manager->can(PermissionEnum::MUATAN_COMPLETE->value))->toBeTrue();
 });
 
-it('menolak manager memindai barang masuk muatan', function () {
+it('mengizinkan manager memindai barang masuk muatan', function () {
     $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
     $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
     $muatan = Muatan::factory()->untukKurir($kurir)->create();
@@ -324,9 +354,24 @@ it('menolak manager memindai barang masuk muatan', function () {
 
     $this->actingAs($manager)
         ->postJson(route('admin.muatan.scan', $muatan), ['no_resi' => $resi->no_resi])
-        ->assertForbidden();
+        ->assertSuccessful();
 
-    expect($muatan->fresh()->total_resi)->toBe(0);
+    expect($muatan->fresh()->total_resi)->toBe(1);
+});
+
+it('mengizinkan manager membuat muatan sendiri', function () {
+    $manager = penggunaDenganRole(RoleEnum::MANAGER->value);
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+
+    $this->actingAs($manager)
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 3,
+        ])
+        ->assertRedirect();
+
+    expect(Muatan::where('created_by', $manager->id)->exists())->toBeTrue();
 });
 
 it('menyebut Distribusi dan Manager Distribusi pada pesan penolakan', function () {
@@ -412,6 +457,168 @@ it('menolak kurir membuka muatan milik kurir lain lewat URL langsung', function 
 });
 
 // --- Memuat resi ke muatan ---
+
+it('memuat SELURUH isi kerdus lewat pemindaian per-box', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    kerdusBerisi(
+        [resiSiapDiantar(), resiSiapDiantar(), resiSiapDiantar()],
+        'KB-20261006-003-A5-01'
+    );
+
+    $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.pindai.box', $muatan), ['kode' => 'KB-20261006-003-A5-01'])
+        ->assertSuccessful()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('dimuat', 3);
+
+    // Inti pemindaian per-box: satu pindai memasukkan SELURUH isi kerdus.
+    expect(MuatanItem::where('muatan_id', $muatan->id)->count())->toBe(3)
+        ->and($muatan->fresh()->total_resi)->toBe(3);
+});
+
+it('menerima kode kerdus yang dibungkus JSON dari pemindai', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    kerdusBerisi([resiSiapDiantar()], 'KB-20261006-003-A5-02');
+
+    $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.pindai.box', $muatan), [
+            'kode' => json_encode(['kode_kerdus' => 'KB-20261006-003-A5-02']),
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('dimuat', 1);
+});
+
+it('melewati resi yang sudah ada di muatan ini tanpa menggagalkan seluruh kerdus', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $sudahDimuat = resiSiapDiantar();
+    $belumDimuat = resiSiapDiantar();
+
+    MuatanItem::factory()->create([
+        'muatan_id' => $muatan->id,
+        'pengiriman_id' => $sudahDimuat->id,
+    ]);
+
+    kerdusBerisi([$sudahDimuat, $belumDimuat], 'KB-20261006-003-A5-03');
+
+    // Satu resi yang sudah ada tidak boleh membatalkan sisa kerdus: kalau
+    // dibatalkan, isi kerdus yang belum masuk tidak akan pernah bisa masuk
+    // tanpa memindainya satu per satu.
+    $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.pindai.box', $muatan), ['kode' => 'KB-20261006-003-A5-03'])
+        ->assertSuccessful()
+        ->assertJsonPath('dimuat', 1);
+
+    expect(MuatanItem::where('muatan_id', $muatan->id)->count())->toBe(2);
+});
+
+it('menolak kerdus yang tidak ditemukan', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.pindai.box', $muatan), ['kode' => 'KB-20260101-999-A5-99'])
+        ->assertNotFound()
+        ->assertJsonPath('success', false);
+});
+
+it('menolak kerdus kosong yang belum berisi resi', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+    kerdusBerisi([], 'KB-20261006-003-A5-04');
+
+    $this->actingAs($kurir)
+        ->postJson(route('admin.muatan.pindai.box', $muatan), ['kode' => 'KB-20261006-003-A5-04'])
+        ->assertStatus(422)
+        ->assertJsonPath('success', false);
+});
+
+// --- Jumlah lembaga ---
+
+it('menyimpan jumlah lembaga yang diisi saat membuat muatan', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $pembuat = penggunaDenganRole(RoleEnum::DISTRIBUSI->value);
+
+    $this->actingAs($pembuat)
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 7,
+        ])
+        ->assertRedirect();
+
+    expect(Muatan::where('kurir_id', $kurir->id)->first()->jumlah_lembaga)->toBe(7);
+});
+
+it('membiarkan jumlah lembaga kosong, bukan memaksanya menjadi nol', function () {
+    // Kosong berarti "belum diisi". Kalau dipaksa 0, laporan akan membaca
+    // muatan yang jelas mengantar sebagai "tidak melayani lembaga mana pun".
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $pembuat = penggunaDenganRole(RoleEnum::DISTRIBUSI->value);
+
+    $this->actingAs($pembuat)
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+        ])
+        ->assertRedirect();
+
+    expect(Muatan::where('kurir_id', $kurir->id)->first()->jumlah_lembaga)->toBeNull();
+});
+
+it('menolak jumlah lembaga yang bukan angka', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $pembuat = penggunaDenganRole(RoleEnum::DISTRIBUSI->value);
+
+    $this->actingAs($pembuat)
+        ->post(route('admin.muatan.store'), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 'banyak',
+        ])
+        ->assertSessionHasErrors('jumlah_lembaga');
+});
+
+it('mengubah jumlah lembaga lewat halaman ubah muatan', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $pembuat = penggunaDenganRole(RoleEnum::DISTRIBUSI->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create(['jumlah_lembaga' => 2]);
+
+    $this->actingAs($pembuat)
+        ->put(route('admin.muatan.update', $muatan), [
+            'kurir_id' => $kurir->id,
+            'tanggal_muatan' => now()->format('Y-m-d'),
+            'jumlah_lembaga' => 5,
+        ])
+        ->assertRedirect();
+
+    expect($muatan->fresh()->jumlah_lembaga)->toBe(5);
+});
+
+it('menampilkan jumlah lembaga di daftar dan detail muatan', function () {
+    $kurir = penggunaDenganRole(RoleEnum::COURIER->value);
+    $distribusi = penggunaDenganRole(RoleEnum::DISTRIBUSI->value);
+    $muatan = Muatan::factory()->untukKurir($kurir)->create(['jumlah_lembaga' => 4]);
+
+    $daftar = $this->actingAs($distribusi)
+        ->get(route('admin.muatan.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect($daftar['muatan']['data'][0]['jumlah_lembaga'])->toBe(4);
+
+    $detail = $this->actingAs($distribusi)
+        ->get(route('admin.muatan.show', $muatan))
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect($detail['muatan']['jumlah_lembaga'])->toBe(4);
+});
 
 it('memuat resi ke muatan lewat pemindaian per-pcs', function () {
     $kurir = penggunaDenganRole(RoleEnum::COURIER->value);

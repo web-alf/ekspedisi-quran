@@ -31,6 +31,8 @@
 
   let noResi = '';
   let memindai = false;
+  let kodeKerdus = '';
+  let memindaiKerdus = false;
   let statusTerpilih = '';
   let catatanStatus = '';
   let memprosesStatus = false;
@@ -58,6 +60,31 @@
       toast.error(err.response?.data?.message || 'Gagal memindai resi.');
     } finally {
       memindai = false;
+    }
+  }
+
+  async function pindaiKerdus() {
+    if (!kodeKerdus.trim() || memindaiKerdus) return;
+
+    memindaiKerdus = true;
+    try {
+      const { data } = await axios.post(`/admin/muatan/${muatan.id}/pindai-box`, { kode: kodeKerdus.trim() });
+
+      if (data.success) {
+        if (data.dimuat > 0) {
+          toast.success(data.message);
+        } else {
+          toast.warning(data.message);
+        }
+        kodeKerdus = '';
+        muatUlang();
+      } else {
+        toast.error(data.message);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Gagal memindai kerdus.');
+    } finally {
+      memindaiKerdus = false;
     }
   }
 
@@ -214,7 +241,7 @@
           </div>
 
           <!-- Ringkasan angka -->
-          <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div class="bg-gray-50 rounded-lg border border-gray-200 p-3">
               <div class="text-xs text-gray-500 mb-1">Total Resi</div>
               <div class="text-xl font-bold text-gray-900">{muatan.total_resi}</div>
@@ -222,6 +249,12 @@
             <div class="bg-gray-50 rounded-lg border border-gray-200 p-3">
               <div class="text-xs text-gray-500 mb-1">Total Mushaf</div>
               <div class="text-xl font-bold text-gray-900">{muatan.total_mushaf}</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg border border-gray-200 p-3">
+              <div class="text-xs text-gray-500 mb-1">Jumlah Lembaga</div>
+              <div class="text-xl font-bold text-gray-900">
+                {muatan.jumlah_lembaga ?? '—'}
+              </div>
             </div>
             <div class="bg-gray-50 rounded-lg border border-gray-200 p-3">
               <div class="text-xs text-gray-500 mb-1">Sudah Diterima</div>
@@ -342,6 +375,37 @@
             >
               {memindai ? 'Memindai...' : 'Pindai'}
             </button>
+          </div>
+
+          <!-- Pindai per-kerdus: satu kerdus = seluruh isinya sekaligus -->
+          <div class="mt-6 pt-6 border-t border-gray-100">
+            <h4 class="text-sm font-semibold text-gray-900 mb-1">Pindai Per-Kerdus</h4>
+            <p class="text-xs text-gray-500 mb-3">
+              Pindai kode kerdus untuk memasukkan seluruh resi di dalamnya sekaligus. Lebih cepat
+              daripada memindai resi satu per satu.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <div class="relative flex-1">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                  <HeroIcon name="archive-box" class="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  bind:value={kodeKerdus}
+                  on:keydown={(e) => e.key === 'Enter' && pindaiKerdus()}
+                  placeholder="KB-20261006-003-A5-01"
+                  class="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm font-mono"
+                />
+              </div>
+              <button
+                on:click={pindaiKerdus}
+                disabled={!kodeKerdus.trim() || memindaiKerdus}
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                <HeroIcon name="archive-box" class="w-4 h-4" />
+                {memindaiKerdus ? 'Memindai...' : 'Pindai Kerdus'}
+              </button>
+            </div>
           </div>
         </div>
       {/if}

@@ -20,6 +20,7 @@
   let tanggal = muatan.tanggal_muatan || '';
   let namaMuatan = muatan.nama_muatan || '';
   let catatan = muatan.catatan || '';
+  let jumlahLembaga = muatan.jumlah_lembaga ?? '';
   let memproses = false;
 
   function simpan() {
@@ -37,6 +38,7 @@
         tanggal_muatan: tanggal,
         nama_muatan: namaMuatan || null,
         catatan: catatan || null,
+        jumlah_lembaga: jumlahLembaga === '' ? null : Number(jumlahLembaga),
       },
       {
         onError: () => {
@@ -120,6 +122,23 @@
               bind:value={catatan}
               class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
             />
+          </div>
+
+          <div>
+            <label for="jumlah_lembaga" class="block text-sm font-medium text-gray-700 mb-2">
+              Jumlah Lembaga (opsional)
+            </label>
+            <input
+              id="jumlah_lembaga"
+              type="number"
+              min="1"
+              bind:value={jumlahLembaga}
+              placeholder="mis. 5"
+              class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              Berapa lembaga yang akan dikunjungi muatan ini. Boleh dikosongkan.
+            </p>
           </div>
         </div>
 

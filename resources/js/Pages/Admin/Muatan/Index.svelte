@@ -214,6 +214,10 @@
                       <span class="font-medium">{m.total_resi}</span> resi
                       <span class="text-gray-400">·</span>
                       <span class="font-medium">{m.total_mushaf}</span> mushaf
+                      {#if m.jumlah_lembaga}
+                        <span class="text-gray-400">·</span>
+                        <span class="font-medium">{m.jumlah_lembaga}</span> lembaga
+                      {/if}
                     </td>
                     <td class="px-4 py-3">
                       <div class="flex flex-wrap gap-1">

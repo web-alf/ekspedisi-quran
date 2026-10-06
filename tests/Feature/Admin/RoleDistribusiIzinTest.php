@@ -157,16 +157,25 @@ it('memberi manager distribusi izin menyelesaikan distribusi lewat migrasi', fun
         ->and($manager->permissions->pluck('name'))->toContain(PermissionEnum::MUATAN_READ->value);
 });
 
-it('TIDAK memberi manager wewenang operasional muatan', function () {
-    // Manager memantau dan memverifikasi; menyiapkan muatan dan memindai barang
-    // adalah pekerjaan operasional gudang dan kurir.
+it('memberi manager izin menyiapkan muatan lewat migrasi', function () {
+    // Manager Distribusi menyiapkan muatannya sendiri: membuat lalu memindai
+    // barang masuk. Tanpa ini ia harus meminta orang lain menyiapkan muatan
+    // yang menjadi tanggung jawabnya.
     $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
     $izin = $manager->permissions->pluck('name');
 
-    expect($izin)->not->toContain(PermissionEnum::MUATAN_CREATE->value)
-        ->and($izin)->not->toContain(PermissionEnum::MUATAN_UPDATE->value)
-        ->and($izin)->not->toContain(PermissionEnum::MUATAN_DELETE->value)
-        ->and($izin)->not->toContain(PermissionEnum::MUATAN_SCAN->value);
+    expect($izin)->toContain(PermissionEnum::MUATAN_CREATE->value)
+        ->and($izin)->toContain(PermissionEnum::MUATAN_SCAN->value);
+});
+
+it('TIDAK memberi manager wewenang menghapus muatan', function () {
+    // Menyiapkan dan menyelesaikan muatan adalah pekerjaan manager; MENGHAPUS
+    // bukan. Muatan yang terhapus membawa serta jejak resi mana yang diantar
+    // siapa, dan itu catatan pertanggungjawaban — bukan sekadar baris data.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $izin = $manager->permissions->pluck('name');
+
+    expect($izin)->not->toContain(PermissionEnum::MUATAN_DELETE->value);
 });
 
 it('TIDAK memberi kurir izin menyelesaikan distribusi walau manager dapat', function () {
@@ -206,6 +215,21 @@ it('mengembalikan izin manager lewat down()', function () {
 
     expect($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_COMPLETE->value)
         ->and($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_READ->value);
+});
+
+it('mengembalikan izin menyiapkan muatan lewat down()', function () {
+    // Migrasi memberi manager dua izin operasional. down()-nya harus mencabut
+    // KEDUANYA — kalau hanya sebagian dicabut, rollback meninggalkan izin yang
+    // tidak pernah diminta siapa pun.
+    $migrasi = require database_path('migrations/2026_10_06_020000_grant_muatan_create_scan_to_manager.php');
+
+    $migrasi->down();
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+
+    expect($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_CREATE->value)
+        ->and($manager->permissions->pluck('name'))->not->toContain(PermissionEnum::MUATAN_SCAN->value);
 });
 
 it('menjaga menu Kelola Donatur tetap terdaftar untuk role lain', function () {

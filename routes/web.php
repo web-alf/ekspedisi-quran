@@ -630,6 +630,11 @@ Route::middleware(['auth'])->group(function () {
                 ->middleware('permission:muatan.scan')
                 ->name('scan');
 
+            // Pindai per-kerdus: satu pindai memuat seluruh isi kerdus
+            Route::post('/{muatan}/pindai-box', [MuatanController::class, 'scanBox'])
+                ->middleware('permission:muatan.scan')
+                ->name('pindai.box');
+
             Route::post('/{muatan}/tambah-resi', [MuatanController::class, 'syncItems'])
                 ->middleware('permission:muatan.update')
                 ->name('sync-items');
