@@ -1,7 +1,7 @@
 # Kurir di Bawah Manager Distribusi — Penindaklanjutan Temuan
 
 **Tanggal:** 2026-10-06
-**Commit:** `fa9bd14` (belum ter-deploy)
+**Commit:** `fa9bd14` (keterkaitan kurir↔manager) + `4269592` (menu gudang) — **keduanya ter-push & ter-deploy ke `dash.ekspedisiquran.com`**
 **Dasar:** temuan bahwa kurir berada di bawah role **manager distribusi** (Nalurita dkk), bukan berdiri sendiri.
 
 ---
@@ -97,12 +97,63 @@ Perbaikannya: keduanya **digabung dalam satu predikat**, dan predikat itu yang d
 
 ---
 
-## 5. Yang perlu dilakukan sebelum/sesudah deploy
+## 5. Menu "Manajemen Gudang" dihilangkan dari manager (commit `4269592`)
 
-**Penugasan belum ada datanya.** Di produksi 9 kurir masih tanpa `manager_id`, dan muatan produksi masih 0 baris. Jadi:
+Menu itu tampil karena manager memegang **14 izin gudang**. AdminLayout memunculkan
+induk dropdown bila pengguna memegang induk **atau** salah satu anaknya — jadi satu
+izin yang tersisa cukup untuk memunculkannya kembali.
 
-1. Setelah deploy, tentukan **kurir mana di bawah manager mana** lewat **Kelola Pengguna → Ubah → Manager Distribusi**.
-2. Sebelum itu ditegakkan, daftar pilihan kurir untuk manager akan **kosong** — bukan kerusakan, melainkan tanda penugasan belum diisi.
-3. Role lain (gudang, supervisor, super-admin) tidak terpengaruh sama sekali, sehingga alur packing dan pengiriman gudang berjalan seperti sebelumnya.
+| Dicabut (14) | Tetap |
+|---|---|
+| `warehouse.dashboard`, `warehouse.packing.view`, `warehouse.boxes.view`, `warehouse.tasks.view`, `warehouse.qr.verify`, `warehouse.performance.view` | `muatan.*` — alur distribusi |
+| keenam `supervisor.*` | `shipments.*` — Pengemasan |
+| | `mushaf-requests.*` |
+| | `qr.generate/scan/verify`, `system.monitor`, `status.*` |
 
-**Tidak ada perubahan izin** pada perubahan ini — hanya lingkup data dan batas pilihan.
+Izin-izin itu **juga yang menjaga URL-nya**, sehingga halaman gudang kini **403** lewat
+alamat langsung — bukan sekadar tautannya disembunyikan. Frontend tidak diubah.
+
+**Dikerjakan lewat migrasi, bukan hanya seeder:** deploy menjalankan `php artisan migrate`
+dan **tidak** menjalankan seeder, jadi perubahan di `RolePermissionSeeder` saja tidak akan
+sampai ke produksi. Seeder tetap disamakan supaya penyemaian ulang tidak mengembalikan
+izinnya. Ada tes yang membuktikan migrasinya mencabut.
+
+**Temuan dari tes:** helper `bukaSemuaDropdown` pada tes sidebar ternyata menekan **setiap**
+tombol, termasuk "Ciutkan Sidebar" — sidebar jadi terlipat dan label teksnya hilang, sehingga
+pemeriksaan label diam-diam tidak menemukan apa pun. Diperbaiki; tanpa itu, tes "menu harus
+hilang" akan lolos secara semu.
+
+---
+
+## 6. Verifikasi produksi (setelah deploy)
+
+| Diperiksa | Hasil |
+|---|---|
+| Izin manager | 40 → **28**; `warehouse.*` + `supervisor.*` = **0** |
+| Role lain | tidak berubah: super-admin 83, warehouse 31, supervisor 20, courier 10, customer-service 13, distribusi 12 |
+| Akses sebagai Nalurita (id 6) | dashboard, Muatan, Pengemasan, Permintaan Mushaf = **200** |
+| Halaman gudang/supervisor | Dasbor Gudang, Proses Packing, Laporan Kinerja, Pelacakan Kerdus, Monitor Gudang, Analitik Kinerja = **403** |
+| Sisi kurir | Dashboard, Scan Barang, Muatan Saya, Pengemasan = **200** |
+| Status kurir | tetap `pengiriman`, `batal` |
+| Status manager | `selesai-packing`, `pengiriman`, `diterima`, **`batal`** |
+| Aset | `admin-users-BDYvTdMR.js` HTTP 200, memuat "Manager Distribusi"/`managerList`/`manager_id` |
+| Log | **0 error** setelah deploy |
+| Situs | `dash.ekspedisiquran.com/login` 200 |
+
+Cadangan sebelum deploy: `/root/eq-manager-gudang-db-*.sql.gz` (3,2 MB gz, 49 tabel) +
+`/root/eq-manager-gudang-kode-*` (seeder & `public/build` lama).
+
+---
+
+## 7. Yang perlu dilakukan setelah deploy
+
+**Penugasan belum ada datanya.** Verifikasi produksi menunjukkan **0 dari 9 kurir** punya
+`manager_id`, dan muatan produksi masih 0 baris. Jadi sampai penugasan diisi, daftar pilihan
+kurir untuk manager **kosong** — itu tanda penugasan belum diisi, bukan kerusakan.
+
+Langkahnya: **Kelola Pengguna → Ubah → Manager Distribusi** pada tiap akun kurir.
+
+**Catatan:** role `distribusi` masih 0 pengguna, dan `muatan.create`/`muatan.scan` kini
+dipegang manager (dari pekerjaan sebelumnya), jadi alur distribusi berjalan lewat manager
+meski role `distribusi` tidak dipakai.
+
