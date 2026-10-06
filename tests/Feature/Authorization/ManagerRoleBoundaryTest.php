@@ -232,7 +232,7 @@ it('memberi manager nama peran "Manager Distribusi", bukan "Manager"', function 
     expect($manager->display_name)->toBe('Manager Distribusi');
 });
 
-it('mencabut izin operasional gudang dari manager, tetapi menyisakan izin memantau', function () {
+it('mencabut izin operasional gudang dari manager', function () {
     // Manager dulu memegang SELURUH 15 izin warehouse.*, persis sama dengan Staff
     // Gudang: bisa mengemas, menyegel, DAN membongkar kerdus tersegel. Perannya
     // mengawasi distribusi, bukan mengerjakan operasinya — jadi izin yang mengubah
@@ -240,7 +240,6 @@ it('mencabut izin operasional gudang dari manager, tetapi menyisakan izin memant
     $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
     $perms = $manager->permissions->pluck('name');
 
-    // Operasional: mengubah keadaan fisik.
     foreach ([
         PermissionEnum::WAREHOUSE_PACKING_SCAN->value,
         PermissionEnum::WAREHOUSE_PACKING_SEAL->value,
@@ -254,35 +253,106 @@ it('mencabut izin operasional gudang dari manager, tetapi menyisakan izin memant
     ] as $operational) {
         expect($perms)->not->toContain($operational);
     }
+});
 
-    // Memantau: tetap dimiliki supaya halaman gudang masih terbuka.
+it('tidak menyisakan satu pun izin gudang pada manager', function () {
+    // Menu "Manajemen Gudang" diminta hilang dari sidebar Manager Distribusi.
+    // AdminLayout memunculkan induk dropdown bila pengguna memegang induk ATAU
+    // salah satu anaknya — jadi satu izin yang lolos cukup untuk memunculkan
+    // kembali menu itu. Karena itu diuji sebagai himpunan, bukan satu per satu.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $perms = $manager->permissions->pluck('name');
+
+    $sisaGudang = $perms->filter(fn ($nama) => str_starts_with($nama, 'warehouse.')
+        || str_starts_with($nama, 'supervisor.'));
+
+    expect($sisaGudang->values()->all())->toBe([]);
+});
+
+it('menghilangkan akses halaman gudang dan supervisor dari manager', function () {
+    // Izin-izin itu juga yang MENJAGA URL-nya, bukan sekadar memunculkan menu.
+    // Tanpa penegakan ini, halaman masih bisa dibuka lewat alamat langsung.
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
     foreach ([
+        '/admin/warehouse',
+        '/admin/warehouse/packing',
+        '/admin/warehouse/performance',
+        '/admin/box-tracking',
+        '/admin/supervisor/warehouse-monitor',
+        '/admin/supervisor/performance-report',
+    ] as $halaman) {
+        $this->actingAs($manager)->get($halaman)->assertForbidden();
+    }
+});
+
+it('tetap membuka halaman alur distribusi manager', function () {
+    // Penjagaan tidak boleh kebablasan: yang bukan menu gudang harus tetap
+    // terbuka, kalau tidak pekerjaan manager sendiri ikut mati.
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->actingAs($manager)->get('/admin/muatan')->assertSuccessful();
+    $this->actingAs($manager)->get('/admin/pengiriman')->assertSuccessful();
+    $this->actingAs($manager)->get('/admin/mushaf-requests')->assertSuccessful();
+});
+
+it('mencabut izin gudang lewat migrasi, bukan hanya lewat seeder', function () {
+    // Deploy menjalankan `php artisan migrate`, TIDAK menjalankan seeder. Jadi
+    // perubahan di RolePermissionSeeder saja tidak akan sampai ke produksi —
+    // pencabutannya harus ada di migrasi. Tes ini menyiapkan keadaan produksi
+    // (manager memegang izin gudang), menjalankan migrasinya, lalu memeriksa
+    // hasilnya.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $manager->givePermissionTo([
         PermissionEnum::WAREHOUSE_DASHBOARD->value,
         PermissionEnum::WAREHOUSE_PACKING_VIEW->value,
         PermissionEnum::WAREHOUSE_BOXES_VIEW->value,
         PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
         PermissionEnum::WAREHOUSE_PERFORMANCE_VIEW->value,
         PermissionEnum::WAREHOUSE_QR_VERIFY->value,
-    ] as $readOnly) {
-        expect($perms)->toContain($readOnly);
-    }
-});
-
-it('menolak manager memindai dan menyegel kerdus, tetapi tetap mengizinkan memantau', function () {
-    $manager = User::factory()->create(['is_active' => true]);
-    $manager->assignRole(RoleEnum::MANAGER->value);
+        PermissionEnum::SUPERVISOR_DASHBOARD->value,
+        PermissionEnum::SUPERVISOR_WAREHOUSE_MONITOR->value,
+        PermissionEnum::SUPERVISOR_WAREHOUSE_ASSIGN->value,
+        PermissionEnum::SUPERVISOR_WAREHOUSE_REDISTRIBUTE->value,
+        PermissionEnum::SUPERVISOR_PERFORMANCE_VIEW->value,
+        PermissionEnum::SUPERVISOR_PERFORMANCE_REPORTS->value,
+    ]);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-    // Tidak boleh lagi mengubah keadaan fisik kerdus.
-    expect($manager->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeFalse();
-    expect($manager->can(PermissionEnum::WAREHOUSE_PACKING_SEAL->value))->toBeFalse();
-    expect($manager->can(PermissionEnum::WAREHOUSE_BOXES_SEAL->value))->toBeFalse();
-    expect($manager->can(PermissionEnum::WAREHOUSE_BOX_UPDATE_SEALED->value))->toBeFalse();
+    expect($manager->fresh()->permissions->pluck('name'))
+        ->toContain(PermissionEnum::WAREHOUSE_DASHBOARD->value);
 
-    // Halaman gudang tetap terbuka, hanya untuk melihat.
-    $this->actingAs($manager)->get('/admin/warehouse')->assertSuccessful();
-    $this->actingAs($manager)->get('/admin/warehouse/packing')->assertSuccessful();
-    $this->actingAs($manager)->get('/admin/box-tracking')->assertSuccessful();
+    $migrasi = require database_path('migrations/2026_10_06_040000_hide_warehouse_menu_from_manager.php');
+    $migrasi->up();
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $sisa = $manager->fresh()->permissions->pluck('name')
+        ->filter(fn ($nama) => str_starts_with($nama, 'warehouse.') || str_starts_with($nama, 'supervisor.'));
+
+    expect($sisa->values()->all())->toBe([]);
+});
+
+it('membiarkan izin di luar grup gudang apa adanya', function () {
+    // Pencabutan harus sempit: menyertakan izin alur distribusi akan mematikan
+    // pekerjaan manager sendiri, dan tidak ada tes lain yang menangkapnya bila
+    // daftar izinnya diperluas keliru.
+    $manager = Role::where('name', RoleEnum::MANAGER->value)->first();
+    $perms = $manager->permissions->pluck('name');
+
+    foreach ([
+        PermissionEnum::MUATAN_READ->value,
+        PermissionEnum::MUATAN_COMPLETE->value,
+        PermissionEnum::SHIPMENTS_READ->value,
+        PermissionEnum::MUSHAF_REQUESTS_READ->value,
+        PermissionEnum::QR_VERIFY->value,
+        PermissionEnum::SYSTEM_MONITOR->value,
+    ] as $tetap) {
+        expect($perms)->toContain($tetap);
+    }
 });
 
 it('menolak manager mengirim pemindaian ke endpoint packing', function () {

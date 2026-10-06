@@ -26,7 +26,8 @@ beforeEach(function () {
 });
 
 it('memberi izin memindai kepada staff gudang, tetapi tidak kepada manager', function () {
-    // Inilah perbedaan yang menentukan: manager hanya memantau.
+    // Inilah perbedaan yang menentukan: manager tidak lagi menyentuh gudang
+    // sama sekali — bukan sekadar "tidak memindai".
     $warehouse = User::factory()->create(['is_active' => true]);
     $warehouse->assignRole(RoleEnum::WAREHOUSE->value);
 
@@ -37,9 +38,11 @@ it('memberi izin memindai kepada staff gudang, tetapi tidak kepada manager', fun
 
     expect($warehouse->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeTrue()
         ->and($manager->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeFalse()
-        // Keduanya tetap boleh MEMBUKA dasbor gudang: manager memantau lewat situ.
+        // Staff gudang tetap membuka dasbornya.
         ->and($warehouse->can(PermissionEnum::WAREHOUSE_DASHBOARD->value))->toBeTrue()
-        ->and($manager->can(PermissionEnum::WAREHOUSE_DASHBOARD->value))->toBeTrue();
+        // Manager TIDAK: menu "Manajemen Gudang" diminta hilang dari sidebar-nya,
+        // dan izin ini juga yang menjaga URL-nya.
+        ->and($manager->can(PermissionEnum::WAREHOUSE_DASHBOARD->value))->toBeFalse();
 });
 
 it('menolak manager memulai pemindaian dengan 403, bukan membiarkannya menekan tombol yang gagal', function () {

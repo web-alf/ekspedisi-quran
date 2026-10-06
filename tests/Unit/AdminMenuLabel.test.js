@@ -55,9 +55,21 @@ beforeEach(() => {
     });
 });
 
-/** Buka semua dropdown supaya menu anaknya ikut ter-render. */
+/**
+ * Buka semua dropdown menu — TANPA menyentuh tombol kerangka halaman.
+ *
+ * Versi lama menekan SETIAP tombol, termasuk "Ciutkan Sidebar". Akibatnya sidebar
+ * terlipat dan label teks menunya hilang sama sekali, sehingga pemeriksaan label
+ * diam-diam tidak menemukan apa pun (menu anak masih ada karena di cabang
+ * terlipat ia dirender sebagai <a> di dalam panel melayang).
+ *
+ * Dijaga tetap sederhana supaya tes lama tidak berubah perilakunya; tes yang
+ * butuh pemeriksaan lebih ketat memakai labelMenu().
+ */
 async function bukaSemuaDropdown(container) {
-    const tombol = [...container.querySelectorAll('button')];
+    const tombol = [...container.querySelectorAll('button')].filter(
+        (b) => b.title !== 'Ciutkan Sidebar' && b.title !== 'Perluas Sidebar'
+    );
 
     for (const t of tombol) {
         await fireEvent.click(t);
@@ -158,5 +170,109 @@ describe('Sidebar admin', () => {
             .find((a) => a.textContent.trim() === 'Pengemasan');
 
         expect(item.getAttribute('href')).toContain('/admin/pengiriman');
+    });
+});
+
+/**
+ * Manager Distribusi: izinnya diambil dari daftar NYATA yang tersimpan pada role
+ * manager, bukan dikarang — supaya tes ini ikut gagal bila suatu saat izin gudang
+ * diberikan kembali kepadanya lewat seeder atau migrasi lain.
+ */
+const izinManager = [
+    'dashboard.view', 'dashboard.analytics', 'system.monitor',
+    'muatan.read', 'muatan.complete', 'muatan.create', 'muatan.scan',
+    'shipments.read', 'shipments.create', 'shipments.update', 'shipments.export',
+    'shipments.track', 'shipments.update-status', 'shipments.bulk-update',
+    'mushaf-requests.read', 'mushaf-requests.create', 'mushaf-requests.update',
+    'mushaf-requests.approve', 'mushaf-requests.reject', 'mushaf-requests.process',
+    'wakaf-batch.read', 'wakaf-batch.create', 'wakaf-batch.update',
+    'qr.generate', 'qr.scan', 'qr.verify',
+    'status.update', 'status.track'
+];
+
+/** Kurir: izinnya jauh lebih sedikit, dan tidak punya menu gudang. */
+const izinKurir = ['dashboard.view', 'muatan.read', 'muatan.scan', 'shipments.read', 'status.track'];
+
+function tampilkanSidebar(izin, role) {
+    page.set({
+        props: { auth: { user: { id: 9, name: 'Uji Menu', role, permissions: izin } }, settings: {}, flash: {} },
+        url: '/admin/dashboard'
+    });
+
+    return render(AdminLayout);
+}
+
+/**
+ * Label seluruh menu sidebar, termasuk INDUK dropdown.
+ *
+ * `labelTerlihat()` hanya memungut elemen `<a>`, sehingga label induk dropdown —
+ * yang dirender sebagai `<button>` — tidak ikut terbaca. Untuk menguji ada/
+ * tidaknya sebuah dropdown, label tombolnya justru yang menentukan.
+ */
+function labelMenu(container) {
+    const label = new Set();
+
+    for (const el of container.querySelectorAll('a, button')) {
+        const teks = el.textContent.trim();
+
+        // Tombol kerangka halaman (lipat sidebar, profil) juga ikut terbaca;
+        // menu dikenali dari teksnya, jadi yang penting himpunannya lengkap.
+        if (teks) {
+            label.add(teks);
+        }
+    }
+
+    return [...label];
+}
+
+describe('Sidebar per peran', () => {
+    it('menghilangkan menu Manajemen Gudang dari Manager Distribusi', async () => {
+        // Menu ini diminta hilang dari sidebar manager. AdminLayout memunculkan
+        // induk dropdown bila salah satu anaknya cocok, jadi tesnya harus
+        // memeriksa INDUK dan ANAK-ANAKNYA sekaligus — memeriksa salah satu saja
+        // bisa lolos padahal menunya masih tampil.
+        const { container } = tampilkanSidebar(izinManager, 'manager');
+        await bukaSemuaDropdown(container);
+
+        const label = labelMenu(container);
+
+        expect(label).not.toContain('Manajemen Gudang');
+
+        for (const anak of [
+            'Dasbor Gudang', 'Proses Packing', 'Box Scanner', 'Laporan Kinerja',
+            'Monitor Gudang', 'Analitik Kinerja', 'Pelacakan Kerdus'
+        ]) {
+            expect(label, `menu "${anak}" masih tampil untuk manager`).not.toContain(anak);
+        }
+    });
+
+    it('menyisakan menu alur distribusi milik manager', async () => {
+        // Penjaga sebaliknya: pencabutan tidak boleh ikut mematikan pekerjaan
+        // manager sendiri.
+        const { container } = tampilkanSidebar(izinManager, 'manager');
+        await bukaSemuaDropdown(container);
+
+        const label = labelMenu(container);
+
+        for (const menu of ['Muatan & Distribusi', 'Pengemasan', 'Permintaan Mushaf', 'Dashboard']) {
+            expect(label, `menu "${menu}" hilang dari manager`).toContain(menu);
+        }
+    });
+
+    it('tetap menampilkan menu Manajemen Gudang bagi yang berhak', async () => {
+        // Kalau tes ini gagal bersama yang di atas, artinya yang berubah adalah
+        // menunya untuk SEMUA orang — bukan izin manager. Sekaligus membuktikan
+        // tes di atas benar-benar menguji sesuatu: label yang sama HARUS muncul
+        // di sini.
+        const { container } = tampilkanSidebar(
+            [...izinKurir, 'warehouse.dashboard', 'warehouse.packing.view'],
+            'warehouse'
+        );
+        await bukaSemuaDropdown(container);
+
+        const label = labelMenu(container);
+
+        expect(label).toContain('Manajemen Gudang');
+        expect(label).toContain('Proses Packing');
     });
 });

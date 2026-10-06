@@ -346,53 +346,54 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::MUATAN_READ->value,
             PermissionEnum::MUATAN_COMPLETE->value,
 
-            // Supervisor & monitoring
-            PermissionEnum::SUPERVISOR_DASHBOARD->value,
-            PermissionEnum::SUPERVISOR_WAREHOUSE_MONITOR->value,
-            PermissionEnum::SUPERVISOR_WAREHOUSE_ASSIGN->value,
-            PermissionEnum::SUPERVISOR_WAREHOUSE_REDISTRIBUTE->value,
-            PermissionEnum::SUPERVISOR_PERFORMANCE_VIEW->value,
-            PermissionEnum::SUPERVISOR_PERFORMANCE_REPORTS->value,
+            // Supervisor & monitoring — SENGAJA TIDAK DIBERIKAN kepada manager.
+            //
+            // Seluruh supervisor.* dulu dipegang manager. Izin-izin itu hanya
+            // membuka grup rute `/admin/supervisor/*`, dan dua di antaranya
+            // (warehouse.monitor, performance.reports) justru MENGHIDUPKAN menu
+            // "Manajemen Gudang" karena anak-anak dropdown-nya memakai izin itu.
+            // Karena menu itu diminta hilang, keenamnya ikut dicabut.
+            //
+            // system.monitor TETAP: ia bukan bagian menu gudang — ia membuka
+            // halaman Sistem (bulk operations, performance, query optimization),
+            // dan manager memang memantaunya.
             PermissionEnum::SYSTEM_MONITOR->value,
 
-            // Warehouse — MEMANTAU saja, bukan MENJALANKAN.
+            // Warehouse — SENGAJA TIDAK DIBERIKAN kepada manager.
             //
-            // Konteks: manager dulu memegang SELURUH 15 izin warehouse.*, persis
-            // sama dengan Staff Gudang. Artinya manager bisa mengemas, menyegel,
-            // dan MEMBONGKAR kerdus yang sudah tersegel — padahal perannya
-            // mengawasi distribusi, bukan mengerjakan operasinya.
+            // Riwayatnya bertahap: manager dulu memegang SELURUH 15 izin
+            // warehouse.*, persis sama dengan Staff Gudang — bisa mengemas,
+            // menyegel, dan MEMBONGKAR kerdus tersegel. Izin operasional itu lalu
+            // dicabut sehingga tinggal yang memantau saja. Sekarang yang memantau
+            // pun dicabut seluruhnya: menu "Manajemen Gudang" diminta hilang dari
+            // sidebar Manager Distribusi.
             //
-            // Perbandingan peran: supervisor juga "Gudang", tapi hanya memantau
-            // (supervisor.* + warehouse.tasks.view + warehouse.boxes.view +
-            // warehouse.performance.view, tanpa izin operasional). Manager
-            // sekarang mengikuti pola yang sama.
+            // Aman: menu itu dibuka oleh izin-izin ini JUGA yang menjaga URL-nya
+            // (middleware `permission:` pada grup `warehouse` dan `supervisor`),
+            // jadi mencabutnya menutup akses langsung, bukan sekadar menghapus
+            // tautan. Alur kerja manager tidak lewat halaman gudang: ia memakai
+            // muatan.* (distribusi), shipments.* (Pengemasan), dan
+            // mushaf-requests.*.
             //
-            // Diambil dari manager (operasional — mengubah keadaan fisik):
-            //   warehouse.packing.scan        memindai & memasukkan mushaf ke kerdus
-            //   warehouse.packing.seal        menyegel kerdus
-            //   warehouse.boxes.seal          menyegel kerdus (jalur lain)
-            //   warehouse.box.update_any      mengubah isi kerdus siapa pun
-            //   warehouse.box.update_sealed   menembus kerdus tersegel (bongkar!)
-            //   warehouse.tasks.update        membatalkan & mengulang job
-            //   warehouse.qr.generate         membuat QR baru
-            //   warehouse.qr.bulk_generate    membuat QR massal
-            //   warehouse.qr.scan             memindai QR kerdus
+            // Yang ikut hilang: warehouse.dashboard, warehouse.packing.view,
+            // warehouse.boxes.view, warehouse.tasks.view, warehouse.qr.verify,
+            // warehouse.performance.view, supervisor.dashboard,
+            // supervisor.warehouse.monitor/assign/redistribute,
+            // supervisor.performance.view/reports.
             //
-            // Tetap diberikan (memantau & membaca):
-            //   warehouse.dashboard, warehouse.performance.view,
-            //   warehouse.packing.view, warehouse.boxes.view,
-            //   warehouse.tasks.view, warehouse.qr.verify, qr.*
-            PermissionEnum::WAREHOUSE_DASHBOARD->value,
-            PermissionEnum::WAREHOUSE_PERFORMANCE_VIEW->value,
-            PermissionEnum::WAREHOUSE_PACKING_VIEW->value,
-            PermissionEnum::WAREHOUSE_BOXES_VIEW->value,
-            PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
-
+            // Pola yang sama dipakai untuk donatur.* dan certificates.* di atas.
+            //
+            // CATATAN: qr.verify TETAP diberikan. Ia bukan milik grup gudang —
+            // rutenya `permission:qr.verify|warehouse.qr.verify`, dan manager
+            // memakainya untuk memeriksa QR resi. Rute verifikasi QR gudang
+            // sudah tertutup oleh pencabutan warehouse.qr.verify.
             // QR
             PermissionEnum::QR_GENERATE->value,
             PermissionEnum::QR_SCAN->value,
             PermissionEnum::QR_VERIFY->value,
-            PermissionEnum::WAREHOUSE_QR_VERIFY->value,
+            // warehouse.qr.verify SENGAJA TIDAK DIBERIKAN — lihat catatan
+            // "Warehouse" di atas. Akses verifikasi QR tetap terbuka lewat
+            // qr.verify, karena rutenya memakai ATAU kedua izin itu.
 
             // Status
             PermissionEnum::STATUS_UPDATE->value,
