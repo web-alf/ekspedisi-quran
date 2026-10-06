@@ -145,15 +145,35 @@ Cadangan sebelum deploy: `/root/eq-manager-gudang-db-*.sql.gz` (3,2 MB gz, 49 ta
 
 ---
 
-## 7. Yang perlu dilakukan setelah deploy
+## 7. Daftar kurir kosong — ditemukan lalu diperbaiki (commit `85709b1`)
 
-**Penugasan belum ada datanya.** Verifikasi produksi menunjukkan **0 dari 9 kurir** punya
-`manager_id`, dan muatan produksi masih 0 baris. Jadi sampai penugasan diisi, daftar pilihan
-kurir untuk manager **kosong** — itu tanda penugasan belum diisi, bukan kerusakan.
+Setelah deploy, manager mendapati **daftar pilihan kurir kosong** saat membuat
+muatan. Sebabnya: batas bawahan berlaku penuh sementara **0 dari 9 kurir** punya
+`manager_id` — jadi tak seorang pun masuk lingkupnya, dan manager tidak bisa membuat
+muatan sama sekali.
+
+Diperbaiki: manager yang **belum punya bawahan sama sekali** tetap ditawari seluruh
+kurir; begitu ia punya bawahan, batas tim berlaku penuh — pada daftar di layar
+**dan** pada validasi `store()`, supaya tidak ada pilihan yang ditolak diam-diam.
+
+**Data kurirnya sendiri tidak pernah hilang** — baik di produksi maupun lokal, 9 kurir
+(tambah 1 akun uji di lokal) tetap utuh. Yang kosong hanya daftar pilihan, bukan datanya.
+
+Verifikasi produksi setelah perbaikan: `/admin/muatan/buat` menawarkan **9 kurir**, dan
+0 error di log.
+
+---
+
+## 8. Yang perlu dilakukan setelah deploy
+
+**Penugasan belum ada datanya.** **0 dari 9 kurir** punya `manager_id`, dan muatan
+produksi masih 0 baris. Selama belum diisi, setiap manager melihat semua kurir
+(pengecualian di atas) — bukan pengelompokan tim yang sebenarnya.
 
 Langkahnya: **Kelola Pengguna → Ubah → Manager Distribusi** pada tiap akun kurir.
 
 **Catatan:** role `distribusi` masih 0 pengguna, dan `muatan.create`/`muatan.scan` kini
 dipegang manager (dari pekerjaan sebelumnya), jadi alur distribusi berjalan lewat manager
 meski role `distribusi` tidak dipakai.
+
 
