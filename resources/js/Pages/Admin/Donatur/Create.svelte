@@ -110,9 +110,17 @@
   }
 
   function handleKodeDonaturInput(event) {
+    // Spasi tidak sengaja terketik, dan kode donatur tidak pernah mengandung spasi.
+    // Dibersihkan sambil diketik supaya staf langsung melihat bentuk bakunya dan
+    // tidak membuat kode kedua untuk orang yang sama ("ECB 81" vs "ECB81").
+    const bersih = event.target.value.replace(/\s+/g, '').toUpperCase();
+    if (bersih !== event.target.value) {
+      $form.kode_donatur = bersih;
+    }
+
     clearTimeout(kodeDonaturTimeout);
     kodeDonaturTimeout = setTimeout(() => {
-      fetchSuggestions(event.target.value);
+      fetchSuggestions($form.kode_donatur);
     }, 300);
   }
 
@@ -358,11 +366,15 @@
             on:blur={handleBlur}
             on:keydown={handleKeydown}
             type="text"
-            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent {(validationErrors.kode_donatur || errors.kode_donatur) ? 'border-red-300' : ''}"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent uppercase {(validationErrors.kode_donatur || errors.kode_donatur) ? 'border-red-300' : ''}"
             placeholder="Contoh: DON001"
             required
             autocomplete="off"
+            spellcheck="false"
           />
+          <p class="mt-1 text-xs text-gray-500">
+            Kode ditulis tanpa spasi dan otomatis jadi huruf besar. Untuk donatur yang sama, pakai kode yang sama.
+          </p>
           {#if suggestionLoading}
             <div class="absolute right-3 top-9 text-gray-400 text-sm">Mencari...</div>
           {/if}

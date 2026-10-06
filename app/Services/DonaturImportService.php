@@ -8,6 +8,7 @@ use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\User;
 use App\Models\WakafItem;
+use App\Support\KodeDonatur;
 use Illuminate\Support\Facades\DB;
 
 class DonaturImportService
@@ -21,7 +22,7 @@ class DonaturImportService
     public function createFromArray(array $data): Donatur
     {
         return DB::transaction(function () use ($data) {
-            $donatur = Donatur::where('kode_donatur', $data['kode_donatur'])->first();
+            $donatur = Donatur::where('kode_donatur', KodeDonatur::bersihkan($data['kode_donatur']))->first();
 
             $currentA5 = (int) ($data['jumlah_a5'] ?? 0);
             $currentA6 = (int) ($data['jumlah_a6'] ?? 0);
@@ -59,7 +60,7 @@ class DonaturImportService
                 $donatur->refresh();
             } else {
                 $donatur = Donatur::create([
-                    'kode_donatur' => $data['kode_donatur'],
+                    'kode_donatur' => KodeDonatur::bersihkan($data['kode_donatur']),
                     'nama_donatur' => $data['nama_donatur'],
                     'no_hp' => $data['no_hp'],
                     'email_donatur' => $data['email_donatur'] ?? null,

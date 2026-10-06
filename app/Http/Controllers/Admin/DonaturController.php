@@ -69,7 +69,11 @@ class DonaturController extends Controller
         }
 
         $donatur = Donatur::select('id', 'kode_donatur', 'nama_donatur', 'no_hp', 'email_donatur', 'alamat_donatur')
-            ->where('kode_donatur', 'like', "%{$query}%")
+            // Dicocokkan pada kode yang sudah diseragamkan, supaya kode lama yang masih
+            // berspasi ("ECB 81") tetap ketemu ketika diketik tanpa spasi ("ECB81").
+            // Tanpa ini, pencarian gagal dan orang yang sama justru dibuatkan kode baru —
+            // persis yang membuat dua baris donatur serupa muncul di produksi.
+            ->whereRaw("REPLACE(REPLACE(kode_donatur, ' ', ''), '\u{00A0}', '') LIKE ?", ["%{$query}%"])
             ->orderBy('kode_donatur')
             ->limit(10)
             ->get();

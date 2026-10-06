@@ -3,7 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
+use App\Models\Donatur;
+use App\Support\KodeDonatur;
 use Illuminate\Foundation\Http\FormRequest;
+use libphonenumber\PhoneNumberUtil;
 
 class StoreDonaturRequest extends FormRequest
 {
@@ -16,6 +19,36 @@ class StoreDonaturRequest extends FormRequest
     }
 
     /**
+     * Seragamkan kode dan nama SEBELUM divalidasi.
+     *
+     * Ini yang membuat salah ketik hilang sendiri: "ECB 81" menjadi "ECB81", nama
+     * berlebih spasi diringkas, dan huruf kecil dijadikan besar. Tanpa ini, spasi
+     * yang tidak sengaja terketik membuat orang yang sama dianggap donatur baru
+     * dan mendapat kode berbeda — persis yang sudah terjadi di produksi.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'kode_donatur' => KodeDonatur::bersihkan($this->kode_donatur),
+            'nama_donatur' => KodeDonatur::nama($this->nama_donatur),
+        ]);
+
+        // Nama wakif pada mode "customize individual" juga dibandingkan dengan nama
+        // donatur, jadi ikut diseragamkan.
+        if (is_array($this->wakif_details)) {
+            $this->merge([
+                'wakif_details' => array_map(function ($detail) {
+                    if (is_array($detail) && isset($detail['wakif_name'])) {
+                        $detail['wakif_name'] = KodeDonatur::nama($detail['wakif_name']);
+                    }
+
+                    return $detail;
+                }, $this->wakif_details),
+            ]);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      */
     public function rules(): array
@@ -25,7 +58,7 @@ class StoreDonaturRequest extends FormRequest
             'nama_donatur' => ['required', 'string', 'max:255', 'min:2', 'regex:/^[a-zA-Z\s\.\'\-]+$/u'],
             'no_hp' => ['required', 'string', 'max:30', function ($attribute, $value, $fail) {
                 try {
-                    $phoneUtil = \libphonenumber\PhoneNumberUtil::getInstance();
+                    $phoneUtil = PhoneNumberUtil::getInstance();
                     $numberProto = $phoneUtil->parse($value, null);
                     if (! $phoneUtil->isValidNumber($numberProto)) {
                         $fail('Nomor telepon tidak valid.');
@@ -121,7 +154,7 @@ class StoreDonaturRequest extends FormRequest
 
             // ENHANCED: Validate duplicate phone numbers with options
             if ($this->no_hp) {
-                $existingDonatur = \App\Models\Donatur::where('no_hp', $this->no_hp)
+                $existingDonatur = Donatur::where('no_hp', $this->no_hp)
                     ->where('kode_donatur', '!=', $this->kode_donatur)
                     ->first();
 
@@ -148,8 +181,8 @@ class StoreDonaturRequest extends FormRequest
             }
 
             // ENHANCED: Validate kode_donatur uniqueness for new donatur creation mode
-            $existingByCode = \App\Models\Donatur::where('kode_donatur', $this->kode_donatur)->first();
-            if ($existingByCode && $existingByCode->nama_donatur !== $this->nama_donatur) {
+            $existingByCode = Donatur::where('kode_donatur', $this->kode_donatur)->first();
+            if ($existingByCode && ! KodeDonatur::namaSama($existingByCode->nama_donatur, $this->nama_donatur)) {
                 $validator->errors()->add('kode_donatur',
                     "Kode donatur sudah digunakan oleh: {$existingByCode->nama_donatur}. ".
                     'Gunakan kode yang berbeda atau pastikan nama donatur sama persis.');

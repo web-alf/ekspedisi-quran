@@ -3,10 +3,25 @@
 namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
+use App\Models\Donatur;
+use App\Support\KodeDonatur;
 use Illuminate\Foundation\Http\FormRequest;
+use libphonenumber\PhoneNumberUtil;
 
 class UpdateDonaturRequest extends FormRequest
 {
+    /**
+     * Seragamkan kode dan nama sebelum divalidasi — sama seperti saat dibuat, supaya
+     * penyuntingan tidak bisa menyelipkan "ECB 81" sebagai kode yang berbeda dari "ECB81".
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'kode_donatur' => KodeDonatur::bersihkan($this->kode_donatur),
+            'nama_donatur' => KodeDonatur::nama($this->nama_donatur),
+        ]);
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -26,7 +41,7 @@ class UpdateDonaturRequest extends FormRequest
             'nama_donatur' => ['required', 'string', 'max:255'],
             'no_hp' => ['required', 'string', 'max:30', function ($attribute, $value, $fail) {
                 try {
-                    $phoneUtil = \libphonenumber\PhoneNumberUtil::getInstance();
+                    $phoneUtil = PhoneNumberUtil::getInstance();
                     $numberProto = $phoneUtil->parse($value, null);
                     if (! $phoneUtil->isValidNumber($numberProto)) {
                         $fail('Nomor telepon tidak valid.');
@@ -68,7 +83,7 @@ class UpdateDonaturRequest extends FormRequest
             $donatur = $this->route('donatur');
 
             // Uniqueness check (exclude current donatur)
-            $existingByCode = \App\Models\Donatur::where('kode_donatur', $this->kode_donatur)
+            $existingByCode = Donatur::where('kode_donatur', $this->kode_donatur)
                 ->where('id', '!=', $donatur?->id)
                 ->first();
 
