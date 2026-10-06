@@ -1,26 +1,28 @@
 import { describe, it, expect } from 'vitest';
 
 /**
- * Pemindai QR: wadah DOM dan kejujuran pesan kegagalan.
+ * Pemindai QR: wadah DOM, langsungnya kamera, dan kejujuran pesan kegagalan.
  *
- * Dua bug yang dikunci di sini, keduanya muncul sebagai satu pesan yang sama di
- * layar pengguna:
+ * Semua bug di bawah ini muncul sebagai SATU pesan yang sama di layar pengguna
+ * ("camera permission"), sehingga akar aslinya mudah tertukar. Tiap bagian
+ * mengunci satu akar:
  *
  *   1. WADAH BELUM ADA. Komponen pemindai dipasang di dalam blok {#if} (tombol
- *      "Nyalakan Kamera"). Saat onMount berjalan, #qr-scanner-container belum
- *      dirender — dan html5-qrcode MELEMPAR error dari konstruktornya bila
- *      elemen tujuan tidak ada. Karena container itu sendiri berada di blok
- *      {:else} (cabang sukses), kegagalan ini membuat container tidak pernah
- *      dirender, sehingga kamera gagal SELALU dan tidak bisa pulih.
+ *      "Nyalakan Kamera"), sementara #qr-scanner-container dulu berada di cabang
+ *      {:else} yang mensyaratkan loading=false — padahal loading baru false
+ *      SETELAH pemindai dibuat. Saling mengunci: wadah tidak pernah dirender dan
+ *      html5-qrcode melempar error bila elemennya tidak ada.
  *
- *   2. PESAN SALAH MENUDUH. Dulu setiap kegagalan berbunyi "check camera
- *      permissions", padahal untuk kasus di atas izin kamera tidak pernah
- *      diminta sama sekali. Orang lalu mengejar setelan izin yang bukan
- *      sebabnya.
+ *   2. SATU KLIK TAMBAHAN DI HP. Html5QrcodeScanner merender UI sendiri berisi
+ *      tautan "Request Camera Permissions". Di HP, menekan tombol kamera tidak
+ *      langsung membuka kamera, hanya memunculkan tautan itu.
+ *
+ *   3. PESAN SALAH MENUDUH. Setiap kegagalan dulu berbunyi "check camera
+ *      permissions", padahal izin tidak pernah diminta sama sekali.
  *
  * Catatan: vitest di repo ini mengompilasi Svelte ke mode SSR, sehingga onMount
- * TIDAK berjalan di tes. Karena itu yang diuji adalah kunci sumbernya:
- * urutannya di berkas, dan fungsinya secara terpisah.
+ * TIDAK berjalan di tes. Karena itu yang diuji adalah kunci-kunci di berkas —
+ * urutan panggilan dan API yang dipakai.
  */
 
 const fs = await import('node:fs');
@@ -33,11 +35,9 @@ const sumber = fs.readFileSync(
 
 describe('LazyQRScanner — wadah pemindai', () => {
     it('menjaga wadah SELALU ada di DOM, bukan di dalam cabang if/else', () => {
-        // Akar masalahnya. Svelte hanya merender satu cabang, dan dulu wadah ada
-        // di cabang {:else} yang mensyaratkan loading=false — padahal loading
-        // baru false SETELAH pemindai berhasil dibuat. Saling mengunci: wadah
-        // tidak pernah dirender, pemindai tidak pernah bisa dibuat, dan kamera
-        // gagal permanen.
+        // Svelte hanya merender satu cabang. Dulu wadah ada di cabang {:else}
+        // yang mensyaratkan loading=false, padahal loading baru false SETELAH
+        // pemindai dibuat — kamera gagal permanen.
         const markup = sumber.slice(sumber.indexOf('</script>'));
         const posisiWadah = markup.indexOf('id="qr-scanner-container"');
 
@@ -47,64 +47,93 @@ describe('LazyQRScanner — wadah pemindai', () => {
         // "{:else}", dan itu bukan markup yang dirender.
         const sebelum = markup.slice(0, posisiWadah).replace(/<!--[\s\S]*?-->/g, '');
         expect(sebelum).not.toContain('{:else');
-        expect(sebelum).not.toMatch(/\{#if loading\}/);
     });
 
     it('menunggu wadah ada di DOM sebelum membuat pemindai', () => {
-        // Konstruktor html5-qrcode melempar bila elemennya belum ada, jadi
-        // penantian ini bukan kehati-hatian berlebih — tanpa ini kamera selalu
-        // gagal saat komponen dipasang di dalam {#if}.
         expect(sumber).toContain('tungguContainer');
         expect(sumber).toContain('await tick()');
     });
 
-    it('menunggu wadah SEBELUM memanggil konstruktor pemindai', () => {
-        // Urutan adalah inti perbaikannya. Kalau penantian dipindah ke bawah,
-        // bug aslinya kembali tanpa tes lain menangkapnya.
+    it('menunggu wadah SEBELUM memanggil API pemindai', () => {
         const posisiTunggu = sumber.indexOf('await tungguContainer()');
-        const posisiKonstruktor = sumber.indexOf('new Html5QrcodeScanner(');
+        const posisiKonstruktor = sumber.indexOf('new Html5Qrcode(');
 
         expect(posisiTunggu).toBeGreaterThan(-1);
         expect(posisiKonstruktor).toBeGreaterThan(-1);
         expect(posisiTunggu).toBeLessThan(posisiKonstruktor);
     });
+});
 
-    it('menggunakan const untuk id wadah, bukan teks yang tersebar', () => {
-        // Dulu id ini ditulis literal dua kali (konstruktor + markup). Kalau
-        // salah satu berubah, kegagalannya sunyi dan hanya muncul di peramban.
-        expect(sumber).toContain("const ELEMENT_ID = 'qr-scanner-container'");
-        expect(sumber).toContain('new Html5QrcodeScanner(ELEMENT_ID');
-        expect(sumber).not.toContain("new Html5QrcodeScanner('qr-scanner-container'");
+describe('LazyQRScanner — kamera menyala langsung', () => {
+    it('memakai Html5Qrcode, bukan Html5QrcodeScanner', () => {
+        // Html5QrcodeScanner merender UI sendiri ("Request Camera Permissions" /
+        // "Scan an Image File"), dan di HP itulah yang membuat kamera tidak
+        // langsung terbuka. Html5Qrcode tidak merender UI apa pun.
+        expect(sumber).toContain('new Html5Qrcode(');
+        expect(sumber).not.toContain('Html5QrcodeScanner');
+    });
+
+    it('memanggil start() supaya kamera langsung menyala', () => {
+        expect(sumber).toMatch(/html5QrCode\.start\(/);
+        expect(sumber).toContain('facingMode');
+    });
+
+    it('meminta izin lebih dulu agar sebab kegagalan bisa dibedakan', () => {
+        // Izin diminta eksplisit; hasilnya menentukan pesan yang tampil. Tanpa
+        // ini, kegagalan izin dan kegagalan lain tampak sama persis.
+        expect(sumber).toContain('pastikanIzinKamera');
+        expect(sumber).toMatch(/navigator\.mediaDevices\.getUserMedia\(/);
+
+        const posisiIzin = sumber.indexOf('await pastikanIzinKamera()');
+        const posisiStart = sumber.indexOf('html5QrCode.start(');
+        expect(posisiIzin).toBeLessThan(posisiStart);
+    });
+
+    it('melepaskan kamera setelah permintaan izin', () => {
+        // Tanpa track.stop(), kamera tetap dikuasai permintaan izin sehingga
+        // pemindai gagal karena perangkat "sedang dipakai".
+        const blok = sumber.slice(
+            sumber.indexOf('async function pastikanIzinKamera'),
+            sumber.indexOf('function pilihKamera')
+        );
+        expect(blok).toContain('track.stop()');
+    });
+
+    it('membersihkan pemindai saat gagal maupun saat komponen dilepas', () => {
+        // Pemindai yang gagal tapi tidak dibersihkan menahan kamera, sehingga
+        // percobaan berikutnya ikut gagal.
+        expect(sumber).toMatch(/await html5QrCode\.stop\(\)/);
+        expect(sumber).toMatch(/onDestroy\(\(\) => \{\s*bersihkanPemindai\(\)/);
     });
 });
 
 describe('LazyQRScanner — kejujuran pesan kegagalan', () => {
     it('menyertakan sebab asli, bukan selalu menuduh izin kamera', () => {
         expect(sumber).not.toContain('Failed to initialize camera. Please check camera permissions.');
-        expect(sumber).toMatch(/error = `Kamera tidak dapat dinyalakan: \$\{err/);
+        expect(sumber).toContain('terjemahkanGagal');
     });
 
-    it('menampilkan tombol minta izin HANYA bila sebabnya soal izin', () => {
-        // Dulu tombol ini muncul untuk setiap kegagalan (termasuk "wadah belum
-        // ada"), jadi pengguna diminta memberi izin yang tidak pernah diminta.
-        expect(sumber).toContain('menyinggungIzin');
-        expect(sumber).toContain('{#if menyinggungIzin}');
+    it('membedakan izin ditolak, kamera tidak ada, dan kamera terpakai', () => {
+        expect(sumber).toContain('NotAllowedError');
+        expect(sumber).toContain('NotFoundError');
+        expect(sumber).toContain('NotReadableError');
+    });
+
+    it('menyebut HTTPS pada kegagalan izin', () => {
+        // Penyebab izin yang paling sering di HP adalah halaman dibuka lewat
+        // koneksi tidak aman — kamera memang diblokir di sana. Pesan tanpa
+        // petunjuk ini membuat orang mencari setelan yang salah.
+        const blok = sumber.slice(sumber.indexOf('NotAllowedError'), sumber.indexOf('NotFoundError'));
+        expect(blok).toContain('HTTPS');
+    });
+
+    it('tidak menyisakan mekanisme "minta izin" terpisah', () => {
+        // Izin kini diminta di awal proses nyala kamera, jadi tombol izin
+        // tersendiri tidak diperlukan lagi. Yang penting: tidak kembali ke pola
+        // lama yang memunculkan tombol itu untuk SETIAP kegagalan.
+        expect(sumber).toContain('pastikanIzinKamera');
+        expect(sumber).not.toContain('menyinggungIzin');
         expect(sumber).not.toContain("error.includes('permission')");
-    });
-
-    it('mengenali kegagalan izin dari nama error peramban', () => {
-        for (const nama of ['NotAllowedError', 'NotFoundError', 'NotReadableError']) {
-            expect(sumber).toContain(nama);
-        }
-    });
-
-    it('melepaskan kamera setelah permintaan izin', () => {
-        // Tanpa track.stop(), kamera tetap dikuasai permintaan izin sehingga
-        // pemindai gagal karena perangkat "sedang dipakai".
-        const blokIzin = sumber.slice(
-            sumber.indexOf('function requestCameraPermission'),
-            sumber.indexOf('function requestCameraPermission') + 1400
-        );
-        expect(blokIzin).toContain('track.stop()');
+        expect(sumber).not.toContain('Grant Camera Permission');
     });
 });

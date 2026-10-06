@@ -8,7 +8,7 @@
   export let fps = 10;
   export let qrbox = 250;
   export let aspectRatio = 1.0;
-  export let loadingText = 'Loading camera...';
+  export let loadingText = 'Menyalakan kamera...';
   export let showToggleCamera = true;
 
   const ELEMENT_ID = 'qr-scanner-container';
@@ -29,9 +29,7 @@
    * html5-qrcode MELEMPAR error dari konstruktornya bila elemen tujuan belum ada
    * ("HTML Element with id=... not found"). Komponen ini dipasang di dalam blok
    * {#if} (tombol "Nyalakan Kamera"), jadi saat onMount berjalan elemennya belum
-   * dirender. Dulu akibatnya blok {:else} yang memuat container itu tidak pernah
-   * dieksekusi, sehingga kamera GAGAL SELALU — dan pesannya keliru menuduh izin
-   * kamera, padahal tidak ada permintaan izin yang pernah terjadi.
+   * dirender.
    */
   async function tungguContainer(percobaan = 20) {
     for (let i = 0; i < percobaan; i++) {
@@ -47,57 +45,135 @@
     return typeof document !== 'undefined' && !!document.getElementById(ELEMENT_ID);
   }
 
+  /**
+   * Menerjemahkan kegagalan peramban menjadi kalimat yang berguna.
+   *
+   * Tanpa ini, semua kegagalan tampak sama di layar dan orang menebak-nebak.
+   * Yang paling sering di HP adalah NotAllowedError — izin ditolak, biasanya
+   * karena halaman dibuka lewat koneksi tidak aman atau izin pernah ditolak.
+   */
+  function terjemahkanGagal(err) {
+    const nama = err?.name || '';
+
+    if (nama === 'NotAllowedError' || nama === 'SecurityError') {
+      return 'Izin kamera ditolak. Pastikan halaman dibuka lewat HTTPS, lalu izinkan akses kamera untuk situs ini dan coba lagi.';
+    }
+    if (nama === 'NotFoundError' || nama === 'OverconstrainedError') {
+      return 'Kamera tidak ditemukan di perangkat ini.';
+    }
+    if (nama === 'NotReadableError' || nama === 'AbortError') {
+      return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.';
+    }
+
+    return `Kamera tidak dapat dinyalakan: ${err?.message || err}`;
+  }
+
+  /**
+   * Menyalakan kamera LANGSUNG, tanpa UI bawaan html5-qrcode.
+   *
+   * Dulu komponen ini memakai pemindai bawaan pustaka yang merender UI sendiri
+   * berisi tautan "Request Camera Permissions" dan "Scan an Image File". Akibat
+   * di HP: menekan tombol kamera TIDAK langsung membuka kamera, tetapi
+   * memunculkan satu klik tambahan yang membingungkan — dan kalau tautannya
+   * tidak tersentuh, kamera tidak pernah menyala sama sekali.
+   *
+   * Html5Qrcode.start() membuka kamera saat itu juga. Ditambah permintaan izin
+   * eksplisit lebih dulu supaya kegagalan izin bisa dibedakan dari kegagalan
+   * lain, dan supaya dialog izin muncul dari sentuhan pengguna (beberapa
+   * peramban menolak permintaan yang tidak dipicu sentuhan).
+   */
   async function mulaiScanner() {
+    loading = true;
+    error = null;
+
     try {
       // Import dinamis: pustaka pemindai tidak ikut di bundel awal halaman.
-      const { Html5QrcodeScanner, Html5Qrcode } = await import('html5-qrcode');
+      const { Html5Qrcode } = await import('html5-qrcode');
 
       if (!(await tungguContainer())) {
         throw new Error('wadah pemindai tidak muncul di halaman');
       }
 
-      // Daftar kamera hanya untuk pemilihan awal. Bila izin belum diberikan,
-      // browser menyembunyikan label dan ini tetap boleh gagal diam-diam —
-      // html5-qrcode yang akan meminta izinnya sendiri saat render.
-      try {
-        const cameras = await Html5Qrcode.getCameras();
-        camerasAvailable = cameras;
+      // Izin diminta lebih dulu, dan hasilnya dipakai sebagai penentu:
+      // kalau ini gagal, sebabnya hampir selalu izin/HTTPS — bukan hal lain.
+      await pastikanIzinKamera();
 
-        const preferredCamera = cameras.find(camera =>
-          camera.label.toLowerCase().includes(facingMode) ||
-          camera.label.toLowerCase().includes('back')
-        ) || cameras[0];
-
-        currentCameraId = preferredCamera?.id;
-      } catch (err) {
-        console.warn('Could not get cameras:', err);
+      if (!camerasAvailable.length) {
+        try {
+          camerasAvailable = await Html5Qrcode.getCameras();
+        } catch (err) {
+          console.warn('Daftar kamera tidak terbaca:', err);
+        }
       }
 
-      const config = {
-        fps: fps,
-        qrbox: { width: qrbox, height: qrbox },
-        aspectRatio: aspectRatio,
-        showTorchButtonIfSupported: true,
-        showZoomSliderIfSupported: true,
-        defaultZoomValueIfSupported: 2,
-      };
+      const kameraTerpilih = pilihKamera();
 
-      html5QrCode = new Html5QrcodeScanner(ELEMENT_ID, config, false);
-      
-      html5QrCode.render(onScanSuccess, onScanError);
-      
-      loading = false;
+      html5QrCode = new Html5Qrcode(ELEMENT_ID, false);
+
+      await html5QrCode.start(
+        kameraTerpilih,
+        {
+          fps: fps,
+          qrbox: { width: qrbox, height: qrbox },
+          aspectRatio: aspectRatio,
+        },
+        onScanSuccess,
+        onScanError
+      );
+
       isScanning = true;
+      loading = false;
 
       dispatch('scannerReady');
     } catch (err) {
-      console.error('Failed to initialize QR scanner:', err);
-      // Sebab aslinya ikut ditampilkan. Pesan lama selalu menuduh izin kamera,
-      // sehingga kegagalan lain (mis. wadah yang belum dirender) menyesatkan dan
-      // membuat orang mengejar setelan izin yang sebenarnya tidak pernah diminta.
-      error = `Kamera tidak dapat dinyalakan: ${err?.message || err}`;
+      console.error('Kamera gagal dinyalakan:', err);
+      error = terjemahkanGagal(err);
       loading = false;
+      // Sisa objek pemindai dibersihkan supaya percobaan berikutnya tidak
+      // bertumpuk dengan yang gagal (kamera bisa ikut tertahan).
+      await bersihkanPemindai();
     }
+  }
+
+  /**
+   * Meminta izin kamera dan MELEPAS kameranya segera setelah diizinkan.
+   *
+   * Pelepasan itu penting: tanpa track.stop(), kamera tetap dikuasai permintaan
+   * izin ini sehingga pemindai gagal menyala karena perangkat "sedang dipakai".
+   */
+  async function pastikanIzinKamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw Object.assign(new Error('peramban tidak mendukung akses kamera'), {
+        name: 'NotAllowedError',
+      });
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode },
+    });
+    stream.getTracks().forEach((track) => track.stop());
+  }
+
+  /**
+   * Kamera yang dipakai: yang terpilih lebih dulu, lalu id perangkat bila sudah
+   * ada, terakhir facingMode (browser memilih sendiri kamera belakang).
+   */
+  function pilihKamera() {
+    if (currentCameraId) {
+      return currentCameraId;
+    }
+
+    const belakang = camerasAvailable.find((camera) =>
+      (camera.label || '').toLowerCase().includes('back') ||
+      (camera.label || '').toLowerCase().includes('rear')
+    );
+
+    if (belakang?.id) {
+      currentCameraId = belakang.id;
+      return belakang.id;
+    }
+
+    return { facingMode };
   }
 
   onMount(() => {
@@ -105,7 +181,7 @@
   });
 
   onDestroy(() => {
-    stopScanning();
+    bersihkanPemindai();
   });
 
   function onScanSuccess(decodedText, decodedResult) {
@@ -115,113 +191,62 @@
     });
   }
 
-  function onScanError(error) {
-    // Don't dispatch every scan error as they're frequent
-    // Only dispatch if it's a critical error
-    if (error.includes('Camera')) {
-      dispatch('scanError', { error });
-    }
+  function onScanError() {
+    // Kegagalan baca per-frame itu wajar (QR belum masuk kotak). Sengaja tidak
+    // dispatcher supaya tidak membanjiri pendengar dengan ribuan pesan.
   }
 
-  function stopScanning() {
-    if (html5QrCode && isScanning) {
-      try {
-        html5QrCode.clear();
-        isScanning = false;
-        dispatch('scannerStopped');
-      } catch (err) {
-        console.error('Error stopping scanner:', err);
-      }
-    }
-  }
-
-  function startScanning() {
-    if (html5QrCode && !isScanning) {
-      try {
-        const config = {
-          fps: fps,
-          qrbox: { width: qrbox, height: qrbox },
-          aspectRatio: aspectRatio
-        };
-
-        html5QrCode.render(onScanSuccess, onScanError);
-        isScanning = true;
-        dispatch('scannerStarted');
-      } catch (err) {
-        console.error('Error starting scanner:', err);
-        error = 'Failed to start scanner';
-      }
-    }
-  }
-
-  async function toggleCamera() {
-    if (!camerasAvailable || camerasAvailable.length < 2) return;
-
+  async function bersihkanPemindai() {
     try {
-      stopScanning();
-      
-      // Find next camera
-      const currentIndex = camerasAvailable.findIndex(cam => cam.id === currentCameraId);
-      const nextIndex = (currentIndex + 1) % camerasAvailable.length;
-      currentCameraId = camerasAvailable[nextIndex].id;
-
-      // Restart with new camera
-      setTimeout(() => {
-        startScanning();
-      }, 500);
+      if (html5QrCode) {
+        await html5QrCode.stop();
+        html5QrCode.clear();
+        html5QrCode = null;
+      }
     } catch (err) {
-      console.error('Error switching camera:', err);
+      // Sudah berhenti / belum pernah menyala — bukan masalah.
+    } finally {
+      isScanning = false;
     }
+  }
+
+  async function stopScanning() {
+    await bersihkanPemindai();
+    dispatch('scannerStopped');
+  }
+
+  async function mulaiUlangKamera() {
+    await bersihkanPemindai();
+    await mulaiScanner();
+    dispatch('scannerStarted');
   }
 
   /**
-   * Kegagalan yang benar-benar soal izin kamera. Dipakai agar tombol "Minta Izin"
-   * hanya muncul ketika memang itu masalahnya — dulu blok ini selalu muncul untuk
-   * SETIAP kegagalan, sehingga orang mengutak-atik izin padahal sebabnya lain.
+   * Menukar ke kamera berikutnya. Dipakai di perangkat dengan kamera lebih dari
+   * satu — dan berguna persis saat kamera yang terpilih tidak bisa menyala.
    */
-  $: menyinggungIzin = /izin|permission|NotAllowed|denied/i.test(error || '');
+  async function toggleCamera() {
+    if (!camerasAvailable || camerasAvailable.length < 2) return;
 
-  async function muatUlang() {
-    await tick();
-    loading = true;
-    error = null;
-    await mulaiScanner();
+    const currentIndex = camerasAvailable.findIndex((cam) => cam.id === currentCameraId);
+    const nextIndex = (currentIndex + 1) % camerasAvailable.length;
+    currentCameraId = camerasAvailable[nextIndex].id;
+
+    await mulaiUlangKamera();
   }
 
-  function requestCameraPermission() {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      error = 'Peramban ini tidak mendukung akses kamera.';
-      return;
-    }
-
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then((stream) => {
-        // Hentikan segera: permintaan ini hanya untuk memicu dialog izin, bukan
-        // untuk memakai kamera. Tanpa ini, kamera tertahan dan pemindai justru
-        // gagal karena perangkat sedang dipakai.
-        stream.getTracks().forEach((track) => track.stop());
-        muatUlang();
-      })
-      .catch((err) => {
-        if (err?.name === 'NotAllowedError') {
-          error = 'Izin kamera ditolak. Aktifkan akses kamera di setelan peramban, lalu coba lagi.';
-        } else if (err?.name === 'NotFoundError') {
-          error = 'Kamera tidak ditemukan di perangkat ini.';
-        } else if (err?.name === 'NotReadableError') {
-          error = 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.';
-        } else {
-          error = `Tidak dapat mengakses kamera: ${err?.message || err}`;
-        }
-      });
+  async function muatUlang() {
+    await bersihkanPemindai();
+    await mulaiScanner();
   }
 
   // Public methods
   export function stop() {
-    stopScanning();
+    return stopScanning();
   }
 
   export function start() {
-    startScanning();
+    return mulaiScanner();
   }
 
   export function isCurrentlyScanning() {
@@ -237,8 +262,7 @@
     di cabang {:else}, yang mensyaratkan loading=false — sementara loading baru
     dijadikan false SETELAH pemindai berhasil dibuat. Urutan itu saling
     mengunci: wadah tidak pernah dirender, dan karena html5-qrcode melempar
-    error bila elemennya tidak ada, pemindai tidak pernah bisa dibuat. Kamera
-    gagal permanen, dengan pesan yang salah menuduh izin kamera.
+    error bila elemennya tidak ada, pemindai tidak pernah bisa dibuat.
   -->
   <div id="qr-scanner-container" bind:this={scannerContainer}></div>
 
@@ -258,22 +282,12 @@
           <HeroIcon name="video-camera" class="w-8 h-8 mx-auto" />
         </div>
         <p class="text-sm text-red-700 mb-3">{error}</p>
-        <div class="flex flex-col sm:flex-row gap-2 justify-center">
-          <button 
-            class="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg"
-            on:click={muatUlang}
-          >
-            Coba Lagi
-          </button>
-          {#if menyinggungIzin}
-            <button 
-              class="px-4 py-2 text-sm border border-red-300 text-red-700 hover:bg-red-100 rounded-lg"
-              on:click={requestCameraPermission}
-            >
-              Minta Izin Kamera
-            </button>
-          {/if}
-        </div>
+        <button 
+          class="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg"
+          on:click={muatUlang}
+        >
+          Coba Lagi
+        </button>
       </div>
     </div>
   {/if}
@@ -286,7 +300,7 @@
           <button
             class="bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-70 transition-all"
             on:click={toggleCamera}
-            title="Switch Camera"
+            title="Ganti Kamera"
           >
             <HeroIcon name="arrow-path" class="w-5 h-5" />
           </button>
@@ -297,17 +311,17 @@
       <div class="flex justify-center mt-4 space-x-2">
         <button
           class="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
-          on:click={startScanning}
+          on:click={mulaiUlangKamera}
           disabled={isScanning}
         >
-          Start Scan
+          Mulai Pindai
         </button>
         <button
           class="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50"
           on:click={stopScanning}
           disabled={!isScanning}
         >
-          Stop Scan
+          Hentikan
         </button>
       </div>
     </div>
