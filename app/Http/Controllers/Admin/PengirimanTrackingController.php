@@ -7,6 +7,7 @@ use App\Models\Pengiriman;
 use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Models\TrackingHistory;
+use App\Support\PengirimanStageVisibility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -24,6 +25,17 @@ class PengirimanTrackingController extends Controller
         // Get next possible statuses
         $currentStatus = $pengiriman->status;
         $nextStatuses = $this->getNextPossibleStatuses($currentStatus->id);
+
+        // Pembatasan yang sama berlaku di sini. Halaman ini punya aturan
+        // "status berikutnya" sendiri, jadi tanpa penyaringan tambahan kurir tetap
+        // bisa memilih tahap gudang walau dropdown di halaman lain sudah dibatasi.
+        $nextStatuses = $nextStatuses
+            ->filter(fn ($status) => $status['id'] === null
+                || PengirimanStageVisibility::bolehPilihStatus(
+                    auth()->user(),
+                    StatusPengiriman::find($status['id'])
+                ))
+            ->values();
 
         return Inertia::render('Admin/Pengiriman/UpdateStatus', [
             'pengiriman' => $pengiriman,
@@ -85,6 +97,16 @@ class PengirimanTrackingController extends Controller
             $pengiriman = $locked;
 
             $oldStatus = $pengiriman->status_id;
+
+            // Kurir hanya boleh memindahkan status perjalanan. Dicek di server,
+            // bukan hanya dengan menyembunyikan pilihannya — endpoint ini bisa
+            // dipanggil langsung dengan status_id apa pun.
+            $statusBaru = StatusPengiriman::find($request->status_id);
+            if ($statusBaru && ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusBaru)) {
+                return back()->withErrors([
+                    'error' => PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusBaru),
+                ])->withInput();
+            }
 
             // Validasi perubahan status
             $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);

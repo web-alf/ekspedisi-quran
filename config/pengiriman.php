@@ -29,4 +29,39 @@ return [
         'diterima',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Status yang boleh dipilih KURIR saat memindahkan status
+    |--------------------------------------------------------------------------
+    |
+    | Ini BATAS PILIHAN, bukan batas data — bedanya penting.
+    |
+    | Kurir tetap perlu MELIHAT resi lintas status di halaman Pengiriman (ada yang
+    | masih pemesanan, packing, selesai packing); membatasi daftarnya akan membuat
+    | pekerjaan mereka tidak bisa dilihat sama sekali. Yang dibatasi adalah status
+    | yang boleh mereka PILIH. Karena itu daftar ini dipakai oleh
+    | PengirimanStageVisibility::visibleProgressStatuses() dan
+    | MuatanController::statusPerjalanan(), dan SENGAJA tidak dipakai oleh
+    | applyToQuery()/isVisible().
+    |
+    | Isinya: kurir mengantar barang dan mengabarkan PERJALANANNYA. Tahap gudang
+    | (pemesanan, produksi, kedatangan, packing, selesai packing) bukan wewenang
+    | mereka, dan "Diterima Penerima" punya jalur tersendiri yang hanya boleh
+    | diselesaikan role distribusi/manager (lihat MuatanController::
+    | selesaikanDistribusi). "Batal" selalu ikut: kurir yang menemukan alamat tidak
+    | ada atau penerima menolak harus bisa mengabarkannya.
+    |
+    | Sebelum ini daftar tersebut tidak dibatasi sama sekali — kurir melihat 8
+    | status, termasuk seluruh tahap gudang.
+    |
+    | Mengosongkan daftar = kurir tidak bisa memindahkan status apa pun
+    | (gagal-tertutup), bukan "boleh semua".
+    |
+    */
+
+    'courier_progress_stages' => [
+        'pengiriman',
+        'batal',
+    ],
+
 ];

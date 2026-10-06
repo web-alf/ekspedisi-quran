@@ -243,7 +243,10 @@ class PengirimanController extends Controller
             'filters' => $request->only(['search', 'status', 'jenis_quran', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
             'perPage' => $perPage,
             'perPageOptions' => self::UKURAN_HALAMAN,
-            'statusList' => PengirimanStageVisibility::visibleStatuses($request->user()),
+            // Daftar status untuk pemindahan juga dipusatkan: sebelumnya jalur ini
+            // memuat semua status aktif sendiri, sehingga berbeda isi dari halaman
+            // ubah status dan halaman Muatan.
+            'statusList' => PengirimanStageVisibility::visibleProgressStatuses($request->user()),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
             'stats' => $this->getOptimizedPengirimanStats($request->user()),

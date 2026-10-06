@@ -429,6 +429,16 @@ class MuatanController extends Controller
             ], 403);
         }
 
+        // Sabuk kedua di server: menyembunyikan pilihan di tampilan saja bukan
+        // pengamanan. Kurir yang mengirim status_id tahap gudang langsung ke
+        // endpoint ini tetap ditolak.
+        if (! PengirimanStageVisibility::bolehPilihStatus($request->user(), $status)) {
+            return response()->json([
+                'success' => false,
+                'message' => PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $status),
+            ], 403);
+        }
+
         $hasil = $this->terapkanStatusKeSemuaResi(
             $muatan,
             $status,
@@ -847,7 +857,11 @@ class MuatanController extends Controller
     {
         $user = auth()->user();
 
-        return PengirimanStageVisibility::visibleStatuses($user)
+        // Sumber tunggal: PengirimanStageVisibility. Dulu di sini hanya "diterima"
+        // yang dibuang, sehingga kurir tetap melihat seluruh tahap gudang di
+        // dropdown. Pembatasan sekarang mengikuti config agar tidak menyimpang dari
+        // jalur lain (filter Pengiriman, halaman ubah status).
+        return PengirimanStageVisibility::visibleProgressStatuses($user)
             ->reject(fn ($s) => $s->slug === 'diterima')
             ->map(fn ($s) => [
                 'id' => $s->id,
