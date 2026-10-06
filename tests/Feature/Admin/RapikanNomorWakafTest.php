@@ -223,6 +223,34 @@ it('bisa dibatasi ke satu donatur saja', function () {
     expect(WakafItem::where('donatur_id', $b->id)->pluck('sequence_in_type')->all())->toBe([1, 1]);
 });
 
+it('membereskan nomor "#N" kembar yang muncul tanpa nomor jenis kembar', function () {
+    // Kasus nyata di produksi (donatur MDI419): A5#1 dan A6#1 sama-sama memakai global 1,
+    // sehingga donatur itu menampilkan DUA item bernomor "#1" — padahal sequence_in_type
+    // -nya sah, tidak kembar, dan tidak menghalangi kunci unik apa pun. Kalau perintahnya
+    // hanya memeriksa nomor jenis kembar, donatur ini tidak tersentuh dan "#N" tetap ganda.
+    $d = donaturDenganItem('REN-08', [
+        ['wakaf_type' => 'A5', 'sequence_in_type' => 1, 'global_sequence' => 1],
+        ['wakaf_type' => 'A6', 'sequence_in_type' => 1, 'global_sequence' => 1],
+        ['wakaf_type' => 'A6', 'sequence_in_type' => 2, 'global_sequence' => 2],
+    ], $this->admin, $this->jenisA5, $this->batal);
+
+    // Tidak ada nomor jenis kembar — inilah yang membuat kasus ini mudah terlewat.
+    expect(DB::table('wakaf_items')
+        ->select('donatur_id', 'wakaf_type', 'sequence_in_type')
+        ->groupBy('donatur_id', 'wakaf_type', 'sequence_in_type')
+        ->havingRaw('COUNT(*) > 1')->count())->toBe(0);
+
+    $this->artisan('wakaf-items:renumber-sequences')->assertSuccessful();
+
+    // "#N" kini 1, 2, 3 — tidak ada lagi dua item bernomor sama.
+    expect(WakafItem::where('donatur_id', $d->id)->orderBy('id')->pluck('global_sequence')->all())
+        ->toBe([1, 2, 3]);
+
+    // Nomor per jenisnya tetap benar.
+    expect(WakafItem::where('donatur_id', $d->id)->orderBy('id')->pluck('sequence_in_type')->all())
+        ->toBe([1, 1, 2]);
+});
+
 it('membuat kunci unik bisa dipasang di atas data yang sudah dirapikan', function () {
     // Inilah tujuannya: setelah rapi, kunci unik (yang selama ini terhalang) bisa dipasang.
     donaturDenganItem('REN-07', [

@@ -54,18 +54,28 @@ class RenumberWakafItemSequences extends Command
         $this->line('Mode uji-coba: '.($dryRun ? 'AKTIF — tidak ada data yang ditulis' : 'NONAKTIF — data akan diubah'));
         $this->newLine();
 
-        $kembar = $this->cariKembar($hanyaDonatur);
+        $kembarSeq = $this->cariKembarSequence($hanyaDonatur);
+        $kembarGlobal = $this->cariKembarGlobal($hanyaDonatur);
 
-        if ($kembar->isEmpty()) {
+        // Dua jenis kembar, dan keduanya harus ditangani:
+        //  - sequence_in_type kembar pada jenis yang sama  -> menghalangi kunci unik
+        //  - global_sequence kembar                        -> nomor "#N" tampil ganda
+        // Kembar global bisa muncul SENDIRI, tanpa kembar sequence: item A5#1 dan A6#1
+        // sama-sama memakai global 1. Kalau hanya yang pertama diperiksa, kasus itu lolos.
+        $idDonatur = $kembarSeq->pluck('donatur_id')
+            ->merge($kembarGlobal->pluck('donatur_id'))
+            ->unique()
+            ->values();
+
+        if ($idDonatur->isEmpty()) {
             $this->info('Tidak ada nomor urut yang kembar. Tidak ada yang perlu dikerjakan.');
 
             return self::SUCCESS;
         }
 
-        $idDonatur = $kembar->pluck('donatur_id')->unique()->values();
-
-        $this->line('Kombinasi (donatur + jenis + nomor) yang kembar : '.$kembar->count());
-        $this->line('Donatur terdampak                                : '.$idDonatur->count());
+        $this->line('Nomor kembar pada jenis yang sama (menghalangi kunci unik) : '.$kembarSeq->count());
+        $this->line('Nomor "#N" yang tampil ganda (global_sequence)              : '.$kembarGlobal->count());
+        $this->line('Donatur terdampak                                          : '.$idDonatur->count());
         $this->newLine();
 
         $rencana = [];
@@ -76,6 +86,12 @@ class RenumberWakafItemSequences extends Command
         $totalDiubah = collect($rencana)->sum(fn ($r) => count($r['perubahan']));
         $this->line('Baris yang nomornya akan disesuaikan             : '.$totalDiubah);
         $this->newLine();
+
+        if ($totalDiubah === 0) {
+            $this->info('Tidak ada nomor yang perlu disesuaikan.');
+
+            return self::SUCCESS;
+        }
 
         // 12 contoh, supaya bisa diperiksa sebelum data disentuh.
         $this->line('12 contoh perubahan:');
@@ -125,22 +141,45 @@ class RenumberWakafItemSequences extends Command
 
         $this->info("Selesai. {$totalDiubah} baris disesuaikan, 0 baris dihapus.");
 
-        // Periksa ulang: kalau masih kembar, jangan mengaku beres.
-        $sisa = $this->cariKembar($hanyaDonatur)->count();
-        $this->line('Kombinasi kembar yang tersisa: '.$sisa);
+        // Periksa ulang KEDUA jenis kembar: kalau masih ada, jangan mengaku beres.
+        $sisaSeq = $this->cariKembarSequence($hanyaDonatur)->count();
+        $sisaGlobal = $this->cariKembarGlobal($hanyaDonatur)->count();
+        $this->line('Sisa nomor kembar pada jenis yang sama : '.$sisaSeq);
+        $this->line('Sisa nomor "#N" yang tampil ganda      : '.$sisaGlobal);
 
-        return $sisa === 0 ? self::SUCCESS : self::FAILURE;
+        return ($sisaSeq === 0 && $sisaGlobal === 0) ? self::SUCCESS : self::FAILURE;
     }
 
     /**
+     * Nomor kembar PADA JENIS YANG SAMA — inilah yang menghalangi kunci unik.
+     *
      * @return Collection<int, object>
      */
-    private function cariKembar(?string $hanyaDonatur)
+    private function cariKembarSequence(?string $hanyaDonatur)
     {
         return DB::table('wakaf_items')
             ->select('donatur_id', 'wakaf_type', 'sequence_in_type', DB::raw('COUNT(*) as n'))
             ->when($hanyaDonatur !== null, fn ($q) => $q->where('donatur_id', (int) $hanyaDonatur))
             ->groupBy('donatur_id', 'wakaf_type', 'sequence_in_type')
+            ->havingRaw('COUNT(*) > 1')
+            ->get();
+    }
+
+    /**
+     * Nomor "#N" yang tampil ganda — global_sequence kembar pada donatur yang sama.
+     *
+     * Bisa muncul SENDIRI tanpa kembar sequence: item A5#1 dan A6#1 sama-sama memakai
+     * global 1, sehingga donatur itu menampilkan dua item bernomor "#1" — padahal
+     * sequence_in_type-nya sah dan tidak menghalangi kunci unik apa pun.
+     *
+     * @return Collection<int, object>
+     */
+    private function cariKembarGlobal(?string $hanyaDonatur)
+    {
+        return DB::table('wakaf_items')
+            ->select('donatur_id', 'global_sequence', DB::raw('COUNT(*) as n'))
+            ->when($hanyaDonatur !== null, fn ($q) => $q->where('donatur_id', (int) $hanyaDonatur))
+            ->groupBy('donatur_id', 'global_sequence')
             ->havingRaw('COUNT(*) > 1')
             ->get();
     }
