@@ -29,6 +29,8 @@
   let showImportModal = false;
   let importFile = null;
   let importFileInput;
+  let importErrors = [];
+  let pratinjau = null;
 
   // Current date for max date attribute
   let currentDate = new Date().toISOString().split('T')[0];
@@ -140,6 +142,8 @@
   function closeImportModal() {
     showImportModal = false;
     importFile = null;
+    importErrors = [];
+    pratinjau = null;
     if (importFileInput) importFileInput.value = '';
   }
 
@@ -160,12 +164,69 @@
       }
 
       importFile = file;
+      hitungPratinjau(file);
+    }
+  }
+
+  // Membaca berkas lebih dulu untuk menunjukkan berapa yang AKAN masuk, sebelum
+  // apa pun tersimpan. Salah ketik jumlah pada puluhan ribu baris tidak lagi
+  // ketahuan setelah impor selesai, tapi sebelum ditekan Import.
+  async function hitungPratinjau(file) {
+    pratinjau = { memuat: true };
+    importErrors = [];
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('_token', csrfToken);
+
+    try {
+      const res = await fetch('/admin/donatur-import-pratinjau', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        pratinjau = null;
+        toast.error(data.message || 'Gagal membaca berkas.');
+        return;
+      }
+
+      pratinjau = {
+        memuat: false,
+        jumlahDonatur: data.jumlah_donatur,
+        jumlahMushaf: data.jumlah_mushaf,
+        a5: data.a5,
+        a6: data.a6,
+        iqra: data.iqra,
+        donaturBaru: data.donatur_baru,
+        donaturAda: data.donatur_ada,
+        perDonatur: data.per_donatur || [],
+        galat: data.galat || [],
+      };
+
+      if (data.galat && data.galat.length > 0) {
+        importErrors = data.galat;
+      }
+    } catch (e) {
+      pratinjau = null;
+      toast.error('Gagal membaca berkas: ' + e.message);
     }
   }
 
   function submitImport() {
     if (!importFile) {
       toast.warning('File Belum Dipilih', 'Silakan pilih file Excel terlebih dahulu');
+      return;
+    }
+
+    // Kalau pratinjau menemukan galat, jangan biarkan berkas itu diimpor sebelum
+    // diperbaiki — lebih baik menolak di sini daripada menyimpan data setengah benar.
+    if (pratinjau && pratinjau.galat && pratinjau.galat.length > 0) {
+      toast.warning('Berkas Masih Bermasalah', 'Perbaiki dulu ' + pratinjau.galat.length + ' baris yang dilaporkan.');
       return;
     }
 
@@ -836,9 +897,79 @@
                   </label>
                 </div>
 
+                {#if pratinjau?.memuat}
+                  <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 animate-pulse">
+                    <div class="h-3 w-40 rounded bg-gray-300"></div>
+                    <div class="mt-3 h-3 w-full rounded bg-gray-200"></div>
+                    <div class="mt-2 h-3 w-3/4 rounded bg-gray-200"></div>
+                    <p class="mt-3 text-xs text-gray-500">Membaca berkas…</p>
+                  </div>
+                {:else if pratinjau}
+                  <div class="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                    <p class="text-sm font-medium text-gray-900">Hasil pembacaan berkas</p>
+                    <p class="mt-1 text-xs text-gray-500">Periksa dulu angka di bawah sebelum menekan Import.</p>
+
+                    <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <dt class="text-gray-600">Donatur</dt>
+                      <dd class="text-right font-semibold text-gray-900">{pratinjau.jumlahDonatur}</dd>
+                      <dt class="text-gray-600">Total mushaf</dt>
+                      <dd class="text-right font-semibold text-gray-900">{pratinjau.jumlahMushaf}</dd>
+                      <dt class="pl-4 text-gray-500">A5</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.a5}</dd>
+                      <dt class="pl-4 text-gray-500">A6</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.a6}</dd>
+                      <dt class="pl-4 text-gray-500">Iqra</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.iqra}</dd>
+                      <dt class="text-gray-600">Donatur baru</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.donaturBaru}</dd>
+                      <dt class="text-gray-600">Menambah data lama</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.donaturAda}</dd>
+                    </dl>
+
+                    {#if pratinjau.perDonatur.length > 0}
+                      <details class="mt-3">
+                        <summary class="cursor-pointer text-xs text-gray-600">
+                          Lihat rincian per donatur ({pratinjau.perDonatur.length})
+                        </summary>
+                        <div class="mt-2 max-h-40 overflow-y-auto rounded border border-gray-200">
+                          <table class="w-full text-left text-xs">
+                            {#each pratinjau.perDonatur as d}
+                              <tr class="border-b border-gray-100 last:border-0">
+                                <td class="px-2 py-1 font-mono text-gray-700">{d.kode}</td>
+                                <td class="px-2 py-1 text-gray-500">{d.baris} baris</td>
+                                <td class="px-2 py-1 text-right text-gray-700">{d.mushaf} mushaf</td>
+                                <td class="px-2 py-1 text-right text-gray-500">
+                                  {#if d.wakifBerbeda > 1}{d.wakifBerbeda} nama{/if}
+                                </td>
+                              </tr>
+                            {/each}
+                          </table>
+                        </div>
+                      </details>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if pratinjau?.galat?.length > 0}
+                  <div class="mt-4 rounded-lg border border-gray-200 p-3">
+                    <p class="text-xs font-semibold text-red-700">
+                      {pratinjau.galat.length} baris bermasalah — perbaiki dulu di berkas Excel
+                    </p>
+                    <div class="mt-2 max-h-32 overflow-y-auto">
+                      {#each pratinjau.galat.slice(0, 20) as g}
+                        <p class="text-xs text-red-700">Baris {g.row}: {g.error}</p>
+                      {/each}
+                      {#if pratinjau.galat.length > 20}
+                        <p class="mt-1 text-xs text-gray-500">… dan {pratinjau.galat.length - 20} lagi</p>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+
                 <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p class="text-xs text-blue-800">
                     <strong>Tips:</strong> Download template terlebih dahulu untuk format yang benar.
+                    Satu donatur boleh ditulis beberapa baris bila mushafnya berbeda nama wakif.
                   </p>
                 </div>
               </div>

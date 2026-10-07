@@ -1,6 +1,6 @@
 <?php
 
-use App\Exports\DonaturTemplateExport;
+use App\Exports\DonaturTemplateWorkbook;
 use App\Imports\DonaturImport;
 use App\Models\Donatur;
 use App\Models\JenisQuran;
@@ -44,21 +44,20 @@ beforeEach(function () {
 function simpanTemplat(): string
 {
     $path = sys_get_temp_dir().'/templat-donatur-'.uniqid().'.xlsx';
-    Excel::store(new DonaturTemplateExport, basename($path), 'local');
+    Excel::store(new DonaturTemplateWorkbook, basename($path), 'local');
 
     // Excel::store menulis ke disk; salin ke jalur sementara agar mudah dibaca.
-    $isi = Storage::disk('local')->get(basename($path));
-    file_put_contents($path, $isi);
+    file_put_contents($path, Storage::disk('local')->get(basename($path)));
     Storage::disk('local')->delete(basename($path));
 
     return $path;
 }
 
-/** Baca seluruh baris templat apa adanya (tanpa perantara pustaka impor). */
+/** Baca seluruh baris lembar data apa adanya (tanpa perantara pustaka impor). */
 function bacaTemplat(string $path): array
 {
     $ss = IOFactory::load($path);
-    $baris = $ss->getActiveSheet()->toArray(null, true, false, false);
+    $baris = $ss->getSheetByName('Donatur')->toArray(null, true, false, false);
 
     return array_values(array_filter($baris, fn ($b) => array_filter($b, fn ($v) => $v !== null && $v !== '') !== []));
 }
@@ -69,7 +68,7 @@ it('judul kolom di templat persis sama dengan yang dibaca pengimpor', function (
     $judul = bacaTemplat($path)[0];
 
     // Inilah nama kolom yang diakses DonaturImport lewat WithHeadingRow. Satu huruf saja
-    // berbeda, barisnya dianggap kosong dan pengguna hanya melihat "berhasil 0".
+    // berbeda, kolomnya dianggap kosong dan pengguna hanya melihat "berhasil 0".
     expect($judul)->toBe([
         'kode_donatur',
         'nama_donatur',
@@ -81,24 +80,41 @@ it('judul kolom di templat persis sama dengan yang dibaca pengimpor', function (
         'jumlah_iqra',
         'donation_date',
         'doa_untuk_semua',
+        'wakif_name',
+        'doa_request',
+        'relationship_to_donatur',
     ]);
 
     @unlink($path);
 });
 
-it('templat memuat contoh baris yang bisa dibaca pengimpor', function () {
+it('setiap baris contoh menyebut donatur yang lengkap', function () {
     $path = simpanTemplat();
 
     $baris = bacaTemplat($path);
 
     expect(count($baris))->toBeGreaterThan(1);
 
+    // Satu donatur boleh ditulis beberapa baris, jadi yang wajib lengkap adalah baris
+    // PERTAMA tiap donatur — baris lanjutannya boleh mengosongkan kolom keterangan.
+    $sudahLengkap = [];
     foreach (array_slice($baris, 1) as $contoh) {
-        expect($contoh[0])->not->toBeEmpty()   // kode_donatur
-            ->and($contoh[1])->not->toBeEmpty() // nama_donatur
+        $kode = $contoh[0];
+        expect($kode)->not->toBeEmpty();
+
+        if (isset($sudahLengkap[$kode])) {
+            continue;
+        }
+
+        expect($contoh[1])->not->toBeEmpty()   // nama_donatur
             ->and($contoh[2])->not->toBeEmpty() // no_hp
             ->and($contoh[8])->not->toBeEmpty(); // donation_date
+
+        $sudahLengkap[$kode] = true;
     }
+
+    // Templat harus mencontohkan cara berulang, bukan hanya satu baris per donatur.
+    expect($baris)->toHaveCount(4); // 1 judul + 2 baris DN-001 + 1 baris DN-002
 
     @unlink($path);
 });
@@ -129,11 +145,33 @@ it('contoh baris di templat menghasilkan donatur lengkap dengan item dan resi', 
     expect($donatur->nama_donatur)->not->toBeEmpty()
         ->and($donatur->no_hp)->toStartWith('+62');
 
-    // 2 A5 + 1 A6 = 3 mushaf, masing-masing dengan satu resi.
-    expect($donatur->total_a5_count)->toBe(2)
-        ->and($donatur->total_a6_count)->toBe(1)
-        ->and(WakafItem::where('donatur_id', $donatur->id)->count())->toBe(3)
-        ->and(Pengiriman::where('donatur_id', $donatur->id)->count())->toBe(3);
+    // DN-001 ditulis 2 baris: 10 A5 + 5 A5 = 15 mushaf, masing-masing satu resi.
+    expect($donatur->total_a5_count)->toBe(15)
+        ->and(WakafItem::where('donatur_id', $donatur->id)->count())->toBe(15)
+        ->and(Pengiriman::where('donatur_id', $donatur->id)->count())->toBe(15)
+        // Dua baris tetap satu donasi.
+        ->and($donatur->donation_count)->toBe(1);
+
+    // Nama wakif per baris benar-benar terpisah.
+    expect(WakafItem::where('donatur_id', $donatur->id)->where('wakif_name', 'Alm. H. Ahmad Subarjo')->count())->toBe(10)
+        ->and(WakafItem::where('donatur_id', $donatur->id)->where('wakif_name', 'Ibu Siti Aminah')->count())->toBe(5);
+
+    @unlink($path);
+});
+
+it('contoh yang mushafnya seragam memakai satu baris saja', function () {
+    $path = simpanTemplat();
+
+    Excel::import(new DonaturImport(new DonaturImportService), $path);
+
+    $donatur = Donatur::where('kode_donatur', 'DN-002')->firstOrFail();
+
+    expect($donatur->total_a5_count)->toBe(3)
+        ->and($donatur->total_a6_count)->toBe(2)
+        ->and($donatur->total_iqra_count)->toBe(1)
+        ->and($donatur->prayer_mode)->toBe('semua_donatur')
+        // Nama wakif dikosongkan -> diisi nama donatur, seperti perilaku lama.
+        ->and(WakafItem::where('donatur_id', $donatur->id)->where('wakif_name', 'Budi Santoso')->count())->toBe(6);
 
     @unlink($path);
 });
@@ -149,6 +187,27 @@ it('tanggal contoh di templat terbaca sebagai tanggal, bukan teks', function () 
     // "berhasil" tetapi tanggalnya null — kesalahan yang mudah lolos dari mata.
     expect($donatur->donation_date)->not->toBeNull()
         ->and($donatur->donation_date->format('Y-m-d'))->toBe('2024-01-15');
+
+    @unlink($path);
+});
+
+it('templat menyertakan lembar petunjuk yang menjelaskan arti kolom jumlah', function () {
+    $path = simpanTemplat();
+
+    $ss = IOFactory::load($path);
+
+    expect($ss->getSheetNames())->toBe(['Donatur', 'Petunjuk']);
+
+    // Tanpa penjelasan ini, tim entry harus menebak bahwa jumlah_a5 berarti jumlah
+    // MUSHAF — salah tebak berujung pada data yang masuk tetapi salah, bukan galat.
+    $isi = implode(' ', array_map(
+        fn ($b) => implode(' ', array_filter($b, fn ($v) => $v !== null)),
+        $ss->getSheetByName('Petunjuk')->toArray()
+    ));
+
+    expect($isi)->toContain('jumlah MUSHAF, bukan jumlah dus')
+        ->and($isi)->toContain('BEBERAPA BARIS')
+        ->and($isi)->toContain('wakif_name');
 
     @unlink($path);
 });

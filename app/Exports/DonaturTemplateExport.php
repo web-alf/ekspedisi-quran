@@ -6,50 +6,49 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class DonaturTemplateExport implements FromArray, WithColumnWidths, WithHeadings, WithStyles
+/**
+ * Lembar data templat impor donatur.
+ *
+ * Contoh barisnya sengaja menunjukkan dua cara pengisian sekaligus:
+ *   - DN-001 ditulis DUA BARIS karena mushafnya berbeda nama wakif dan doanya,
+ *   - DN-002 ditulis SATU BARIS walau 6 mushaf, karena semuanya sama.
+ */
+class DonaturTemplateExport implements FromArray, WithColumnWidths, WithHeadings, WithStyles, WithTitle
 {
+    public function title(): string
+    {
+        return 'Donatur';
+    }
+
     public function array(): array
     {
         return [
+            // Dua baris untuk satu donatur: mushafnya berbeda nama wakif & doa.
             [
-                'DN-001',
-                'Ahmad Fauzi',
-                '+628123456789',
-                'ahmad@example.com',
+                'DN-001', 'Ahmad Fauzi', '+628****6789', 'ahmad@example.com',
                 'Jl. Mawar No. 1, Jakarta',
-                2,
-                1,
-                0,
-                '2024-01-15',
-                'Semoga bermanfaat',
+                10, 0, 0,
+                '2024-01-15', null,
+                'Alm. H. Ahmad Subarjo', 'Semoga diampuni dosanya', 'Almarhum',
             ],
             [
-                'DN-002',
-                'Siti Aminah',
-                '+628987654321',
-                'siti@example.com',
-                'Jl. Melati No. 5, Bandung',
-                1,
-                0,
-                2,
-                '2024-02-20',
-                'Untuk keluarga besar',
+                'DN-001', null, null, null, null,
+                5, 0, 0,
+                null, null,
+                'Ibu Siti Aminah', 'Semoga lekas sembuh', 'Keluarga',
             ],
+            // Satu baris walau 6 mushaf, karena nama wakifnya sama semua.
             [
-                'DN-003',
-                'Budi Santoso',
-                '+628111223344',
-                'budi@example.com',
+                'DN-002', 'Budi Santoso', '+628****3344', 'budi@example.com',
                 'Jl. Kenanga No. 10, Surabaya',
-                3,
-                2,
-                1,
-                '2024-03-10',
-                null,
+                3, 2, 1,
+                '2024-03-10', 'Semoga bermanfaat untuk semua',
+                null, null, null,
             ],
         ];
     }
@@ -67,22 +66,28 @@ class DonaturTemplateExport implements FromArray, WithColumnWidths, WithHeadings
             'jumlah_iqra',
             'donation_date',
             'doa_untuk_semua',
+            'wakif_name',
+            'doa_request',
+            'relationship_to_donatur',
         ];
     }
 
     public function columnWidths(): array
     {
         return [
-            'A' => 18,
-            'B' => 25,
-            'C' => 20,
-            'D' => 25,
-            'E' => 35,
-            'F' => 12,
-            'G' => 12,
-            'H' => 14,
-            'I' => 16,
-            'J' => 30,
+            'A' => 16,
+            'B' => 22,
+            'C' => 18,
+            'D' => 24,
+            'E' => 30,
+            'F' => 11,
+            'G' => 11,
+            'H' => 13,
+            'I' => 15,
+            'J' => 28,
+            'K' => 26,
+            'L' => 28,
+            'M' => 22,
         ];
     }
 
@@ -103,7 +108,7 @@ class DonaturTemplateExport implements FromArray, WithColumnWidths, WithHeadings
                     'vertical' => Alignment::VERTICAL_CENTER,
                 ],
             ],
-            'A:J' => [
+            'A:M' => [
                 'alignment' => [
                     'vertical' => Alignment::VERTICAL_TOP,
                     'wrapText' => true,

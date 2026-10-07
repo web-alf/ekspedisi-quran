@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Exports\DonaturExport;
-use App\Exports\DonaturTemplateExport;
+use App\Exports\DonaturTemplateWorkbook;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDonaturRequest;
 use App\Http\Requests\UpdateDonaturRequest;
@@ -983,16 +983,64 @@ class DonaturController extends Controller
                 return back()->with('error', 'File Excel kosong atau tidak memiliki data. Pastikan file Excel berisi data sesuai template (minimal 1 baris data setelah header).');
             }
 
+            // Jumlah mushaf ikut dilaporkan karena satu donatur boleh ditulis beberapa
+            // baris: "3 donatur" bisa berarti jauh lebih banyak mushaf dari 3.
+            $rincian = "{$results['success_count']} donatur / {$results['mushaf_count']} mushaf";
+
             if ($results['error_count'] > 0) {
                 return back()->with([
-                    'warning' => "Import selesai dengan {$results['success_count']} data berhasil dan {$results['error_count']} data gagal",
+                    'warning' => "Import selesai dengan {$rincian} berhasil dan {$results['error_count']} data gagal",
                     'import_errors' => $results['errors'],
                 ]);
             }
 
-            return back()->with('success', "Berhasil import {$results['success_count']} data donatur");
+            return back()->with('success', "Berhasil import {$rincian}");
         } catch (\Exception $e) {
             return back()->with('error', 'Error saat import: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Membaca berkas impor TANPA menyimpan apa pun.
+     *
+     * Dipakai halaman untuk menunjukkan berapa donatur dan berapa mushaf yang AKAN
+     * masuk, serta baris mana yang bermasalah, sebelum tim entry menekan Import.
+     * Pada impor puluhan ribu baris, salah ketik jumlah tidak lagi ketahuan setelah
+     * impor selesai — jadi harus ketahuan sebelum.
+     */
+    public function previewImport(Request $request)
+    {
+        $this->authorize('import', Donatur::class);
+
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls|max:10240',
+        ]);
+
+        try {
+            // Pembaca yang SAMA dipakai untuk impor sungguhan, dengan mode pratinjau.
+            // Kalau berbeda, angka di layar bisa tidak cocok dengan hasil impornya.
+            $import = new DonaturImport(new DonaturImportService, pratinjauSaja: true);
+            Excel::import($import, $request->file('file'));
+
+            $hasil = $import->getResults();
+
+            $perDonatur = $hasil['per_donatur'];
+            $kode = array_column($perDonatur, 'kode');
+            $sudahAda = $kode === [] ? [] : Donatur::whereIn('kode_donatur', $kode)->pluck('kode_donatur')->all();
+
+            return response()->json([
+                'jumlah_donatur' => $hasil['success_count'],
+                'jumlah_mushaf' => $hasil['mushaf_count'],
+                'a5' => $hasil['per_jenis']['A5'] ?? 0,
+                'a6' => $hasil['per_jenis']['A6'] ?? 0,
+                'iqra' => $hasil['per_jenis']['IQRA'] ?? 0,
+                'donatur_baru' => $hasil['success_count'] - count($sudahAda),
+                'donatur_ada' => count($sudahAda),
+                'per_donatur' => array_slice($perDonatur, 0, 100),
+                'galat' => array_slice($hasil['errors'], 0, 100),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal membaca berkas: '.$e->getMessage()], 422);
         }
     }
 
@@ -1006,7 +1054,10 @@ class DonaturController extends Controller
         try {
             $filename = 'donatur-import-template-'.now()->format('Y-m-d').'.xlsx';
 
-            return Excel::download(new DonaturTemplateExport, $filename);
+            // Dua lembar dalam satu berkas: lembar data yang diisi tim entry, dan
+            // lembar petunjuk. Sebelumnya hanya ada lembar data tanpa penjelasan,
+            // sehingga arti tiap kolom harus ditebak sendiri.
+            return Excel::download(new DonaturTemplateWorkbook, $filename);
         } catch (\Exception $e) {
             return back()->with('error', 'Error saat download template: '.$e->getMessage());
         }

@@ -298,6 +298,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('donatur-import', [DonaturController::class, 'import'])
                 ->middleware('permission:donatur.import')
                 ->name('donatur.import');
+            Route::post('donatur-import-pratinjau', [DonaturController::class, 'previewImport'])
+                ->middleware('permission:donatur.import')
+                ->name('donatur.import-pratinjau');
             Route::get('donatur-template', [DonaturController::class, 'downloadTemplate'])
                 ->middleware('permission:donatur.read')
                 ->name('donatur.template');
