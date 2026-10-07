@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use App\Models\Donatur;
 use App\Services\DonaturImportService;
 use App\Support\KodeDonatur;
 use Illuminate\Support\Collection;
@@ -132,21 +133,29 @@ class DonaturImport implements SkipsOnError, SkipsOnFailure, ToCollection, WithH
         foreach ($urutan as $kode) {
             $grup = $perKode[$kode];
 
-            $kurang = [];
-            foreach (['nama_donatur' => 'nama_donatur', 'no_hp' => 'no_hp', 'donation_date' => 'donation_date'] as $kunci => $label) {
-                if (($grup['ringkasan'][$kunci] ?? '') === '') {
-                    $kurang[] = $label;
+            // Keterangan donatur hanya wajib untuk donatur BARU. Untuk donatur yang
+            // sudah ada, impor susulan cukup menyebut kode dan jumlah mushafnya —
+            // memaksa mengetik ulang nama dan nomor HP bukan hanya merepotkan, tetapi
+            // juga berisiko salah ketik menimpa data yang sudah benar.
+            $donaturSudahAda = Donatur::where('kode_donatur', $kode)->exists();
+
+            if (! $donaturSudahAda) {
+                $kurang = [];
+                foreach (['nama_donatur' => 'nama_donatur', 'no_hp' => 'no_hp', 'donation_date' => 'donation_date'] as $kunci => $label) {
+                    if (($grup['ringkasan'][$kunci] ?? '') === '') {
+                        $kurang[] = $label;
+                    }
                 }
-            }
 
-            if ($kurang !== []) {
-                $this->errors[] = [
-                    'row' => $grup['baris_pertama'],
-                    'error' => 'Kolom '.implode(', ', $kurang)." wajib diisi pada baris pertama donatur {$kode}",
-                    'data' => $grup['ringkasan'],
-                ];
+                if ($kurang !== []) {
+                    $this->errors[] = [
+                        'row' => $grup['baris_pertama'],
+                        'error' => 'Donatur baru: kolom '.implode(', ', $kurang)." wajib diisi pada baris pertama donatur {$kode}",
+                        'data' => $grup['ringkasan'],
+                    ];
 
-                continue;
+                    continue;
+                }
             }
 
             $jumlahMushafGrup = array_sum(array_column($grup['baris'], 'jumlah'));

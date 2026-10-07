@@ -95,6 +95,18 @@ class DonaturImportService
             ];
 
             if ($donatur) {
+                // Impor susulan tidak perlu mengetik ulang keterangan donatur: kalau
+                // kolomnya dikosongkan di berkas, nilai lama dipertahankan. Mengosongkan
+                // kolom di sini tidak boleh MENGHAPUS data yang sudah ada — kalau tim
+                // entry mau mengubahnya, itu lewat halaman Edit.
+                foreach ($atribut as $kolom => $nilai) {
+                    if ($nilai === null || $nilai === '') {
+                        $atribut[$kolom] = $donatur->{$kolom};
+                    }
+                }
+            }
+
+            if ($donatur) {
                 $donatur->update($atribut + [
                     'total_a5_count' => $donatur->total_a5_count + $totalA5,
                     'total_a6_count' => $donatur->total_a6_count + $totalA6,
@@ -165,8 +177,16 @@ class DonaturImportService
      */
     private function simpanItemsDanPengiriman(Donatur $donatur, array $items): Donatur
     {
-        $newWakafItems = [];
+        // `created_by` di donatur, wakaf_items, dan pengiriman semuanya NOT NULL,
+        // sedangkan auth()->id() bernilai null di luar sesi pengguna (console,
+        // penjadwal, atau pengujian dari baris perintah). Tanpa cadangan ini, impor
+        // gagal total dengan "Column 'created_by' cannot be null".
+        $pembuat = auth()->id()
+            ?? $donatur->created_by
+            ?? User::query()->value('id');
+
         foreach ($items as $itemData) {
+            $itemData['created_by'] ??= $pembuat;
             $newWakafItems[] = WakafItem::create($itemData);
         }
 
@@ -221,7 +241,7 @@ class DonaturImportService
                 'no_hp_penerima' => null,
                 'alamat_tujuan' => null,
                 'catatan' => "Donatur: {$donatur->nama_donatur} | Doa: ".($wakafItem->doa_request ?? '-'),
-                'created_by' => auth()->id(),
+                'created_by' => $pembuat,
             ]);
 
             $wakafItem->update(['pengiriman_id' => $pengiriman->id]);
