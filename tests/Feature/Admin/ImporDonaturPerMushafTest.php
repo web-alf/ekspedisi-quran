@@ -230,6 +230,63 @@ it('baris tanpa jumlah mushaf dilaporkan, bukan didiamkan', function () {
     @unlink($path);
 });
 
+it('baris lanjutan boleh mengosongkan nama donatur dan tetap satu donatur yang benar', function () {
+    // Kekhawatiran yang wajar saat melihat berkas contoh: baris ke-2 dan seterusnya
+    // punya nama_donatur kosong. Kalau kolom itu benar-benar wajib di tiap baris,
+    // seluruh baris lanjutan akan gagal dan berkasnya tidak berguna.
+    //
+    // Kolom keterangan donatur hanya dibaca dari baris PERTAMA kemunculan kodenya.
+    $path = buatExcel([
+        ['DN-KOSONG', 'Ibu Hartati', '081234567890', null, null, 10, 0, 0, '2026-02-01', null, 'Alm. Suami', null, 'Almarhum'],
+        ['DN-KOSONG', null, null, null, null, 5, 0, 0, null, null, 'Ibu Hartati', null, 'Diri sendiri'],
+        ['DN-KOSONG', null, null, null, null, 2, 0, 0, null, null, null, null, null],
+    ]);
+
+    $hasil = jalankanImpor($path);
+
+    // Nama kosong di baris lanjutan TIDAK boleh dilaporkan sebagai galat.
+    expect($hasil['error_count'])->toBe(0)
+        ->and($hasil['success_count'])->toBe(1)
+        ->and($hasil['mushaf_count'])->toBe(17);
+
+    $d = Donatur::where('kode_donatur', 'DN-KOSONG')->firstOrFail();
+
+    expect($d->nama_donatur)->toBe('Ibu Hartati')
+        ->and($d->no_hp)->toBe('+6281234567890')
+        ->and($d->donation_date->format('Y-m-d'))->toBe('2026-02-01')
+        ->and($d->donation_count)->toBe(1)
+        ->and(WakafItem::where('donatur_id', $d->id)->count())->toBe(17);
+
+    // Tiap baris tetap punya nama wakifnya sendiri; yang dikosongkan jatuh ke nama donatur.
+    expect(WakafItem::where('donatur_id', $d->id)->where('wakif_name', 'Alm. Suami')->count())->toBe(10)
+        ->and(WakafItem::where('donatur_id', $d->id)->where('wakif_name', 'Ibu Hartati')->count())->toBe(7);
+
+    @unlink($path);
+});
+
+it('kolom keterangan yang diisi di baris lanjutan tetap dihormati', function () {
+    // Kebalikannya: baris pertama kosong, baris kedua mengisi. Ini tetap harus terbaca,
+    // supaya tim entry tidak dihukum karena menaruh keterangan di baris mana pun.
+    $path = buatExcel([
+        ['DN-BOLAK', null, null, null, null, 4, 0, 0, null, null, 'Alm. Bapak', null, 'Almarhum'],
+        ['DN-BOLAK', 'Bapak Sugeng', '085712345678', null, null, 3, 0, 0, '2026-03-05', null, null, null, null],
+    ]);
+
+    $hasil = jalankanImpor($path);
+
+    expect($hasil['error_count'])->toBe(0)->and($hasil['success_count'])->toBe(1);
+
+    $d = Donatur::where('kode_donatur', 'DN-BOLAK')->firstOrFail();
+
+    expect($d->nama_donatur)->toBe('Bapak Sugeng')
+        ->and($d->no_hp)->toBe('+6285712345678')
+        ->and($d->donation_date->format('Y-m-d'))->toBe('2026-03-05')
+        ->and(WakafItem::where('donatur_id', $d->id)->where('wakif_name', 'Alm. Bapak')->count())->toBe(4)
+        ->and(WakafItem::where('donatur_id', $d->id)->where('wakif_name', 'Bapak Sugeng')->count())->toBe(3);
+
+    @unlink($path);
+});
+
 it('baris lanjutan tanpa nama donatur tapi kode belum pernah muncul dilaporkan', function () {
     // Baris pertama sudah menyebut kode ini, jadi baris kedua boleh kosong.
     // Yang diuji kebalikannya: kode baru yang baris pertamanya tidak lengkap.
