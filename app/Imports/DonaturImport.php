@@ -309,6 +309,12 @@ class DonaturImport implements SkipsOnError, SkipsOnFailure, ToCollection, WithH
 
     /**
      * Parse date from various formats
+     *
+     * Urutannya disengaja: format Indonesia (hari/bulan/tahun) diperiksa LEBIH DULU.
+     * `strtotime("15/01/2026")` gagal, dan yang lebih berbahaya lagi
+     * `strtotime("1/2/2026")` berhasil tetapi terbaca 2 Januari mengikuti kebiasaan
+     * Amerika — padahal yang dimaksud 1 Februari. Tanggal yang salah terbaca tidak
+     * pernah memunculkan galat; ia hanya menyimpan tanggal yang keliru.
      */
     private function parseDate(mixed $value): ?string
     {
@@ -322,7 +328,26 @@ class DonaturImport implements SkipsOnError, SkipsOnFailure, ToCollection, WithH
             return $date->format('Y-m-d');
         }
 
-        $date = strtotime((string) $value);
+        $teks = trim((string) $value);
+
+        // Bila berbentuk angka/angka/tahun, pastikan dibaca hari dulu — bukan bulan.
+        if (preg_match('#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$#', $teks, $m)) {
+            $hari = (int) $m[1];
+            $bulan = (int) $m[2];
+
+            // 13/01/2026 jelas hari dulu; 01/13/2026 jelas bulan dulu.
+            if ($bulan > 12 && $hari <= 12) {
+                [$hari, $bulan] = [$bulan, $hari];
+            }
+
+            if (checkdate($bulan, $hari, (int) $m[3])) {
+                return sprintf('%04d-%02d-%02d', (int) $m[3], $bulan, $hari);
+            }
+
+            return null;
+        }
+
+        $date = strtotime($teks);
         if ($date !== false) {
             return date('Y-m-d', $date);
         }
