@@ -212,6 +212,39 @@ describe('perintah penautan resi lama', function () {
     });
 
     /**
+     * Pemotongan per rentang id harus menautkan SELURUH resi, bukan hanya yang
+     * kena potongan pertama. Versi sebelumnya memakai `UPDATE ... JOIN ... LIMIT`,
+     * yang ditolak MySQL 8 (produksi) walau diterima MariaDB 10.11 (lokal) —
+     * jadi uji ini menjaga jalur pemotongan yang benar-benar dipakai produksi.
+     */
+    it('menautkan semua resi walau diproses berpotong-potong', function () {
+        $resi = [];
+
+        // Resi dibuat LEBIH DULU, batch menyusul — kalau tidak, hook di
+        // Pengiriman::boot() sudah menautkannya dan yang teruji bukan perintah ini.
+        foreach (range(1, 5) as $i) {
+            $donatur = Donatur::factory()->create();
+            $resi[$donatur->id] = resiLamaTahapAkhir($donatur, statusTahapAkhir('packing'));
+        }
+
+        $batchPerDonatur = [];
+        foreach (array_keys($resi) as $idDonatur) {
+            $batchPerDonatur[$idDonatur] = WakafBatch::factory()->create(['donatur_id' => $idDonatur])->id;
+        }
+
+        // Buktikan dulu memang belum tertaut, kalau tidak uji ini bisa lulus palsu.
+        foreach ($resi as $r) {
+            expect($r->fresh()->wakaf_batch_id)->toBeNull();
+        }
+
+        $this->artisan('wakaf:tautkan-pengiriman --chunk=2')->assertSuccessful();
+
+        foreach ($batchPerDonatur as $idDonatur => $idBatch) {
+            expect(Pengiriman::query()->where('donatur_id', $idDonatur)->value('wakaf_batch_id'))->toBe($idBatch);
+        }
+    });
+
+    /**
      * Bukti rantai tersambung: setelah resinya tertaut, status batch harus maju
      * sendiri. Inilah yang selama ini tidak pernah terjadi di produksi.
      */

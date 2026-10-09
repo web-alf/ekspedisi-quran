@@ -71,23 +71,40 @@ class TautkanPengirimanKeBatchCommand extends Command
 
         $tertaut = 0;
 
-        DB::transaction(function () use ($ukuran, &$tertaut) {
-            // Satu UPDATE ... JOIN: jauh lebih cepat daripada memanggil model
-            // satu per satu (26 ribu baris). Hanya baris dengan tepat satu batch.
-            $tertaut = DB::update('
-                UPDATE pengiriman p
-                JOIN (
-                    SELECT donatur_id, MIN(id) AS id_batch
-                    FROM wakaf_batches
-                    GROUP BY donatur_id
-                    HAVING COUNT(*) = 1
-                ) b ON b.donatur_id = p.donatur_id
-                SET p.wakaf_batch_id = b.id_batch
-                WHERE p.wakaf_batch_id IS NULL
-                  AND p.donatur_id IS NOT NULL
-                LIMIT '.$ukuran
-            );
-        });
+        // MySQL menolak `UPDATE ... JOIN ... LIMIT` ("Incorrect usage of UPDATE and
+        // LIMIT"), jadi pemotongan dilakukan lewat rentang id, bukan LIMIT.
+        $idMin = (clone $dasar)->min('id');
+        $idMaks = (clone $dasar)->max('id');
+
+        if ($idMin !== null) {
+            $this->info("Memproses id {$idMin}–{$idMaks} dengan langkah {$ukuran}...");
+            $bar = $this->output->createProgressBar((int) ceil(($idMaks - $idMin + 1) / $ukuran));
+
+            for ($mulai = $idMin; $mulai <= $idMaks; $mulai += $ukuran) {
+                $akhir = $mulai + $ukuran - 1;
+
+                // Satu UPDATE ... JOIN: jauh lebih cepat daripada memanggil model
+                // satu per satu (26 ribu baris). Hanya baris dengan tepat satu batch.
+                $tertaut += DB::update('
+                    UPDATE pengiriman p
+                    JOIN (
+                        SELECT donatur_id, MIN(id) AS id_batch
+                        FROM wakaf_batches
+                        GROUP BY donatur_id
+                        HAVING COUNT(*) = 1
+                    ) b ON b.donatur_id = p.donatur_id
+                    SET p.wakaf_batch_id = b.id_batch
+                    WHERE p.wakaf_batch_id IS NULL
+                      AND p.donatur_id IS NOT NULL
+                      AND p.id BETWEEN ? AND ?
+                ', [$mulai, $akhir]);
+
+                $bar->advance();
+            }
+
+            $bar->finish();
+            $this->newLine();
+        }
 
         $this->info("Tertautkan: {$tertaut}");
 
