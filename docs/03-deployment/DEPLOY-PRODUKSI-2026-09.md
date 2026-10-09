@@ -218,13 +218,17 @@ sudo rsync -a --delete --exclude ".env" --exclude "storage/" \
 cd /var/www/dash
 sudo composer install --no-dev --optimize-autoloader --no-interaction
 sudo composer check-platform-reqs --no-dev     # semua harus "success"
+
+# PENTING (1): kembalikan kepemilikan SEBELUM menjalankan perintah artisan apa pun.
+# `rsync --delete` MENGHAPUS bootstrap/cache/*.php dan meninggalkan direktori itu
+# milik root, sehingga artisan gagal lebih dulu dengan
+#   "The /var/www/dash/bootstrap/cache directory must be present and writable"
+# — bahkan `migrate --pretend` pun tidak jalan. Urutannya wajib chown dulu.
+sudo mkdir -p /var/www/dash/bootstrap/cache
+sudo chown -R www-data:www-data /var/www/dash/storage /var/www/dash/bootstrap/cache /var/www/dash/public/build
+
 sudo -u www-data HOME=/tmp php artisan migrate --pretend --force   # review dulu
 sudo -u www-data HOME=/tmp php artisan migrate --force
-
-# PENTING (1): rsync dijalankan sebagai root, jadi bootstrap/cache jadi milik root.
-# Kembalikan kepemilikan SEBELUM menjalankan cache, atau config:cache gagal dengan
-# "file_put_contents(...): Failed to open stream: Permission denied".
-sudo chown -R www-data:www-data /var/www/dash/storage /var/www/dash/bootstrap/cache
 
 # PENTING (2): jalankan cache sebagai www-data, BUKAN root — kalau tidak, file
 # cache jadi milik root dan request berikutnya gagal menulis.
