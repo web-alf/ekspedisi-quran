@@ -208,6 +208,18 @@ class PengirimanTrackingController extends Controller
             'lokasi' => ['nullable', 'string', 'max:255'],
         ]);
 
+        // Batas tahap diperiksa lebih dulu: endpoint ini tidak memakai
+        // applyToQuery (memang tidak ada batas DATA di sini), sehingga tanpa
+        // pemeriksaan ini siapa pun pemegang izin bisa memindahkan resi apa pun
+        // ke tahap apa pun — termasuk gudang ke "diterima"/"pengiriman".
+        $statusTujuan = StatusPengiriman::find($request->status_id);
+        if (! $statusTujuan || ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusTujuan)) {
+            return back()->withErrors([
+                'status_id' => PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan)
+                    ?? 'Anda tidak berwenang memindahkan pengiriman ke status tersebut.',
+            ]);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -218,6 +230,14 @@ class PengirimanTrackingController extends Controller
                 ->get();
 
             foreach ($pengirimanList as $pengiriman) {
+                // Batas per-baris: staff gudang tidak boleh menarik kembali resi
+                // yang sudah lewat tahap awal, walau tahap tujuannya sendiri sah.
+                if (! PengirimanStageVisibility::bolehPindahkan($request->user(), $pengiriman, $statusTujuan)) {
+                    $failed++;
+
+                    continue;
+                }
+
                 $oldStatus = $pengiriman->status_id;
 
                 // Validasi transisi status

@@ -41,6 +41,43 @@ class PengirimanStageVisibility
     }
 
     /**
+     * Slug tahap awal distribusi yang menjadi ranah gudang.
+     *
+     * @return array<int, string>
+     */
+    public static function allowedGudangSlugs(): array
+    {
+        return array_values(config('pengiriman.warehouse_stage_slugs') ?? []);
+    }
+
+    /**
+     * Apakah user ini staff gudang.
+     *
+     * Gudang memegang izin `shipments.update-status` supaya bisa mencatat tahap
+     * awal distribusi (pemesanan, produksi, kedatangan, packing). Izin itu
+     * sendiri TIDAK membatasi status tujuan — ia hanya mengatakan "boleh
+     * mengubah status". Karena itu batas tahapnya harus ditegakkan di sini,
+     * pada satu-satunya predikat yang dipakai baik untuk menyusun pilihan
+     * maupun untuk menolak permintaan di server.
+     */
+    public static function adalahGudang(?User $user): bool
+    {
+        return $user !== null && $user->hasRole(RoleEnum::WAREHOUSE->value);
+    }
+
+    /**
+     * ID status yang termasuk ranah gudang.
+     *
+     * @return array<int, int>
+     */
+    public static function allowedGudangStatusIds(): array
+    {
+        return StatusPengiriman::whereIn('slug', static::allowedGudangSlugs())
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
      * Apakah pembatasan berlaku untuk user ini.
      */
     public static function appliesTo(?User $user): bool
@@ -106,15 +143,86 @@ class PengirimanStageVisibility
     }
 
     /**
-     * Daftar status untuk dropdown filter, sudah disaring sesuai wewenang.
+     * Boleh memindahkan PENGIRIMAN INI ke status tersebut?
+     *
+     * Aturan yang sama seperti bolehPilihStatus(), tetapi memeriksa keadaan
+     * resinya juga. Dua hal yang ditambahkan:
+     *
+     * 1. Staff gudang hanya boleh menyentuh resi yang statusnya SEKARANG masih
+     *    di tahap awal. Tanpa ini, `bolehPilihStatus` saja tidak cukup: resi
+     *    yang sudah "Diterima" pun masih boleh dipindahkan kembali ke
+     *    "Produksi" (urutan mundur ditolak, tetapi tahap awal selalu berurutan
+     *    lebih rendah). Gudang tidak boleh menarik kembali pekerjaan yang sudah
+     *    lewat tangannya.
+     *
+     * 2. Untuk role yang datanya dibatasi (manager), resi di luar tahap yang
+     *    boleh ia lihat tidak boleh disentuh sama sekali.
+     */
+    public static function bolehPindahkan(?User $user, Pengiriman $pengiriman, StatusPengiriman $status): bool
+    {
+        if (! static::bolehPilihStatus($user, $status)) {
+            return false;
+        }
+
+        if (static::adalahGudang($user)) {
+            return $pengiriman->status_id === null
+                || in_array($pengiriman->status_id, static::allowedGudangStatusIds(), true);
+        }
+
+        return static::isVisible($user, $pengiriman);
+    }
+
+    /**
+     * Daftar status untuk dropdown/filter PEMINDAHAN STATUS.
+     *
+     * Memakai PREDIKAT YANG SAMA dengan penegakan di server (bolehPilihStatus),
+     * supaya yang ditawarkan dan yang diterima tidak pernah berbeda. Dulu tiap
+     * jalur menyusun daftarnya sendiri, dan sempat juga dua batas diterapkan
+     * sebagai irisan — yang membuat manager kehilangan pilihan "Diterima" dan
+     * "Selesai Packing" padahal justru itu pekerjaannya.
+     *
+     * @return Collection<int, StatusPengiriman>
+     */
+    public static function visibleProgressStatuses(?User $user): Collection
+    {
+        $statuses = StatusPengiriman::active()
+            ->ordered()
+            ->select('id', 'nama', 'slug', 'warna')
+            ->get();
+
+        // Batas pilihan hanya berlaku untuk kurir, manager, dan gudang; role
+        // lain memakai batas DATA-nya sendiri (restricts), bukan daftar ini.
+        if (! static::restrictsProgressChoice($user) && ! static::adalahManager($user) && ! static::adalahGudang($user)) {
+            return $statuses;
+        }
+
+        return $statuses
+            ->filter(fn ($status) => static::bolehPilihStatus($user, $status))
+            ->values();
+    }
+
+    /**
+     * Daftar status untuk dropdown FILTER daftar pengiriman.
+     *
+     * Berbeda dari visibleProgressStatuses(): filter tidak memindahkan apa pun,
+     * jadi yang pantas muncul adalah status resi yang MEMANG boleh dilihat role
+     * itu — bukan status yang boleh ia pilih. Untuk manager keduanya kebetulan
+     * sama (data-nya memang dibatasi), tetapi untuk gudang tidak: mereka melihat
+     * resi lintas status supaya pekerjaannya terlihat, sehingga filternya juga
+     * harus mencakup tahap perjalanan.
      *
      * @return Collection<int, StatusPengiriman>
      */
     public static function visibleStatuses(?User $user): Collection
     {
         $statuses = StatusPengiriman::active()
+            ->ordered()
             ->select('id', 'nama', 'slug', 'warna')
             ->get();
+
+        if (static::adalahGudang($user)) {
+            return $statuses;
+        }
 
         if (! static::restricts($user)) {
             return $statuses;
@@ -167,35 +275,6 @@ class PengirimanStageVisibility
     }
 
     /**
-     * Daftar status untuk dropdown/filter PEMINDAHAN STATUS.
-     *
-     * Memakai PREDIKAT YANG SAMA dengan penegakan di server (bolehPilihStatus),
-     * supaya yang ditawarkan dan yang diterima tidak pernah berbeda. Dulu tiap
-     * jalur menyusun daftarnya sendiri, dan sempat juga dua batas diterapkan
-     * sebagai irisan — yang membuat manager kehilangan pilihan "Diterima" dan
-     * "Selesai Packing" padahal justru itu pekerjaannya.
-     *
-     * @return Collection<int, StatusPengiriman>
-     */
-    public static function visibleProgressStatuses(?User $user): Collection
-    {
-        $statuses = StatusPengiriman::active()
-            ->ordered()
-            ->select('id', 'nama', 'slug', 'warna')
-            ->get();
-
-        // Batas pilihan hanya berlaku untuk kurir dan manager; role lain memakai
-        // batas DATA-nya sendiri (restricts), bukan daftar ini.
-        if (! static::restrictsProgressChoice($user) && ! static::adalahManager($user)) {
-            return $statuses;
-        }
-
-        return $statuses
-            ->filter(fn ($status) => static::bolehPilihStatus($user, $status))
-            ->values();
-    }
-
-    /**
      * Boleh memindahkan pengiriman ke status ini?
      *
      * Ini SATU-SATUNYA sumber aturan tentang status yang boleh dipilih. Dipakai
@@ -208,12 +287,20 @@ class PengirimanStageVisibility
      *   manager  → tahap perjalanan DItambah tahap yang datanya ia tangani
      *              (termasuk "diterima", yang diselesaikan dengan verifikasi
      *              manual). Tahap gudang tetap tertutup baginya.
+     *   gudang   → tahap awal distribusi saja (pemesanan, produksi,
+     *              kedatangan, packing). Tahap perjalanan dan penyelesaian
+     *              tetap tertutup baginya; pengiriman/diterima adalah wewenang
+     *              kurir, manager, dan role distribusi.
      *   lainnya  → tidak dibatasi di sini
      */
     public static function bolehPilihStatus(?User $user, StatusPengiriman $status): bool
     {
         if ($user === null) {
             return false;
+        }
+
+        if (static::adalahGudang($user)) {
+            return in_array($status->slug, static::allowedGudangSlugs(), true);
         }
 
         $kurirAtauManager = static::restrictsProgressChoice($user) || static::adalahManager($user);
@@ -247,6 +334,11 @@ class PengirimanStageVisibility
             return null;
         }
 
+        if (static::adalahGudang($user)) {
+            return 'Tahap awal distribusi (pemesanan, produksi, kedatangan, packing) '
+                ."adalah wewenang gudang. Status \"{$status->nama}\" bukan bagian dari tahap itu.";
+        }
+
         return 'Status yang boleh dipindahkan hanya tahap perjalanan pengiriman. '
             ."Status \"{$status->nama}\" bukan bagian dari perjalanan.";
     }
@@ -254,13 +346,20 @@ class PengirimanStageVisibility
     /**
      * Metadata untuk frontend: apakah dibatasi dan tahap apa saja yang tampil.
      *
-     * @return array{restricted: bool, slugs: array<int, string>}
+     * `restricted`/`slugs` mengikuti batas DATA (manager). Batas PILIHAN untuk
+     * gudang dikirim terpisah sebagai `gudangSlugs`, karena keduanya menjawab
+     * pertanyaan berbeda: yang satu "resi mana yang boleh saya lihat", yang lain
+     * "tahap mana yang boleh saya pindahkan".
+     *
+     * @return array{restricted: bool, slugs: array<int, string>, gudang: bool, gudangSlugs: array<int, string>}
      */
     public static function frontendContext(?User $user): array
     {
         return [
             'restricted' => static::restricts($user),
             'slugs' => static::restricts($user) ? static::allowedSlugs() : [],
+            'gudang' => static::adalahGudang($user),
+            'gudangSlugs' => static::adalahGudang($user) ? static::allowedGudangSlugs() : [],
         ];
     }
 }

@@ -201,6 +201,14 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::SHIPMENTS_CREATE->value,
             PermissionEnum::SHIPMENTS_READ->value,
             PermissionEnum::SHIPMENTS_UPDATE->value,
+            // Tahap awal distribusi (pemesanan, produksi, kedatangan, packing)
+            // adalah ranah gudang — lihat config/pengiriman.php dan migrasi
+            // 2026_10_09_060000_grant_warehouse_stage_permissions.
+            // `update-status` untuk memindahkan tahap; `track` supaya halaman
+            // scan QR bisa mencari resinya. Batas tahapnya tetap ditegakkan
+            // PengirimanStageVisibility::bolehPilihStatus().
+            PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
+            PermissionEnum::SHIPMENTS_TRACK->value,
             PermissionEnum::SHIPMENTS_EXPORT->value,
             PermissionEnum::MUSHAF_REQUESTS_READ->value,
             PermissionEnum::MUSHAF_REQUESTS_PROCESS->value,

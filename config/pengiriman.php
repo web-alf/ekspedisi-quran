@@ -64,4 +64,44 @@ return [
         'batal',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Tahap yang boleh dipindahkan STAFF GUDANG
+    |--------------------------------------------------------------------------
+    |
+    | Tahap awal distribusi — Pemesanan, Produksi, Kedatangan/Penurunan, dan
+    | Packing — adalah ranah gudang: mereka yang menerima kiriman mushaf,
+    | memantau produksi, mencatat penurunan, dan mengerjakan packing. Karena itu
+    | hanya role `warehouse` yang boleh memindahkan status ke tahap-tahap ini.
+    |
+    | Mengapa `packing` ikut ada: alur packing dimulai dari resi yang SUDAH
+    | berstatus packing (PackingAssignmentService::assignPengirimanOnScan
+    | menolak resi yang belum packing), jadi tanpa `packing` di daftar ini gudang
+    | tidak akan pernah bisa memulai pekerjaan packing-nya sendiri dan tiap
+    | pemindahan tetap harus lewat super-admin.
+    |
+    | Yang TIDAK termasuk: pengiriman, diterima, batal, dan selesai-packing.
+    | Selesai-packing dihasilkan otomatis saat kerdus disegel (bukan pilihan
+    | manual); pengiriman/diterima/batal adalah wewenang kurir, manager, dan
+    | role distribusi.
+    |
+    | Batas ini berlaku MUTLAK untuk gudang — bukan sekadar pilihan yang
+    | disembunyikan. Semua jalur pemindahan status (ubah status, batch, bulk,
+    | form edit, scan QR gudang) menolak tahap di luar daftar ini dan menolak
+    | memindahkan resi yang sudah lewat tahap awal, walau ID-nya dikirim
+    | langsung. Tanpa batas itu, izin `shipments.update-status` yang mereka
+    | pegang akan membuka pengiriman/diterima lewat endpoint yang tidak dijaga.
+    |
+    | Mengosongkan daftar = gudang tidak bisa memindahkan status apa pun
+    | (gagal-tertutup), bukan "boleh semua".
+    |
+    */
+
+    'warehouse_stage_slugs' => [
+        'pemesanan',
+        'produksi',
+        'kedatangan',
+        'packing',
+    ],
+
 ];

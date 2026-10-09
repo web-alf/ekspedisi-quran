@@ -121,11 +121,24 @@ it('membatasi pilihan status kurir ke perjalanan dan batal', function () {
 it('tidak membatasi role lain', function () {
     // Pembatasan data mereka sudah ditangani applyToQuery/isVisible; membatasi
     // pilihannya di sini akan ikut mempersempit pekerjaan mereka.
-    foreach ([RoleEnum::DISTRIBUSI->value, RoleEnum::SUPER_ADMIN->value, RoleEnum::WAREHOUSE->value] as $role) {
+    //
+    // Gudang TIDAK lagi termasuk di sini: sejak 9 Okt 2026 tahap awal distribusi
+    // dijadikan ranah gudang, jadi pilihannya sengaja dibatasi ke empat tahap
+    // awal — lihat BatasTahapGudangTest.
+    foreach ([RoleEnum::DISTRIBUSI->value, RoleEnum::SUPER_ADMIN->value] as $role) {
         expect(slugStatus(pengguna($role)))
             ->toHaveCount(8)
             ->toContain('pemesanan', 'packing', 'diterima');
     }
+});
+
+it('membatasi pilihan gudang ke tahap awal distribusi', function () {
+    // slugStatus() mengembalikan array PHP, bukan Collection — jadi ->sort()
+    // tidak ada dan urutannya dirapikan dengan sort() biasa.
+    $slug = slugStatus(pengguna(RoleEnum::WAREHOUSE->value));
+    sort($slug);
+
+    expect($slug)->toBe(['kedatangan', 'packing', 'pemesanan', 'produksi']);
 });
 
 it('gagal-tertutup: daftar kosong berarti kurir tidak bisa memilih apa pun', function () {

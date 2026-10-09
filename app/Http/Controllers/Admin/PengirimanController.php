@@ -350,7 +350,10 @@ class PengirimanController extends Controller
 
         return Inertia::render('Admin/Pengiriman/Edit', [
             'pengiriman' => $pengiriman,
-            'statusList' => StatusPengiriman::active()->select('id', 'nama', 'slug', 'warna')->get(),
+            // Disaring dengan predikat yang sama seperti penegakan di server;
+            // sebelumnya daftar ini memuat SEMUA status, sehingga form edit
+            // menawarkan tahap yang justru ditolak saat disimpan.
+            'statusList' => PengirimanStageVisibility::visibleProgressStatuses(auth()->user()),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'approvedMushafRequests' => $approvedMushafRequests,
         ]);
@@ -388,6 +391,23 @@ class PengirimanController extends Controller
             // Validate status transition ONLY if status actually changes
             // (update() also handles address/recipient edits with unchanged status)
             if ((int) $oldStatus !== (int) $request->status_id) {
+                // Batas tahap juga berlaku di jalur ini. Sebelumnya hanya izin
+                // `shipments.update` yang diperiksa, dan izin itu juga dipegang
+                // gudang/supervisor — sehingga form edit bisa dipakai memindahkan
+                // resi ke tahap yang tertutup bagi role tersebut, menembus batas
+                // yang sudah dipasang di jalur ubah-status dan scan.
+                $statusTujuan = StatusPengiriman::find($request->status_id);
+                if (! $statusTujuan || ! PengirimanStageVisibility::bolehPindahkan(
+                    $request->user(),
+                    $lockedPengiriman,
+                    $statusTujuan
+                )) {
+                    throw new \Exception(
+                        PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan)
+                        ?? 'Anda tidak berwenang memindahkan pengiriman ini ke status tersebut.'
+                    );
+                }
+
                 $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
                 if (! $validTransition['valid']) {
                     throw new \Exception($validTransition['message']);
@@ -461,6 +481,17 @@ class PengirimanController extends Controller
 
         try {
             \DB::beginTransaction();
+
+            // Batas tahap diperiksa SEBELUM baris dikunci. Kalau tidak, memindahkan
+            // resi ke tahap yang terlarang akan menulis riwayat status untuk resi
+            // yang gagal di tengah, meninggalkan jejak palsu.
+            $statusTujuan = StatusPengiriman::find($request->status_id);
+            if (! $statusTujuan || ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusTujuan)) {
+                throw new \Exception(
+                    PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan)
+                    ?? 'Anda tidak berwenang memindahkan pengiriman ke status tersebut.'
+                );
+            }
 
             $updated = 0;
             $skipped = 0;
