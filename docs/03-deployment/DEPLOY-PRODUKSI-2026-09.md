@@ -134,50 +134,56 @@ migrasi), menganggap itu produksi. Tindakan pemulihan yang sudah dilakukan:
 (`209990f`..`29e1d87`) di-deploy ke **`dash`** dengan backup penuh
 (`/root/dash-full-backup-20260930.tar.gz` + `/root/dash-db-backup-20260930.sql`).
 
-## Struktur dash sekarang: clone git (sejak 9 Okt 2026)
+## Struktur dash: direktori biasa, deploy dengan rsync (tetap seperti selama ini)
 
-`/var/www/dash` **memiliki `.git`** dan melacak `origin/main`
-(`https://github.com/anggiadiputra/EQ.git`). Jadi versi yang berjalan di server bisa
-diperiksa langsung dari servernya:
+`/var/www/dash` adalah **direktori biasa**, bukan layout `releases/` dan bukan checkout git
+yang dipakai untuk deploy. Cara menyamakan kode dari lokal tetap **rsync** — itu cara yang
+sudah dipakai tim dan tidak diubah.
+
+> **Catatan (9 Okt 2026):** sempat ada inisiatif menjadikan `/var/www/dash` clone git dan
+> mengganti deploy ke `git checkout`. Itu **dibatalkan** atas keputusan pemilik — jangan
+> dihidupkan lagi tanpa diminta. Alasan pembatalannya ada di bagian "Kenapa tetap rsync"
+> di bawah.
+
+**Keuntungan yang hilang karena tidak memakai git, supaya disadari:** server tidak bisa
+memberi tahu sendiri apakah kodenya berbeda dari repo. Kalau berkas di server pernah diedit
+langsung, tidak ada yang menandainya. Untuk memeriksanya tetap bisa, tanpa mengubah cara
+deploy — bandingkan dengan clone sementara:
 
 ```bash
-cd /var/www/dash
-sudo git log --oneline -3                 # riwayat yang sedang berjalan
-sudo git rev-list --left-right --count HEAD...origin/main   # 0 0 = sinkron
+sudo rm -rf /tmp/eq-cek && sudo git clone -q --depth 1 https://github.com/anggiadiputra/EQ.git /tmp/eq-cek
+# -c = bandingkan ISI (checksum), bukan timestamp. Tanpa -c, semua berkas akan tampak
+# "berubah" karena rsync menyertakan waktu — 989 baris, dan itu menyesatkan.
+sudo rsync -ainc --delete --exclude ".env" --exclude "storage/" --exclude "vendor/" \
+    --exclude ".git/" --exclude "public/storage" /tmp/eq-cek/ /var/www/dash/ | head -40
+sudo rm -rf /tmp/eq-cek
 ```
 
-**Cara deploy sekarang — git, bukan rsync.** `rsync -a --delete` akan menimpa isi
-checkout dan membuat working tree kotor, jadi jangan dipakai lagi untuk kode:
+Baris `deleting` yang normal hanya `bootstrap/cache/*.php` (cache yang dibangun di server,
+memang tidak ada di repo).
 
-```bash
-cd /var/www/dash
-sudo git fetch origin main
-sudo git checkout -f origin/main          # menimpa berkas terlacak; storage/vendor/.env TIDAK terlacak
-sudo chown -R www-data:www-data /var/www/dash/public/build   # WAJIB: checkout sbg root bikin berkas root
-sudo -u www-data HOME=/tmp php artisan optimize:clear
-sudo -u www-data HOME=/tmp php artisan migrate --force
-sudo -u www-data HOME=/tmp php artisan config:cache && sudo -u www-data HOME=/tmp php artisan route:cache
-sudo systemctl reload php8.3-fpm
-```
+## Kenapa tetap rsync (bukan git checkout)
 
-Jebakan git di server ini:
-- **`git checkout` dijalankan sebagai root → berkas jadi milik root.** Untuk `.php` tidak
-  masalah (mode 644, dibaca siapa saja), tetapi `public/build` harus tetap bisa ditimpa
-  build berikutnya, jadi kembalikan ke `www-data` seperti langkah di atas.
-- **`git checkout -f` membuang perubahan terlacak di server tanpa bertanya.** Kalau ada
-  yang pernah mengedit berkas langsung di server, edit itu hilang. Periksa dulu dengan
-  `sudo git status --short` (kosong = bersih).
-- `origin/main` sudah ada di server tetapi **push ke GitHub TIDAK otomatis men-deploy
-  dash** — workflow `.github/workflows/deploy.yml` masih menunjuk server lama
-  (`root@45.77.42.220`, repo `agoesset/ekspedisi-quran`) lewat `Envoy.blade.php` yang
-  usang. Deploy ke dash tetap langkah manual di atas sampai workflow itu diperbaiki.
-- `vendor/`, `.env`, `storage/`, dan `public/storage` tidak dilacak git — aman dari
-  checkout, tapi juga berarti `composer install` tetap perlu dijalankan bila
-  `composer.lock` berubah.
+Diuji 9 Okt 2026 di server, supaya tidak jadi perdebatan tanpa bukti:
 
-## Prosedur deploy lama (rsync) — JANGAN dipakai lagi
+| | rsync | git checkout |
+|---|---|---|
+| Hasil kode | benar | benar |
+| Deteksi berkas server yang menyimpang | tidak ada | ada (`git status`) |
+| Menghapus `bootstrap/cache` | ya → dibangun ulang otomatis | tidak |
+| Langkah tambahan | tidak ada | wajib `chown public/build` + `optimize:clear` |
 
-Disimpan hanya sebagai catatan sejarah; langkah ini digantikan blok git di atas.
+**Dua klaim yang sempat ditulis di dokumen ini TIDAK benar dan sudah dibuang:**
+- "rsync membuat working tree kotor" — salah. `rsync` menyalin konten **beserta timestamp
+  sumber**, jadi setelah sinkron berkasnya justru sama persis dengan commit yang dicatat;
+  diuji dengan menimpa satu berkas: tetap 0 baris kotor.
+- "rsync merusak checkout git" — salah. Berkas kode di luar `bootstrap/cache` hanya berbeda
+  **timestamp** (kode `.f..t`), dan `.git` memang di-`--exclude`.
+
+Jadi yang benar: **rsync tidak merusak apa pun, ia hanya tidak punya fitur deteksi drift.**
+Itu keuntungan yang sesungguhnya dari git, bukan "rsync salah".
+
+## Prosedur deploy ke DASH (rsync — yang dipakai)
 
 ```bash
 # 1. Backup WAJIB (kode + DB)
@@ -202,6 +208,8 @@ sudo rm -rf /tmp/eq-deploy && sudo git clone --depth 1 \
 # 3. rsync kode ke dash (JANGAN sentuh .env, storage, vendor, public/storage)
 #    --delete akan MENGHAPUS public/storage (symlink tidak ada di repo) sehingga
 #    SELURUH gambar yang diunggah jadi 404. Wajib dikecualikan.
+#    Berkas kode hasil deploy akan sama persis dengan commit; yang ikut terhapus
+#    hanya bootstrap/cache/*.php, dan itu memang dibangun ulang di langkah 4.
 sudo rsync -a --delete --exclude ".env" --exclude "storage/" \
     --exclude "vendor/" --exclude ".git/" --exclude "public/storage" \
     /tmp/eq-deploy/ /var/www/dash/
