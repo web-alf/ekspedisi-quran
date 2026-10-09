@@ -19,12 +19,21 @@ use Illuminate\Support\Facades\Log;
  * sertifikat, karena rantai ke hulu putus: resi tidak tertaut ke batch, sehingga
  * WakafBatch::updateStatus() selalu menyimpulkan "belum ada pengiriman".
  *
+ * Kenapa penanda idempotennya KOLOM SERTIFIKAT, bukan status batch:
+ * PengirimanObserver memanggil WakafBatch::updateStatus() setiap kali status
+ * resi berubah, dan begitu resi terakhir menjadi "diterima" batch LANGSUNG
+ * berstatus completed. Kalau perintah ini menyaring `status != completed`, batch
+ * normal justru tidak akan pernah terlihat dan sertifikatnya tidak akan pernah
+ * dibuat — persis kegagalan yang mau diperbaiki. Karena itu:
+ *   - penyaring batch tidak melihat status batch sama sekali, hanya "semua resi diterima";
+ *   - selesainya dipulihkan dari kolom `sertifikat_generated`, bukan dari status.
+ *
  * Kenapa perintah terjadwal, bukan hook saat status berubah: notifikasi ke
- * donatur TIDAK BISA dikerjakan — tidak ada layanan WhatsApp di aplikasi ini,
- * dan job yang dirujuk kode lama (`SendDeliveryNotificationToWakif`,
- * `SendCertificateToWakif`) memang tidak pernah ada. Menyambung ke sesuatu yang
- * tidak ada akan membuat setiap perubahan status meledak. Yang bisa dikerjakan
- * sekarang: penutupan batch + catatan sertifikat. Aman dijalankan berulang.
+ * donatur TIDAK BISA dikerjakan — fitur WhatsApp dihapus permanen (migrasi
+ * 2025_08_15_190504 menghapus 4 tabel + 10 izin, `down()`-nya sengaja dibuat tidak
+ * bisa dibatalkan), dan job yang dirujuk kode lama (`SendDeliveryNotificationToWakif`,
+ * `SendCertificateToWakif`) tidak pernah ada. Yang bisa dikerjakan sekarang:
+ * penutupan batch + catatan sertifikat. Aman dijalankan berulang.
  */
 class TutupPengirimanSelesaiCommand extends Command
 {
@@ -47,10 +56,10 @@ class TutupPengirimanSelesaiCommand extends Command
             return self::FAILURE;
         }
 
-        // Batch yang berjalan, punya resi, dan SELURUH resinya sudah diterima.
-        // Satu query agregat — bukan satu query per batch (15 ribu batch).
+        // Batch yang punya resi DAN seluruh resinya sudah diterima. Satu query
+        // agregat, bukan satu query per batch (15 ribu batch). Status batch
+        // sengaja TIDAK disaring — lihat catatan di atas.
         $idBatch = WakafBatch::query()
-            ->whereNotIn('status', ['completed', 'cancelled'])
             ->whereHas('pengiriman')
             ->whereRaw('NOT EXISTS (
                 SELECT 1 FROM pengiriman p
@@ -61,41 +70,36 @@ class TutupPengirimanSelesaiCommand extends Command
             ->limit($batas)
             ->pluck('id');
 
-        if ($idBatch->isEmpty()) {
-            $this->info('Tidak ada batch yang seluruh resinya sudah diterima.');
-
-            return self::SUCCESS;
-        }
-
-        $this->info("Batch siap ditutup: {$idBatch->count()}");
-
-        if ($kering) {
-            $this->table(
-                ['Batch', 'Resi diterima', 'Donatur'],
-                WakafBatch::query()
-                    ->whereIn('id', $idBatch)
-                    ->withCount('pengiriman')
-                    ->limit(20)
-                    ->get()
-                    ->map(fn ($b) => [
-                        $b->batch_code,
-                        $b->pengiriman_count,
-                        Donatur::query()->whereKey($b->donatur_id)->value('nama_donatur') ?? '—',
-                    ])->all()
-            );
-            $this->warn('Mode kering: tidak ada yang diubah.');
-
-            return self::SUCCESS;
-        }
-
         $jumlahSertifikat = 0;
         $jumlahBatch = 0;
 
         foreach ($idBatch as $id) {
-            DB::transaction(function () use ($id, $idDiterima, &$jumlahSertifikat, &$jumlahBatch) {
+            DB::transaction(function () use ($id, $idDiterima, $kering, &$jumlahSertifikat, &$jumlahBatch) {
                 $batch = WakafBatch::query()->lockForUpdate()->find($id);
 
-                if (! $batch || in_array($batch->status, ['completed', 'cancelled'], true)) {
+                if (! $batch || $batch->status === 'cancelled') {
+                    return;
+                }
+
+                // Penanda idempoten: batchnya sudah selesai bila tidak ada lagi
+                // resi diterima yang belum bertanda sertifikat.
+                $belumBertanda = Pengiriman::query()
+                    ->where('wakaf_batch_id', $batch->id)
+                    ->where('status_id', $idDiterima)
+                    ->where('sertifikat_generated', false)
+                    ->exists();
+
+                if (! $belumBertanda) {
+                    return;
+                }
+
+                if ($kering) {
+                    $this->line(sprintf(
+                        '  [kering] %s — %d resi diterima, belum bersertifikat',
+                        $batch->batch_code,
+                        Pengiriman::query()->where('wakaf_batch_id', $batch->id)->where('status_id', $idDiterima)->count()
+                    ));
+
                     return;
                 }
 
@@ -136,6 +140,8 @@ class TutupPengirimanSelesaiCommand extends Command
                     ]);
 
                 // 3. Tutup batch — pakai logika yang sudah ada, jangan ditiru.
+                //    Biasanya sudah "completed" karena observer; updateStatus()
+                //    memastikan batch yang belum tersentuh ikut ditutup.
                 $batch->updateStatus();
 
                 if ($batch->status === 'completed') {
@@ -144,12 +150,14 @@ class TutupPengirimanSelesaiCommand extends Command
             });
         }
 
-        $this->info("Batch ditutup: {$jumlahBatch} | catatan sertifikat: {$jumlahSertifikat}");
+        $this->info("Diperiksa {$idBatch->count()} batch | ditutup {$jumlahBatch} | catatan sertifikat {$jumlahSertifikat}");
 
-        Log::info('Penutupan pengiriman selesai', [
-            'batch_ditutup' => $jumlahBatch,
-            'catatan_sertifikat' => $jumlahSertifikat,
-        ]);
+        if ($jumlahSertifikat > 0) {
+            Log::info('Penutupan pengiriman selesai', [
+                'batch_ditutup' => $jumlahBatch,
+                'catatan_sertifikat' => $jumlahSertifikat,
+            ]);
+        }
 
         return self::SUCCESS;
     }

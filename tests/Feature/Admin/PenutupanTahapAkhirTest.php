@@ -374,6 +374,51 @@ describe('perintah penutup tahap akhir', function () {
             ->and($resi->fresh()->received_at)->not->toBeNull();
     });
 
+    /**
+     * Kasus yang paling mudah terlewat, dan pernah benar-benar terlewat:
+     * PengirimanObserver memanggil WakafBatch::updateStatus() setiap status resi
+     * berubah, jadi batch LANGSUNG berstatus "completed" begitu resi terakhir
+     * menjadi "diterima" — SEBELUM perintah penutup sempat jalan.
+     *
+     * Kalau perintahnya menyaring `status != completed`, batch seperti ini tidak
+     * akan pernah terlihat, sertifikatnya tidak akan pernah dibuat, dan
+     * hasilnya tetap 0 sertifikat selamanya walau resinya sudah sampai.
+     */
+    it('tetap membuat sertifikat untuk batch yang sudah ditutup observer', function () {
+        $donatur = Donatur::factory()->create();
+        $batch = WakafBatch::factory()->create([
+            'donatur_id' => $donatur->id,
+            'status' => 'pending_distribution',
+        ]);
+        $resi = Pengiriman::factory()->create([
+            'donatur_id' => $donatur->id,
+            'wakaf_batch_id' => $batch->id,
+            'status_id' => statusTahapAkhir('pemesanan'),
+        ]);
+
+        // Jalur resmi, supaya observer ikut jalan dan menutup batchnya lebih dulu.
+        $resi->updateStatus(statusTahapAkhir('diterima'));
+
+        expect($batch->fresh()->status)->toBe('completed')
+            ->and($resi->fresh()->sertifikat_generated)->toBeFalse();
+
+        $this->artisan('wakaf:tutup-pengiriman')->assertSuccessful();
+
+        expect(Sertifikat::query()->where('donatur_id', $donatur->id)->exists())->toBeTrue()
+            ->and($resi->fresh()->sertifikat_generated)->toBeTrue();
+    });
+
+    it('melewatkan batch yang dibatalkan', function () {
+        $donatur = Donatur::factory()->create();
+        [$batch, $resi] = batchSampaiTahapAkhir($donatur);
+        $batch->update(['status' => 'cancelled']);
+
+        $this->artisan('wakaf:tutup-pengiriman')->assertSuccessful();
+
+        expect($resi->fresh()->sertifikat_generated)->toBeFalse()
+            ->and(Sertifikat::query()->count())->toBe(0);
+    });
+
     it('tidak menggandakan catatan sertifikat saat dijalankan ulang', function () {
         $donatur = Donatur::factory()->create();
         batchSampaiTahapAkhir($donatur);
