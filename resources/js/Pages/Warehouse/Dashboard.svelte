@@ -8,6 +8,7 @@
   import SealReadyBoxes from '../../Components/SealReadyBoxes.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import { hasPermission } from '../../utils/permissions.js';
+  import { can } from '../../utils/permissions.js';
 
   // Boleh memulai/melanjutkan packing? Endpoint /start-scanning dijaga izin
   // warehouse.packing.scan, jadi tanpa izin itu tombolnya hanya akan menghasilkan
@@ -16,12 +17,23 @@
   // menyimpulkan bahwa tombolnya boleh ditampilkan. Tombol yang pasti gagal lebih
   // buruk daripada tidak ada tombol sama sekali: pengguna mengira aplikasinya rusak.
   $: canStartPacking = hasPermission('warehouse.packing.scan');
+
+  // Halaman ini juga dibuka oleh peran yang hanya memantau, tanpa
+  // `warehouse.boxes.view`. Tautan ke Pelacakan Kerdus hanya ditampilkan bila
+  // halamannya memang boleh dibuka — tautan yang pasti 403 lebih buruk daripada
+  // tidak ada tautan sama sekali.
+  $: bolehLacakKerdus = can.warehouse.boxes.view();
   
   // Props - FIXED: Added missing props
   export let todayTask = null;
   export let activeBox = null;
   export let notifications = [];
   export let performanceData = {};
+  // Daftar kerdus milik staf ini. Server sudah lama mengirim prop ini
+  // (DashboardController::getRecentBoxesForUser), tetapi halaman tidak pernah
+  // mendeklarasikannya sehingga hasilnya dibuang tanpa pesan: kerdus yang
+  // isinya sudah jalan tidak terlihat di mana pun di dashboard ini.
+  export let recentBoxes = [];
   // Unused incoming props removed to silence build warnings
   export let currentTime = '';
   export let currentDate = '';
@@ -153,6 +165,13 @@
           // Update shared boxes data
           if (data.sharedBoxes && data.sharedBoxes.length > 0) {
             sharedBoxes = data.sharedBoxes;
+          }
+
+          // Daftar kerdus ikut diperbarui. Sengaja TIDAK memakai syarat
+          // "length > 0" seperti sharedBoxes: daftar yang wajar jadi kosong
+          // tidak boleh membuat tampilan mempertahankan daftar lama.
+          if (Array.isArray(data.recentBoxes)) {
+            recentBoxes = data.recentBoxes;
           }
           
           // Update notifications count
@@ -356,7 +375,78 @@
             </div>
           {/if}
     </div>
-    
+
+    <!-- Kerdus Terbaru - Responsive -->
+    <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+            <HeroIcon name="archive-box" class="w-5 h-5" />
+          </div>
+          <div>
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Kerdus Terbaru</h2>
+            <p class="text-xs sm:text-sm text-gray-500">10 kerdus terakhir yang Anda kerjakan</p>
+          </div>
+        </div>
+        {#if bolehLacakKerdus}
+          <a
+            href="/admin/box-tracking"
+            class="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+          >
+            <HeroIcon name="magnifying-glass" class="w-4 h-4" />
+            Lacak Kerdus
+          </a>
+        {/if}
+      </div>
+
+      {#if recentBoxes.length > 0}
+        <div class="space-y-3">
+          {#each recentBoxes as box}
+            <div class="border border-gray-100 rounded-lg p-3 sm:p-4 hover:border-gray-200 transition-colors">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono text-sm sm:text-base font-semibold text-gray-900 truncate">{box.kode_kerdus}</span>
+                    <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full {box.status_info.bg} {box.status_info.text}">
+                      {box.status_info.label}
+                    </span>
+                  </div>
+                  <div class="text-xs sm:text-sm text-gray-500 mt-1">
+                    {box.jenis_quran} · dibuat {box.created_at}
+                    {#if box.sealed_at}<span class="text-gray-400">· tersegel {box.sealed_at}</span>{/if}
+                  </div>
+                </div>
+                <div class="sm:w-48 sm:flex-shrink-0">
+                  <div class="flex items-center gap-3">
+                    <div class="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        class="h-2 rounded-full {getProgressColor(box.progress_percentage)}"
+                        style="width: {box.progress_percentage}%"
+                      ></div>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                      {box.jumlah_terisi}/{box.kapasitas}
+                    </span>
+                  </div>
+                  <div class="text-right text-xs text-gray-500 mt-1">{box.progress_percentage}%</div>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="text-center py-8 sm:py-10 border border-dashed border-gray-200 rounded-lg">
+          <div class="inline-flex items-center justify-center w-14 h-14 bg-gray-100 rounded-full mb-3">
+            <HeroIcon name="archive-box" class="w-7 h-7 text-gray-400" />
+          </div>
+          <div class="text-gray-900 font-semibold mb-1">Belum ada kerdus</div>
+          <div class="text-sm text-gray-600 px-4">
+            Kerdus baru tercatat setelah Anda memindai resi di halaman Proses Packing.
+          </div>
+        </div>
+      {/if}
+    </div>
+
     <!-- Performance Stats Grid - Responsive -->
     <div class="performance-stats grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       <!-- This Week Performance -->

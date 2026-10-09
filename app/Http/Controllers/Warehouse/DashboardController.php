@@ -10,6 +10,7 @@ use App\Models\SharedBoxAssignment;
 use App\Models\User;
 use App\Services\PackingAssignmentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -54,32 +55,7 @@ class DashboardController extends Controller
                 $activeBox = $todayTask->getCurrentBox();
             }
 
-            // OPTIMIZED: Get recent boxes for this user with constrained eager loading
-            $recentBoxes = PackingBox::whereHas('dailyPackingTask', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
-                ->with([
-                    'jenisQuran:id,nama_jenis',
-                    'dailyPackingTask:id,user_id,tanggal_tugas',
-                ])
-                ->select('id', 'kode_kerdus', 'status', 'jenis_quran_id', 'jumlah_terisi', 'kapasitas', 'sealed_at', 'created_at', 'daily_packing_task_id')
-                ->orderBy('created_at', 'desc')
-                ->limit(10)
-                ->get()
-                ->map(function ($box) {
-                    return [
-                        'id' => $box->id,
-                        'kode_kerdus' => $box->kode_kerdus,
-                        'status' => $box->status,
-                        'status_info' => $box->getStatusInfo(),
-                        'jenis_quran' => $box->jenisQuran ? $box->jenisQuran->nama_jenis : 'Belum ditentukan',
-                        'jumlah_terisi' => $box->jumlah_terisi,
-                        'kapasitas' => $box->kapasitas,
-                        'progress_percentage' => $box->progress_percentage,
-                        'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
-                        'created_at' => $box->created_at->format('d/m/Y H:i'),
-                    ];
-                });
+            $recentBoxes = $this->getRecentBoxesForUser($user);
 
             // Get shared boxes for collaboration interface
             $sharedBoxes = $this->getSharedBoxesForCollaboration($user);
@@ -148,6 +124,45 @@ class DashboardController extends Controller
         // Auto-assign disabled by user request - supervisor manual assignment only
 
         return $todayTask;
+    }
+
+    /**
+     * Kerdus terbaru milik pengguna, untuk ditampilkan di dashboard.
+     *
+     * Dipisah jadi metode sendiri supaya bisa diuji langsung: sebelumnya daftar
+     * ini dihitung di dalam index(), tidak pernah diuji, dan frontend membuang
+     * hasilnya tanpa pesan apa pun.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function getRecentBoxesForUser(User $user, int $limit = 10)
+    {
+        return PackingBox::whereHas('dailyPackingTask', function ($query) use ($user) {
+            $query->where('user_id', $user->id);
+        })
+            ->with([
+                'jenisQuran:id,nama_jenis',
+                'dailyPackingTask:id,user_id,tanggal_tugas',
+            ])
+            ->select('id', 'kode_kerdus', 'status', 'jenis_quran_id', 'jumlah_terisi', 'kapasitas', 'sealed_at', 'created_at', 'daily_packing_task_id')
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get()
+            ->map(function ($box) {
+                return [
+                    'id' => $box->id,
+                    'kode_kerdus' => $box->kode_kerdus,
+                    'status' => $box->status,
+                    'status_info' => $box->getStatusInfo(),
+                    'jenis_quran' => $box->jenisQuran ? $box->jenisQuran->nama_jenis : 'Belum ditentukan',
+                    'jumlah_terisi' => $box->jumlah_terisi,
+                    'kapasitas' => $box->kapasitas,
+                    'progress_percentage' => $box->progress_percentage,
+                    'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
+                    'created_at' => $box->created_at->format('d/m/Y H:i'),
+                ];
+            })
+            ->values();
     }
 
     /**
@@ -538,6 +553,10 @@ class DashboardController extends Controller
             // Get shared boxes if user has shared allocations
             $sharedBoxes = $this->getSharedBoxesForCollaboration($user);
 
+            // Daftar kerdus ikut disegarkan; tanpa ini kerdus yang baru dibuat
+            // (atau baru bertambah isinya) baru muncul setelah halaman dimuat ulang.
+            $recentBoxes = $this->getRecentBoxesForUser($user);
+
             $taskData = null;
             if ($todayTask) {
                 $taskData = array_merge([
@@ -559,6 +578,7 @@ class DashboardController extends Controller
                     'activeBox' => $activeBox,
                     'notificationsCount' => $notificationsCount,
                     'sharedBoxes' => $sharedBoxes,
+                    'recentBoxes' => $recentBoxes,
                     'timestamp' => now()->toISOString(),
                 ],
             ]);
