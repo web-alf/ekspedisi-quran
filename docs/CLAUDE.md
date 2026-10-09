@@ -194,7 +194,49 @@ dijaga dan JANGAN dilepas saat menambah fitur baru:
 batasan"; itu justru membuka seluruh data saat salah konfigurasi.
 
 Konteks pembatasan dikirim ke frontend sebagai prop `stageVisibility`
-(`{restricted, slugs}`) agar kartu statistik menyesuaikan diri.
+(`{restricted, slugs, gudang, gudangSlugs}`) agar kartu statistik menyesuaikan diri.
+
+## Batas Tahap Staff Gudang (tahap awal distribusi)
+
+Tahap awal distribusi adalah ranah role `warehouse` (Staff Gudang):
+
+| Slug | Label |
+|------|-------|
+| `pemesanan` | Proses Pemesanan |
+| `produksi` | Proses Produksi |
+| `kedatangan` | Proses Kedatangan/Penurunan |
+| `packing` | Proses Packing |
+
+`pengiriman`, `diterima`, `batal` BUKAN wewenang gudang (kurir/manager/distribusi).
+`selesai-packing` dihasilkan otomatis saat kerdus disegel — bukan pilihan manual.
+
+**Kenapa `packing` ikut:** `PackingAssignmentService::assignPengirimanOnScan` menolak
+resi yang belum berstatus `packing`, jadi tanpa itu gudang tidak pernah bisa memulai
+pekerjaan packing-nya sendiri.
+
+**Izin:** `shipments.update-status` (memindahkan tahap) + `shipments.track` (halaman scan
+QR mencari resi lewat endpoint ber-izin itu; tanpa `track`, halaman scan tampak rusak di
+langkah pertama). Diberikan lewat migrasi `2026_10_09_060000_grant_warehouse_stage_permissions`
+— **hanya menambah**, karena `RolePermissionSeeder::syncPermissions` menghapus izin yang
+tidak ada di daftarnya. Seeder juga sudah ikut diperbarui agar lingkungan uji sama.
+
+**Satu sumber kebenaran:** `PengirimanStageVisibility::bolehPilihStatus()` (status tujuan)
+dan `bolehPindahkan()` (status tujuan + keadaan resinya), daftar tahap di
+`config/pengiriman.php` (`warehouse_stage_slugs`). Jalur yang sudah dijaga dan JANGAN
+dilepas saat menambah fitur: `updateStatusWithDocs`, `updateProcessStatus`,
+`updateBatchStatus`, `bulkUpdateStatus`, `update()` (form edit), `edit()` (dropdown),
+dan `updateStatusByScan`.
+
+**Batas per-baris itu perlu:** resi yang sudah lewat tahap awal tidak boleh ditarik
+kembali oleh gudang. Aturan "tidak boleh mundur" saja TIDAK menutup ini, sebab tahap
+awal selalu berurutan lebih rendah (`diterima` → `produksi` justru "maju").
+
+**Dua implementasi `validateStatusTransition` yang berbeda:** `PengirimanController`
+longgar (hanya menolak mundur), `PengirimanTrackingController` hanya mengizinkan maju
+SATU langkah. Karena itu uji penolakan harus memakai tujuan yang HANYA ditolak batas
+tahap (mis. `packing` → `selesai-packing`), kalau tidak ujinya lulus karena aturan urutan
+dan batas wewenang bisa dihapus tanpa ada uji yang gagal — lihat
+`tests/Feature/Admin/BatasTahapGudangTest.php`.
 
 ## Warehouse Packing System
 
