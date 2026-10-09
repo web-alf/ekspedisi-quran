@@ -45,5 +45,14 @@ Schedule::command('performance:check-budgets --output=json')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/performance-budgets.log'));
 
+// Tutup tahap akhir distribusi: batch yang seluruh resinya sudah diterima
+// ditandai selesai dan catatan sertifikatnya dibuat. Tanpa ini alur berhenti di
+// "diterima" — lihat TutupPengirimanSelesaiCommand untuk alasan kenapa ini
+// perintah terjadwal, bukan hook saat status berubah.
+Schedule::command('wakaf:tutup-pengiriman')
+    ->dailyAt('02:30')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/wakaf-tutup.log'));
+
 Schedule::command('cache:clear')->weekly();
 Schedule::command('optimize:clear')->weekly();

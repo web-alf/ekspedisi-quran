@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Helpers\HijriHelper;
 use App\Models\CertificateTemplate;
 use App\Models\Sertifikat;
+use App\Models\User;
 use App\Models\WakafBatch;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
@@ -235,7 +236,7 @@ class CertificateService
                 'template_used' => $template->slug ?? 'default',
                 'template_id' => $template->id ?? null,
                 'file_path' => $filePath,
-                'generated_by' => auth()->id() ?? 1,
+                'generated_by' => auth()->id() ?? User::query()->value('id'),
                 'generated_at' => now(),
             ]
         );

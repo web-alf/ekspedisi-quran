@@ -2,14 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\WakafBatch;
-use App\Models\Sertifikat;
-use App\Models\CertificateTemplate;
 use App\Helpers\HijriHelper;
+use App\Models\CertificateTemplate;
+use App\Models\Pengiriman;
+use App\Models\Sertifikat;
+use App\Models\User;
+use App\Models\WakafBatch;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Exception;
+use Illuminate\Support\Facades\Log;
 
 class OnDemandCertificateService
 {
@@ -43,7 +44,7 @@ class OnDemandCertificateService
             Log::error('On-demand certificate generation failed', [
                 'wakaf_batch_id' => $wakafBatch->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             throw $e;
@@ -62,20 +63,21 @@ class OnDemandCertificateService
             ->findOrFail($sertifikatId);
 
         // Check if this is a consolidated certificate (direct donatur relationship)
-        if (!$sertifikat->wakafBatch && $sertifikat->donatur) {
+        if (! $sertifikat->wakafBatch && $sertifikat->donatur) {
             // Use ConsolidatedCertificateService for consolidated certificates
-            $consolidatedService = app(\App\Services\ConsolidatedCertificateService::class);
+            $consolidatedService = app(ConsolidatedCertificateService::class);
+
             return $consolidatedService->generateByToken($token);
         }
 
         // For regular WakafBatch-based certificates
-        if (!$sertifikat->wakafBatch) {
+        if (! $sertifikat->wakafBatch) {
             throw new Exception('Data batch wakaf tidak ditemukan.');
         }
 
         // ✅ FIX: Use same generation method as admin to support multi-page PDFs
         // Use BatchCertificateService to generate multi-wakif certificates
-        $batchCertificateService = app(\App\Services\BatchCertificateService::class);
+        $batchCertificateService = app(BatchCertificateService::class);
 
         // Get wakif items for this batch
         $wakifItems = $batchCertificateService->getWakifItemsForBatch($sertifikat->wakafBatch);
@@ -94,7 +96,8 @@ class OnDemandCertificateService
 
         // Store the PDF content for use in download/preview
         // Create a wrapper object that mimics PDF API
-        return new class($pdfContent) {
+        return new class($pdfContent)
+        {
             private $content;
 
             public function __construct($content)
@@ -129,7 +132,7 @@ class OnDemandCertificateService
         $payload = [
             'id' => $sertifikat->id,
             'exp' => now()->addHours(24)->timestamp,
-            'hash' => md5($sertifikat->id . $sertifikat->nomor_sertifikat . config('app.key'))
+            'hash' => md5($sertifikat->id.$sertifikat->nomor_sertifikat.config('app.key')),
         ];
 
         return base64_encode(json_encode($payload));
@@ -142,8 +145,8 @@ class OnDemandCertificateService
     {
         try {
             $payload = json_decode(base64_decode($token), true);
-            
-            if (!$payload || !isset($payload['id']) || !isset($payload['exp']) || !isset($payload['hash'])) {
+
+            if (! $payload || ! isset($payload['id']) || ! isset($payload['exp']) || ! isset($payload['hash'])) {
                 throw new Exception('Invalid token format');
             }
 
@@ -154,11 +157,11 @@ class OnDemandCertificateService
 
             // Validate hash
             $sertifikat = Sertifikat::find($payload['id']);
-            if (!$sertifikat) {
+            if (! $sertifikat) {
                 throw new Exception('Certificate not found');
             }
 
-            $expectedHash = md5($sertifikat->id . $sertifikat->nomor_sertifikat . config('app.key'));
+            $expectedHash = md5($sertifikat->id.$sertifikat->nomor_sertifikat.config('app.key'));
             if ($payload['hash'] !== $expectedHash) {
                 throw new Exception('Invalid token signature');
             }
@@ -166,7 +169,7 @@ class OnDemandCertificateService
             return $payload['id'];
 
         } catch (Exception $e) {
-            throw new Exception('Invalid or expired token: ' . $e->getMessage());
+            throw new Exception('Invalid or expired token: '.$e->getMessage());
         }
     }
 
@@ -184,6 +187,7 @@ class OnDemandCertificateService
     public function getPublicDownloadUrl(Sertifikat $sertifikat): string
     {
         $token = $this->generateDownloadToken($sertifikat);
+
         return route('public.certificate.download', ['token' => $token]);
     }
 
@@ -194,11 +198,11 @@ class OnDemandCertificateService
     {
         // Decode token to get sertifikat ID
         $sertifikatId = $this->decodeToken($token);
-        
+
         $sertifikat = Sertifikat::with(['wakafBatch.donatur', 'donatur'])->findOrFail($sertifikatId);
 
         // Handle consolidated certificates (direct donatur relationship)
-        if (!$sertifikat->wakafBatch && $sertifikat->donatur) {
+        if (! $sertifikat->wakafBatch && $sertifikat->donatur) {
             return [
                 'nomor_sertifikat' => $sertifikat->nomor_sertifikat,
                 'donatur_name' => $sertifikat->donatur->nama_donatur,
@@ -207,7 +211,7 @@ class OnDemandCertificateService
         }
 
         // Handle regular WakafBatch-based certificates
-        if (!$sertifikat->wakafBatch) {
+        if (! $sertifikat->wakafBatch) {
             throw new Exception('Data sertifikat tidak lengkap.');
         }
 
@@ -223,7 +227,7 @@ class OnDemandCertificateService
      */
     private function validateWakafBatchData(WakafBatch $wakafBatch)
     {
-        if (!$wakafBatch->donatur) {
+        if (! $wakafBatch->donatur) {
             throw new Exception('Data donatur tidak ditemukan untuk batch ini.');
         }
         if (empty($wakafBatch->donatur->nama_donatur)) {
@@ -246,7 +250,7 @@ class OnDemandCertificateService
 
         // Get default template if not specified
         $templateId = $options['template_id'] ?? null;
-        if (!$templateId) {
+        if (! $templateId) {
             $defaultTemplate = CertificateTemplate::where('is_default', true)
                 ->where('is_active', true)
                 ->first();
@@ -258,7 +262,7 @@ class OnDemandCertificateService
             'wakaf_batch_id' => $wakafBatch->id,
             'template_id' => $templateId,
             'template_used' => $templateId ? CertificateTemplate::find($templateId)->slug : 'default',
-            'generated_by' => auth()->id() ?? 1,
+            'generated_by' => auth()->id() ?? User::query()->value('id'),
             'generated_at' => now(),
             // No file_path - generated on demand
         ]);
@@ -281,7 +285,7 @@ class OnDemandCertificateService
             ->where('is_active', true)
             ->first();
 
-        if (!$defaultTemplate) {
+        if (! $defaultTemplate) {
             throw new Exception('Belum ada template sertifikat yang tersedia di sistem. Silakan buat template sertifikat terlebih dahulu melalui menu Template Sertifikat sebelum membuat sertifikat.');
         }
 
@@ -294,7 +298,7 @@ class OnDemandCertificateService
     private function prepareCertificateData(WakafBatch $wakafBatch)
     {
         // Load the jenisQuran relationship if not already loaded
-        if (!$wakafBatch->relationLoaded('jenisQuran')) {
+        if (! $wakafBatch->relationLoaded('jenisQuran')) {
             $wakafBatch->load('jenisQuran');
         }
 
@@ -312,7 +316,7 @@ class OnDemandCertificateService
                     $mushafText .= ' Buku Iqra';
                     break;
                 default:
-                    $mushafText .= ' ' . $wakafBatch->jenisQuran->nama_jenis;
+                    $mushafText .= ' '.$wakafBatch->jenisQuran->nama_jenis;
                     break;
             }
         } else {
@@ -320,10 +324,10 @@ class OnDemandCertificateService
         }
 
         // Get wakif names from all pengiriman of this donatur
-        $wakifNames = \App\Models\Pengiriman::where('donatur_id', $wakafBatch->donatur_id)
+        $wakifNames = Pengiriman::where('donatur_id', $wakafBatch->donatur_id)
             ->with('wakafItem:id,pengiriman_id,wakif_name')
             ->get()
-            ->map(function($p) {
+            ->map(function ($p) {
                 return $p->wakafItem ? $p->wakafItem->wakif_name : null;
             })
             ->filter()
@@ -334,7 +338,7 @@ class OnDemandCertificateService
         $wakifNamesString = '';
         if ($wakifNames->count() > 1) {
             $lastWakif = $wakifNames->pop();
-            $wakifNamesString = $wakifNames->implode(', ') . ' dan ' . $lastWakif;
+            $wakifNamesString = $wakifNames->implode(', ').' dan '.$lastWakif;
         } else {
             $wakifNamesString = $wakifNames->first() ?: $wakafBatch->donatur->nama_donatur;
         }
@@ -355,7 +359,7 @@ class OnDemandCertificateService
     {
         // Generate base64 template image for the view
         $templateBase64 = $this->getTemplateBase64($template);
-        
+
         $viewData = [
             'data' => $certificateData,
             'template' => $template,
@@ -363,7 +367,7 @@ class OnDemandCertificateService
             'template_base64' => $templateBase64,
         ];
 
-        $pdf = PDF::loadView($this->templatePath, $viewData)
+        $pdf = Pdf::loadView($this->templatePath, $viewData)
             ->setPaper([0, 0, $template->width, $template->height], 'landscape')
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
@@ -383,7 +387,7 @@ class OnDemandCertificateService
         Log::info('Certificate generated on-demand', [
             'batch_code' => $batchCode,
             'template_id' => $template->id,
-            'generated_at' => now()
+            'generated_at' => now(),
         ]);
 
         return $pdf;
@@ -396,31 +400,31 @@ class OnDemandCertificateService
     {
         try {
             // Get template file path
-            $templatePath = storage_path('app/public/' . $template->template_file_path);
-            
+            $templatePath = storage_path('app/public/'.$template->template_file_path);
+
             // Check if file exists
-            if (!file_exists($templatePath)) {
+            if (! file_exists($templatePath)) {
                 throw new Exception("Template file not found: {$template->template_file_path}");
             }
-            
+
             // Get file contents and encode to base64
             $imageData = file_get_contents($templatePath);
             $base64 = base64_encode($imageData);
-            
+
             // Get file extension for proper MIME type
             $extension = pathinfo($templatePath, PATHINFO_EXTENSION);
             $mimeType = $this->getMimeType($extension);
-            
+
             return "data:{$mimeType};base64,{$base64}";
-            
+
         } catch (Exception $e) {
             Log::error('Failed to generate template base64', [
                 'template_id' => $template->id,
                 'template_file_path' => $template->template_file_path,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
-            throw new Exception("Failed to load template image: " . $e->getMessage());
+
+            throw new Exception('Failed to load template image: '.$e->getMessage());
         }
     }
 
@@ -435,9 +439,9 @@ class OnDemandCertificateService
             'png' => 'image/png',
             'gif' => 'image/gif',
             'bmp' => 'image/bmp',
-            'webp' => 'image/webp'
+            'webp' => 'image/webp',
         ];
-        
+
         return $mimeTypes[strtolower($extension)] ?? 'image/jpeg';
     }
 
@@ -448,16 +452,16 @@ class OnDemandCertificateService
     {
         // Remove or replace problematic characters
         $filename = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $filename);
-        
+
         // Replace multiple spaces with single dash
         $filename = preg_replace('/\s+/', '-', $filename);
-        
+
         // Remove multiple consecutive dashes
         $filename = preg_replace('/-+/', '-', $filename);
-        
+
         // Trim dashes from start and end
         $filename = trim($filename, '-');
-        
+
         return $filename;
     }
 }

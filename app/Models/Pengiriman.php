@@ -60,7 +60,39 @@ class Pengiriman extends Model
             if (empty($model->no_resi)) {
                 $model->no_resi = $model->generateUniqueNoResi();
             }
+
+            $model->tautkanKeBatchDonatur();
         });
+    }
+
+    /**
+     * Isi wakaf_batch_id dari batch milik donatur bila belum diisi.
+     *
+     * Kenapa di sini: dari lima jalur pembuatan resi, hanya satu yang mengisi
+     * wakaf_batch_id (DonaturController::storeBatch). Jalur lain — impor donatur
+     * massal, permintaan mushaf, dan penambahan item wakaf — membiarkannya null.
+     * Akibatnya relasi `WakafBatch::pengiriman()` selalu kosong, dan
+     * WakafBatch::updateStatus() karena itu selalu menyimpulkan "belum ada
+     * pengiriman" lalu menulis ulang status ke pending_distribution. Di produksi
+     * ini membuat 15.552 batch menggantung: 0 dari 26.111 resi punya wakaf_batch_id.
+     *
+     * Hanya ditautkan bila donaturnya punya TEPAT SATU batch — kalau lebih dari
+     * satu, pilihannya ambigu dan menebak bisa menautkan resi ke batch yang salah.
+     */
+    protected function tautkanKeBatchDonatur(): void
+    {
+        if (! empty($this->wakaf_batch_id) || empty($this->donatur_id)) {
+            return;
+        }
+
+        $idBatch = WakafBatch::query()
+            ->where('donatur_id', $this->donatur_id)
+            ->limit(2)
+            ->pluck('id');
+
+        if ($idBatch->count() === 1) {
+            $this->wakaf_batch_id = $idBatch->first();
+        }
     }
 
     /**
@@ -334,7 +366,16 @@ class Pengiriman extends Model
             }
 
             // Update status pada instance terkunci
-            $locked->update(['status_id' => $newStatusId]);
+            $atribut = ['status_id' => $newStatusId];
+
+            // Catat waktu terima, sekali saja. Tanpa ini kolom received_at tetap
+            // null selamanya dan tampilan yang bergantung padanya selalu
+            // melaporkan "belum diterima" walau statusnya sudah diterima.
+            if (StatusPengiriman::query()->whereKey($newStatusId)->value('slug') === 'diterima') {
+                $atribut['received_at'] = $locked->received_at ?? now();
+            }
+
+            $locked->update($atribut);
 
             // Create status history
             StatusHistory::create([

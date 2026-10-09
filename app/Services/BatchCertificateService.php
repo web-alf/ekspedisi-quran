@@ -4,7 +4,10 @@ namespace App\Services;
 
 use App\Helpers\HijriHelper;
 use App\Models\CertificateTemplate;
+use App\Models\Donatur;
+use App\Models\JenisQuran;
 use App\Models\Sertifikat;
+use App\Models\User;
 use App\Models\WakafBatch;
 use App\Models\WakafItem;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -206,7 +209,7 @@ class BatchCertificateService
         ];
 
         // Use a special multi-page template
-        $pdf = PDF::loadView('certificates.multi-template', $viewData)
+        $pdf = Pdf::loadView('certificates.multi-template', $viewData)
             ->setPaper([0, 0, $template->width, $template->height], 'landscape')
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
@@ -256,7 +259,7 @@ class BatchCertificateService
                 'template_used' => $template->slug ?? 'default',
                 'template_id' => $template->id ?? null,
                 'is_consolidated' => false, // Batch certificates are not consolidated certificates
-                'generated_by' => auth()->id() ?? 1,
+                'generated_by' => auth()->id() ?? User::query()->value('id'),
                 'generated_at' => now(),
             ]
         );
@@ -296,7 +299,7 @@ class BatchCertificateService
     private function createMissingWakafBatches()
     {
         // Find all donatur that have donations and check if they have complete batches
-        $donatursNeedingBatches = \App\Models\Donatur::where(function ($query) {
+        $donatursNeedingBatches = Donatur::where(function ($query) {
             $query->where('total_a5_count', '>', 0)
                 ->orWhere('total_a6_count', '>', 0)
                 ->orWhere('total_iqra_count', '>', 0);
@@ -340,7 +343,7 @@ class BatchCertificateService
 
         if ($totalMushaf > 0) {
             // Use A5 as default jenis quran (can be mixed types in consolidated batch)
-            $jenisQuran = \App\Models\JenisQuran::where('kode_jenis', 'A5')->first();
+            $jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first();
             if ($jenisQuran) {
                 $this->createWakafBatch($donatur, $jenisQuran, $totalMushaf, 1);
 
@@ -360,16 +363,16 @@ class BatchCertificateService
      */
     private function createWakafBatch($donatur, $jenisQuran, $totalQuran, $sequence)
     {
-        $batchCode = 'WB-'.date('Y').'-'.str_pad(\App\Models\WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT);
+        $batchCode = 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT);
 
-        return \App\Models\WakafBatch::create([
+        return WakafBatch::create([
             'batch_code' => $batchCode,
             'donatur_id' => $donatur->id,
             'jenis_quran_id' => $jenisQuran->id,
             'total_quran' => $totalQuran,
             'tanggal_wakaf' => $donatur->donation_date ?? now(),
             'status' => 'pending_distribution', // Use proper status from WakafBatch
-            'created_by' => auth()->id() ?? 1,
+            'created_by' => auth()->id() ?? User::query()->value('id'),
             'catatan' => 'Consolidated batch for all wakif names - Auto-generated from donation data',
         ]);
     }

@@ -12,6 +12,7 @@ use App\Models\JenisQuran;
 use App\Models\JobProgress;
 use App\Models\Pengiriman;
 use App\Models\Sertifikat;
+use App\Models\User;
 use App\Models\WakafBatch;
 use App\Services\BatchCertificateService;
 use App\Services\ConsolidatedCertificateService;
@@ -426,7 +427,7 @@ class CertificateController extends Controller
                         'total_quran' => $donatur->total_a5_count,
                         'tanggal_wakaf' => $donatur->donation_date ?? now(),
                         'status' => 'pending_distribution',
-                        'created_by' => auth()->id() ?? 1,
+                        'created_by' => auth()->id() ?? User::query()->value('id'),
                     ]);
                 }
             }
@@ -441,7 +442,7 @@ class CertificateController extends Controller
                         'total_quran' => $donatur->total_a6_count,
                         'tanggal_wakaf' => $donatur->donation_date ?? now(),
                         'status' => 'pending_distribution',
-                        'created_by' => auth()->id() ?? 1,
+                        'created_by' => auth()->id() ?? User::query()->value('id'),
                     ]);
                 }
             }
@@ -456,7 +457,7 @@ class CertificateController extends Controller
                         'total_quran' => $donatur->total_iqra_count,
                         'tanggal_wakaf' => $donatur->donation_date ?? now(),
                         'status' => 'pending_distribution',
-                        'created_by' => auth()->id() ?? 1,
+                        'created_by' => auth()->id() ?? User::query()->value('id'),
                     ]);
                 }
             }

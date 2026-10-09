@@ -6,6 +6,7 @@ use App\Helpers\HijriHelper;
 use App\Models\CertificateTemplate;
 use App\Models\Donatur;
 use App\Models\Sertifikat;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -171,7 +172,7 @@ class ConsolidatedCertificateService
             'template_id' => $templateId,
             'template_used' => $templateId ? CertificateTemplate::find($templateId)->slug : 'default',
             'is_consolidated' => true,
-            'generated_by' => auth()->id() ?? 1,
+            'generated_by' => auth()->id() ?? User::query()->value('id'),
             'generated_at' => now(),
         ]);
     }
@@ -294,7 +295,7 @@ class ConsolidatedCertificateService
                 'field_positions' => $template->field_positions,
             ];
 
-            $pdf = PDF::loadView('certificates.multi-template', $viewData)
+            $pdf = Pdf::loadView('certificates.multi-template', $viewData)
                 ->setPaper([0, 0, $template->width, $template->height], 'landscape')
                 ->setOptions([
                     'isHtml5ParserEnabled' => true,
@@ -324,7 +325,7 @@ class ConsolidatedCertificateService
             'template_base64' => $templateBase64,
         ];
 
-        $pdf = PDF::loadView($this->templatePath, $viewData)
+        $pdf = Pdf::loadView($this->templatePath, $viewData)
             ->setPaper([0, 0, $template->width, $template->height], 'landscape')
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
@@ -364,7 +365,7 @@ class ConsolidatedCertificateService
                 'field_positions' => $template->field_positions,
             ];
 
-            $pdf = PDF::loadView('certificates.multi-template', $viewData)
+            $pdf = Pdf::loadView('certificates.multi-template', $viewData)
                 ->setPaper([0, 0, $template->width, $template->height], 'landscape')
                 ->setOptions([
                     'isHtml5ParserEnabled' => true,
@@ -395,7 +396,7 @@ class ConsolidatedCertificateService
             'template_base64' => $templateBase64,
         ];
 
-        $pdf = PDF::loadView($this->templatePath, $viewData)
+        $pdf = Pdf::loadView($this->templatePath, $viewData)
             ->setPaper([0, 0, $template->width, $template->height], 'landscape')
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
