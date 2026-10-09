@@ -134,7 +134,50 @@ migrasi), menganggap itu produksi. Tindakan pemulihan yang sudah dilakukan:
 (`209990f`..`29e1d87`) di-deploy ke **`dash`** dengan backup penuh
 (`/root/dash-full-backup-20260930.tar.gz` + `/root/dash-db-backup-20260930.sql`).
 
-**Prosedur deploy ke DASH (yang benar):**
+## Struktur dash sekarang: clone git (sejak 9 Okt 2026)
+
+`/var/www/dash` **memiliki `.git`** dan melacak `origin/main`
+(`https://github.com/anggiadiputra/EQ.git`). Jadi versi yang berjalan di server bisa
+diperiksa langsung dari servernya:
+
+```bash
+cd /var/www/dash
+sudo git log --oneline -3                 # riwayat yang sedang berjalan
+sudo git rev-list --left-right --count HEAD...origin/main   # 0 0 = sinkron
+```
+
+**Cara deploy sekarang — git, bukan rsync.** `rsync -a --delete` akan menimpa isi
+checkout dan membuat working tree kotor, jadi jangan dipakai lagi untuk kode:
+
+```bash
+cd /var/www/dash
+sudo git fetch origin main
+sudo git checkout -f origin/main          # menimpa berkas terlacak; storage/vendor/.env TIDAK terlacak
+sudo chown -R www-data:www-data /var/www/dash/public/build   # WAJIB: checkout sbg root bikin berkas root
+sudo -u www-data HOME=/tmp php artisan optimize:clear
+sudo -u www-data HOME=/tmp php artisan migrate --force
+sudo -u www-data HOME=/tmp php artisan config:cache && sudo -u www-data HOME=/tmp php artisan route:cache
+sudo systemctl reload php8.3-fpm
+```
+
+Jebakan git di server ini:
+- **`git checkout` dijalankan sebagai root → berkas jadi milik root.** Untuk `.php` tidak
+  masalah (mode 644, dibaca siapa saja), tetapi `public/build` harus tetap bisa ditimpa
+  build berikutnya, jadi kembalikan ke `www-data` seperti langkah di atas.
+- **`git checkout -f` membuang perubahan terlacak di server tanpa bertanya.** Kalau ada
+  yang pernah mengedit berkas langsung di server, edit itu hilang. Periksa dulu dengan
+  `sudo git status --short` (kosong = bersih).
+- `origin/main` sudah ada di server tetapi **push ke GitHub TIDAK otomatis men-deploy
+  dash** — workflow `.github/workflows/deploy.yml` masih menunjuk server lama
+  (`root@45.77.42.220`, repo `agoesset/ekspedisi-quran`) lewat `Envoy.blade.php` yang
+  usang. Deploy ke dash tetap langkah manual di atas sampai workflow itu diperbaiki.
+- `vendor/`, `.env`, `storage/`, dan `public/storage` tidak dilacak git — aman dari
+  checkout, tapi juga berarti `composer install` tetap perlu dijalankan bila
+  `composer.lock` berubah.
+
+## Prosedur deploy lama (rsync) — JANGAN dipakai lagi
+
+Disimpan hanya sebagai catatan sejarah; langkah ini digantikan blok git di atas.
 
 ```bash
 # 1. Backup WAJIB (kode + DB)
@@ -142,9 +185,16 @@ sudo tar -czf /root/dash-full-backup-$(date +%Y%m%d-%H%M%S).tar.gz \
     -C /var/www --exclude=vendor dash
 U=$(grep -m1 ^DB_USERNAME /var/www/dash/.env | cut -d= -f2)
 P=$(grep -m1 ^DB_PASSWORD /var/www/dash/.env | cut -d= -f2-)
-sudo mysqldump --single-transaction -u"$U" -p"$P" db_ekspedisi_quran_dash \
-    > /root/dash-db-backup-$(date +%Y%m%d-%H%M%S).sql
+sudo sh -c "mysqldump --single-transaction --no-tablespaces -u\"$U\" -p\"$P\" \
+    db_ekspedisi_quran_dash > /root/dash-db-$(date +%Y%m%d-%H%M%S).sql"
+```
 
+Catatan: `mysqldump` tanpa `--no-tablespaces` gagal dengan *"Access denied; you need
+(at least one of) the PROCESS privilege(s)"* dan — karena stdout diarahkan ke berkas —
+**berkas kosong tetap tertulis**, jadi backup terlihat ada padahal isinya nol. Selalu
+periksa hasilnya (`grep -c "^CREATE TABLE"` harus 49, bukan 0).
+
+```bash
 # 2. Clone repo terbaru ke dir sementara
 sudo rm -rf /tmp/eq-deploy && sudo git clone --depth 1 \
     https://github.com/anggiadiputra/EQ.git /tmp/eq-deploy
