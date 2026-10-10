@@ -87,6 +87,15 @@ enum PermissionEnum: string
     case WAREHOUSE_BOX_UPDATE_SEALED = 'warehouse.box.update_sealed';
     case WAREHOUSE_BOX_UPDATE_ANY = 'warehouse.box.update_any';
 
+    // Notifikasi WhatsApp
+    case WHATSAPP_SETTINGS_READ = 'whatsapp.settings.read';
+    case WHATSAPP_SETTINGS_WRITE = 'whatsapp.settings.write';
+    case WHATSAPP_TEMPLATES_READ = 'whatsapp.templates.read';
+    case WHATSAPP_TEMPLATES_WRITE = 'whatsapp.templates.write';
+    case WHATSAPP_NOTIFICATIONS_READ = 'whatsapp.notifications.read';
+    case WHATSAPP_NOTIFICATIONS_SEND = 'whatsapp.notifications.send';
+    case WHATSAPP_SYSTEM_TEST = 'whatsapp.system.test';
+
     // Supervisor
     case SUPERVISOR_DASHBOARD = 'supervisor.dashboard';
     case SUPERVISOR_WAREHOUSE_MONITOR = 'supervisor.warehouse.monitor';

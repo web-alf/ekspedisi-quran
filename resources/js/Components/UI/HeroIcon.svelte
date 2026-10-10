@@ -22,6 +22,7 @@
   import IconArchiveBox from 'lucide-svelte/icons/package-check';
   import IconBars3 from 'lucide-svelte/icons/menu';
   import IconBell from 'lucide-svelte/icons/bell';
+  import IconBellOff from 'lucide-svelte/icons/bell-off';
   import IconBolt from 'lucide-svelte/icons/zap';
   import IconBookOpen from 'lucide-svelte/icons/book-open';
   import IconBuildingOffice2 from 'lucide-svelte/icons/building-2';
@@ -112,6 +113,9 @@
     'arrow-up-tray': IconArrowUpTray,
     'bars-3': IconBars3,
     'bell': IconBell,
+    // Nama Heroicons -> komponen Lucide. Nama yang tidak terdaftar di sini
+    // diam-diam jatuh ke ikon cadangan, jadi setiap nama baru wajib didaftarkan.
+    'bell-slash': IconBellOff,
     'bolt': IconBolt,
     'book-open': IconBookOpen,
     'building-office-2': IconBuildingOffice2,

@@ -5,10 +5,13 @@ namespace App\Observers;
 use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
+use App\Services\WhatsApp\WhatsAppNotifier;
 use Illuminate\Support\Facades\Log;
 
 class PengirimanObserver
 {
+    public function __construct(private readonly WhatsAppNotifier $notifier) {}
+
     /**
      * Handle the Pengiriman "updated" event.
      */
@@ -23,6 +26,7 @@ class PengirimanObserver
         // Selesaikan permintaan mushaf begitu pengiriman sampai tujuan.
         if ($pengiriman->wasChanged('status_id')) {
             $this->completeRelatedMushafRequest($pengiriman);
+            $this->kabarkanKeDonatur($pengiriman);
         }
     }
 
@@ -82,5 +86,48 @@ class PengirimanObserver
             'mushaf_request' => $mushafRequest->no_request,
             'pengiriman' => $pengiriman->no_resi,
         ]);
+    }
+
+    /**
+     * Kabari donatur bahwa kiriman wakafnya sudah sampai.
+     *
+     * Hanya saat MASUK ke 'diterima' (wasChanged), bukan setiap kali resi
+     * disimpan — kalau tidak, menyunting catatan resi yang sudah diterima akan
+     * mengirim pesan kedua. Kunci anti-ganda di WhatsAppNotifier menjaga hal yang
+     * sama dari sisi lain; keduanya sengaja ada.
+     *
+     * Pemanggilannya aman: WhatsAppNotifier tidak pernah melempar exception,
+     * jadi perubahan status resi oleh staf gudang tidak bisa gagal gara-gara
+     * notifikasi.
+     */
+    protected function kabarkanKeDonatur(Pengiriman $pengiriman): void
+    {
+        $slug = StatusPengiriman::query()->whereKey($pengiriman->status_id)->value('slug');
+
+        if ($slug !== 'diterima') {
+            return;
+        }
+
+        $donatur = $pengiriman->donatur;
+
+        if (! $donatur) {
+            return;
+        }
+
+        $this->notifier->antri(
+            'resi_diterima',
+            'resi_diterima:pengiriman:'.$pengiriman->id,
+            $donatur->no_hp,
+            [
+                'nama' => $donatur->nama_donatur ?: 'Bapak/Ibu',
+                'resi' => $pengiriman->no_resi,
+            ],
+            [
+                'donatur_id' => $donatur->id,
+                'pengiriman_id' => $pengiriman->id,
+                'wakaf_batch_id' => $pengiriman->wakaf_batch_id,
+                'nama' => $donatur->nama_donatur,
+            ]
+        );
     }
 }

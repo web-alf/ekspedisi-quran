@@ -6,6 +6,7 @@ use App\Models\Donatur;
 use App\Models\Pengiriman;
 use App\Models\WakafBatch;
 use App\Services\ConsolidatedCertificateService;
+use App\Services\WhatsApp\WhatsAppNotifier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -119,12 +120,63 @@ class TutupPengirimanSelesaiCommand extends Command
 
                 $layanan = app(ConsolidatedCertificateService::class);
 
+                $nomorSertifikat = [];
+
                 foreach ($idDonatur as $idDonaturSatu) {
                     $donatur = Donatur::query()->find($idDonaturSatu);
 
-                    if ($donatur) {
-                        $layanan->createConsolidatedCertificateRecord($donatur);
-                        $jumlahSertifikat++;
+                    if (! $donatur) {
+                        continue;
+                    }
+
+                    $sertifikat = $layanan->createConsolidatedCertificateRecord($donatur);
+                    $jumlahSertifikat++;
+
+                    if ($sertifikat) {
+                        $nomorSertifikat[$donatur->id] = $sertifikat->nomor_sertifikat;
+                    }
+                }
+
+                // 2. Kabari donaturnya bahwa sertifikatnya siap.
+                //
+                //    Tautannya sengaja menuju HALAMAN PELACAKAN, bukan tautan
+                //    unduh sertifikat langsung: token unduh kedaluwarsa dalam 24
+                //    jam (lihat generateDownloadToken()), jadi tautan yang
+                //    dikirim lewat pesan WhatsApp akan mati keesokan harinya.
+                //    Halaman pelacakan membuat tautan unduh yang baru setiap kali
+                //    dibuka, jadi pesannya tetap berguna berbulan-bulan kemudian.
+                if (! $kering && $nomorSertifikat !== []) {
+                    $notifier = app(WhatsAppNotifier::class);
+                    $resiUntukTautan = Pengiriman::query()
+                        ->where('wakaf_batch_id', $batch->id)
+                        ->where('status_id', $idDiterima)
+                        ->orderBy('id')
+                        ->first();
+
+                    foreach ($nomorSertifikat as $idDonaturSatu => $nomor) {
+                        $donatur = Donatur::query()->find($idDonaturSatu);
+
+                        if (! $donatur) {
+                            continue;
+                        }
+
+                        $notifier->antri(
+                            'sertifikat_siap',
+                            'sertifikat_siap:sertifikat:'.$nomor,
+                            $donatur->no_hp,
+                            [
+                                'nama' => $donatur->nama_donatur ?: 'Bapak/Ibu',
+                                'batch' => $batch->batch_code,
+                                'link' => $resiUntukTautan
+                                    ? route('public.tracking', ['no_resi' => $resiUntukTautan->no_resi])
+                                    : rtrim((string) config('app.url'), '/'),
+                            ],
+                            [
+                                'donatur_id' => $donatur->id,
+                                'wakaf_batch_id' => $batch->id,
+                                'nama' => $donatur->nama_donatur,
+                            ]
+                        );
                     }
                 }
 

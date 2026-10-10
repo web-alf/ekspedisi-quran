@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\ThermalPrintController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VideoController;
 use App\Http\Controllers\Admin\WakafItemsController;
+use App\Http\Controllers\Admin\WhatsAppController;
 use App\Http\Controllers\Api\WilayahController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Public\LegalController;
@@ -1039,6 +1040,25 @@ Route::middleware(['auth'])->group(function () {
         });
         Route::middleware(['permission:settings.delete'])->group(function () {
             Route::delete('faqs/{faq}', [FaqController::class, 'destroy'])->name('faqs.destroy');
+        });
+
+        // Notifikasi WhatsApp (StarSender)
+        Route::prefix('whatsapp')->name('whatsapp.')->group(function () {
+            Route::middleware(['permission:whatsapp.settings.read'])->group(function () {
+                Route::get('/', [WhatsAppController::class, 'index'])->name('index');
+            });
+            Route::middleware(['permission:whatsapp.settings.write'])->group(function () {
+                Route::put('pengaturan', [WhatsAppController::class, 'perbaruiPengaturan'])->name('pengaturan');
+            });
+            Route::middleware(['permission:whatsapp.templates.write'])->group(function () {
+                Route::put('template/{template}', [WhatsAppController::class, 'perbaruiTemplate'])->name('template');
+            });
+            Route::middleware(['permission:whatsapp.system.test'])->group(function () {
+                Route::post('uji-kirim', [WhatsAppController::class, 'ujiKirim'])->name('uji-kirim');
+            });
+            Route::middleware(['permission:whatsapp.notifications.send'])->group(function () {
+                Route::post('notifikasi/{notification}/kirim-ulang', [WhatsAppController::class, 'kirimUlang'])->name('kirim-ulang');
+            });
         });
 
         // 🔧 Cache Management (Super Admin Only)

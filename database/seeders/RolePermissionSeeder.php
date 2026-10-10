@@ -136,6 +136,19 @@ class RolePermissionSeeder extends Seeder
 
             // System monitoring
             PermissionEnum::SYSTEM_MONITOR->value,
+
+            // Notifikasi WhatsApp. Diberikan hanya ke super-admin di seeder ini —
+            // siapa lagi yang boleh melihat antrean dan mengirim ulang adalah
+            // keputusan pemilik. Izinnya dibuat lewat migrasi
+            // 2026_10_10_000030_add_whatsapp_permissions supaya ada di produksi
+            // tanpa bergantung pada seeder.
+            PermissionEnum::WHATSAPP_SETTINGS_READ->value,
+            PermissionEnum::WHATSAPP_SETTINGS_WRITE->value,
+            PermissionEnum::WHATSAPP_TEMPLATES_READ->value,
+            PermissionEnum::WHATSAPP_TEMPLATES_WRITE->value,
+            PermissionEnum::WHATSAPP_NOTIFICATIONS_READ->value,
+            PermissionEnum::WHATSAPP_NOTIFICATIONS_SEND->value,
+            PermissionEnum::WHATSAPP_SYSTEM_TEST->value,
         ];
 
         foreach ($permissions as $permission) {

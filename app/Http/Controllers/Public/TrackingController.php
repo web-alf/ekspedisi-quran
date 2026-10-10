@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengiriman;
+use App\Models\Setting;
 use App\Models\StatusPengiriman;
+use App\Services\OnDemandCertificateService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Services\OnDemandCertificateService;
 
 class TrackingController extends Controller
 {
@@ -17,13 +18,14 @@ class TrackingController extends Controller
     {
         $this->onDemandCertificateService = $onDemandCertificateService;
     }
+
     /**
      * Show tracking search page
      */
     public function index()
     {
         // Get settings for consistent layout
-        $settings = \App\Models\Setting::where('is_public', true)
+        $settings = Setting::where('is_public', true)
             ->where('is_active', true)
             ->whereIn('group', ['landing', 'contact', 'social', 'general'])
             ->pluck('value', 'key');
@@ -33,7 +35,7 @@ class TrackingController extends Controller
             'statusHistory' => [],
             'searchQuery' => '',
             'error' => null,
-            'settings' => $settings
+            'settings' => $settings,
         ]);
     }
 
@@ -44,7 +46,7 @@ class TrackingController extends Controller
     {
         // Clean up the resi number
         $noResi = strtoupper(trim($noResi));
-        
+
         // Find pengiriman with detailed relationships
         $pengiriman = Pengiriman::with([
             'donatur:id,nama_donatur,kode_donatur,no_hp',
@@ -52,17 +54,17 @@ class TrackingController extends Controller
             'wakafItem:id,pengiriman_id,wakif_name,doa_request',
             'jenisQuran:id,nama_jenis,kode_jenis',
             'status:id,nama,slug,warna,icon',
-            'statusHistory' => function($query) {
+            'statusHistory' => function ($query) {
                 $query->with(['statusFrom:id,nama,slug', 'statusTo:id,nama,slug', 'creator:id,name'])
-                      ->orderBy('created_at', 'desc');
+                    ->orderBy('created_at', 'desc');
             },
-            'trackingHistory' => function($query) {
+            'trackingHistory' => function ($query) {
                 $query->with(['status:id,nama,slug,warna,icon', 'user:id,name'])
-                      ->orderBy('tanggal_update', 'desc');
-            }
+                    ->orderBy('tanggal_update', 'desc');
+            },
         ])->where('no_resi', $noResi)->first();
 
-        if (!$pengiriman) {
+        if (! $pengiriman) {
             abort(404, 'Nomor resi tidak ditemukan');
         }
 
@@ -77,8 +79,8 @@ class TrackingController extends Controller
             'no_resi' => $pengiriman->no_resi,
             'jumlah_quran' => $pengiriman->jumlah_quran,
             'tanggal_wakaf' => $pengiriman->tanggal_wakaf,
-            'formatted_tanggal_wakaf' => $pengiriman->tanggal_wakaf 
-                ? $pengiriman->tanggal_wakaf->format('d/m/Y') 
+            'formatted_tanggal_wakaf' => $pengiriman->tanggal_wakaf
+                ? $pengiriman->tanggal_wakaf->format('d/m/Y')
                 : null,
             'alamat_tujuan' => $pengiriman->alamat_tujuan,
             'nama_penerima' => $pengiriman->nama_penerima,
@@ -115,35 +117,68 @@ class TrackingController extends Controller
         // Logic: Show certificates from all wakaf batches belonging to this donatur
         // because certificates are issued per wakaf batch, not per individual shipment
         $certificateUrls = [];
-        if ($pengiriman->donatur && $pengiriman->donatur->wakafBatches) {
+        $nomorSudahAda = [];
+
+        if ($pengiriman->donatur) {
+            // Nama wakif sama untuk semua sertifikat donatur ini, jadi dihitung
+            // sekali — bukan di dalam perulangan batch seperti sebelumnya.
+            $wakifNames = Pengiriman::where('donatur_id', $pengiriman->donatur_id)
+                ->with('wakafItem:id,pengiriman_id,wakif_name')
+                ->get()
+                ->map(function ($p) {
+                    return $p->wakafItem ? $p->wakafItem->wakif_name : null;
+                })
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
             foreach ($pengiriman->donatur->wakafBatches as $batch) {
-                if ($batch->sertifikat) {
-                    // Get wakif names from all pengiriman of this donatur
-                    $wakifNames = \App\Models\Pengiriman::where('donatur_id', $batch->donatur_id)
-                        ->with('wakafItem:id,pengiriman_id,wakif_name')
-                        ->get()
-                        ->map(function($p) {
-                            return $p->wakafItem ? $p->wakafItem->wakif_name : null;
-                        })
-                        ->filter()
-                        ->unique()
-                        ->values()
-                        ->toArray();
-                    
-                    $certificateUrls[] = [
-                        'batch_code' => $batch->batch_code,
-                        'download_url' => $this->onDemandCertificateService->getPublicDownloadUrl($batch->sertifikat),
-                        'nomor_sertifikat' => $batch->sertifikat->nomor_sertifikat,
-                        'generated_at' => $batch->sertifikat->generated_at,
-                        'wakif_names' => $wakifNames, // Array of wakif names for this batch/donatur
-                        'donatur_name' => $batch->donatur->nama_donatur
-                    ];
+                if (! $batch->sertifikat) {
+                    continue;
                 }
+
+                $nomor = $batch->sertifikat->nomor_sertifikat;
+                $nomorSudahAda[] = $nomor;
+
+                $certificateUrls[] = [
+                    'batch_code' => $batch->batch_code,
+                    'download_url' => $this->onDemandCertificateService->getPublicDownloadUrl($batch->sertifikat),
+                    'nomor_sertifikat' => $nomor,
+                    'generated_at' => $batch->sertifikat->generated_at,
+                    'wakif_names' => $wakifNames, // Array of wakif names for this batch/donatur
+                    'donatur_name' => $batch->donatur->nama_donatur,
+                ];
+            }
+
+            // Sertifikat konsolidasi (per donatur) TIDAK tertaut ke batch mana
+            // pun — `wakaf_batch_id`-nya NULL — sehingga tidak akan pernah
+            // terlihat lewat perulangan batch di atas. Padahal justru inilah yang
+            // dibuat saat sebuah batch ditutup (lihat
+            // TutupPengirimanSelesaiCommand), jadi tanpa blok ini sertifikatnya
+            // ada di database tapi tidak bisa ditemukan donatur di mana pun.
+            $sertifikatKonsolidasi = $pengiriman->donatur->sertifikat()
+                ->where('is_consolidated', true)
+                ->get();
+
+            foreach ($sertifikatKonsolidasi as $sertifikat) {
+                if (in_array($sertifikat->nomor_sertifikat, $nomorSudahAda, true)) {
+                    continue;
+                }
+
+                $certificateUrls[] = [
+                    'batch_code' => null,
+                    'download_url' => $this->onDemandCertificateService->getPublicDownloadUrl($sertifikat),
+                    'nomor_sertifikat' => $sertifikat->nomor_sertifikat,
+                    'generated_at' => $sertifikat->generated_at,
+                    'wakif_names' => $wakifNames,
+                    'donatur_name' => $pengiriman->donatur->nama_donatur,
+                ];
             }
         }
 
         // Format status history
-        $statusHistoryData = $pengiriman->statusHistory->map(function($history) {
+        $statusHistoryData = $pengiriman->statusHistory->map(function ($history) {
             // Manual decode dokumentasi to avoid accessor issues
             $photos = [];
             $rawDok = $history->getRawOriginal('dokumentasi');
@@ -156,9 +191,9 @@ class TrackingController extends Controller
                 if (is_array($decoded)) {
                     foreach ($decoded as $item) {
                         if (is_string($item)) {
-                            $photos[] = asset('storage/' . $item);
+                            $photos[] = asset('storage/'.$item);
                         } elseif (is_array($item) && isset($item['path'])) {
-                            $photos[] = isset($item['url']) ? $item['url'] : asset('storage/' . $item['path']);
+                            $photos[] = isset($item['url']) ? $item['url'] : asset('storage/'.$item['path']);
                         }
                     }
                 }
@@ -191,9 +226,9 @@ class TrackingController extends Controller
                 ] : null,
             ];
         });
-        
+
         // Format tracking history for documentation
-        $trackingHistoryData = $pengiriman->trackingHistory->map(function($history) {
+        $trackingHistoryData = $pengiriman->trackingHistory->map(function ($history) {
             return [
                 'id' => $history->id,
                 'status' => $history->status ? [
@@ -216,7 +251,7 @@ class TrackingController extends Controller
         });
 
         // Get settings for consistent layout
-        $settings = \App\Models\Setting::where('is_public', true)
+        $settings = Setting::where('is_public', true)
             ->where('is_active', true)
             ->whereIn('group', ['landing', 'contact', 'social', 'general'])
             ->pluck('value', 'key');
@@ -239,7 +274,7 @@ class TrackingController extends Controller
             }),
             'no_resi' => $noResi,
             'searchQuery' => $noResi,
-            'settings' => $settings
+            'settings' => $settings,
         ]);
     }
 
@@ -249,11 +284,11 @@ class TrackingController extends Controller
     public function search(Request $request)
     {
         $request->validate([
-            'no_resi' => 'required|string|max:20'
+            'no_resi' => 'required|string|max:20',
         ]);
 
         $noResi = strtoupper(trim($request->no_resi));
-        
+
         // Redirect to tracking URL
         return redirect()->route('public.tracking', $noResi);
     }
@@ -264,32 +299,32 @@ class TrackingController extends Controller
     public function api($noResi)
     {
         $noResi = strtoupper(trim($noResi));
-        
+
         $pengiriman = Pengiriman::with([
             'donatur:id,kode_donatur,nama_donatur,no_hp',
             'wakafItem:id,pengiriman_id,wakif_name',
             'jenisQuran:id,nama_jenis,kode_jenis',
             'status:id,nama,slug,warna,icon',
-            'statusHistory' => function($query) {
+            'statusHistory' => function ($query) {
                 $query->with(['statusTo:id,nama,slug', 'creator:id,name'])
-                      ->orderBy('created_at', 'desc')
-                      ->limit(10);
+                    ->orderBy('created_at', 'desc')
+                    ->limit(10);
             },
-            'trackingHistory' => function($query) {
+            'trackingHistory' => function ($query) {
                 $query->with(['status:id,nama,slug,warna,icon', 'user:id,name'])
-                      ->orderBy('tanggal_update', 'desc')
-                      ->limit(10);
-            }
+                    ->orderBy('tanggal_update', 'desc')
+                    ->limit(10);
+            },
         ])->where('no_resi', $noResi)->first();
 
-        if (!$pengiriman) {
+        if (! $pengiriman) {
             return response()->json([
                 'success' => false,
                 'message' => 'Nomor resi tidak ditemukan',
-                'data' => null
+                'data' => null,
             ], 404);
         }
-        
+
         // Get all statuses for the timeline (cached for performance)
         $allStatuses = \Cache::remember('status_pengiriman_active', 3600, function () {
             return StatusPengiriman::active()->orderBy('urutan')->get();
@@ -311,7 +346,7 @@ class TrackingController extends Controller
                     'wakif_nama' => $pengiriman->wakafItem?->wakif_name ?? $pengiriman->donatur?->nama_donatur,
                     'jenis_quran' => $pengiriman->jenisQuran?->nama_jenis,
                 ],
-                'status_history' => $pengiriman->statusHistory->map(function($history) {
+                'status_history' => $pengiriman->statusHistory->map(function ($history) {
                     return [
                         'status' => $history->statusTo?->nama,
                         'slug' => $history->statusTo?->slug,
@@ -320,7 +355,7 @@ class TrackingController extends Controller
                         'petugas' => $history->creator?->name,
                     ];
                 }),
-                'tracking_history' => $pengiriman->trackingHistory->map(function($history) {
+                'tracking_history' => $pengiriman->trackingHistory->map(function ($history) {
                     return [
                         'status' => $history->status?->nama,
                         'slug' => $history->status?->slug,
@@ -343,8 +378,8 @@ class TrackingController extends Controller
                         'urutan' => $status->urutan,
                         'icon' => $status->icon,
                     ];
-                })
-            ]
+                }),
+            ],
         ]);
     }
 
@@ -354,21 +389,21 @@ class TrackingController extends Controller
     public function qrCode($noResi)
     {
         $pengiriman = Pengiriman::where('no_resi', $noResi)->first();
-        
-        if (!$pengiriman) {
+
+        if (! $pengiriman) {
             abort(404, 'Nomor resi tidak ditemukan');
         }
 
         $trackingUrl = route('public.tracking', $noResi);
-        
+
         // Simple QR code generation using Google Charts API
-        $qrCodeUrl = "https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=" . urlencode($trackingUrl);
-        
+        $qrCodeUrl = 'https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl='.urlencode($trackingUrl);
+
         return response()->json([
             'success' => true,
             'qr_code_url' => $qrCodeUrl,
             'tracking_url' => $trackingUrl,
-            'no_resi' => $noResi
+            'no_resi' => $noResi,
         ]);
     }
 }

@@ -54,5 +54,14 @@ Schedule::command('wakaf:tutup-pengiriman')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/wakaf-tutup.log'));
 
+// Kuras notifikasi WhatsApp yang tertahan: yang sengaja ditahan karena jam
+// tenang, dan yang jobnya hilang (worker mati sebelum sempat jalan). Tiap jam
+// supaya pesan yang ditahan pukul 02:30 tetap terkirim pagi itu juga, begitu
+// jam tenangnya berakhir.
+Schedule::command('whatsapp:kirim-tertunda')
+    ->hourly()
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/whatsapp-tertunda.log'));
+
 Schedule::command('cache:clear')->weekly();
 Schedule::command('optimize:clear')->weekly();

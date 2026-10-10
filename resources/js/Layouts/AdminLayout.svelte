@@ -210,6 +210,11 @@
         ]
       },
       {
+        label: 'Notifikasi WhatsApp',
+        route: '/admin/whatsapp',
+        requiredPermissions: ['whatsapp.settings.read']
+      },
+      {
         label: 'Konten Landing',
         route: null,
         dropdown: true,
@@ -497,6 +502,8 @@
       'Permintaan Disetujui': 'badge-check',
       'Manajemen Gudang': 'building-office-2',
       'Manajemen Pengguna': 'user-group',
+      // Menu ini soal mengirim pesan, jadi ikonnya balon percakapan.
+      'Notifikasi WhatsApp': 'chat-bubble-left-right',
       'Konten Landing': 'paint-brush',
       
       // Sertifikat submenu
