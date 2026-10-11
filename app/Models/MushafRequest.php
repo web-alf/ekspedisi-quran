@@ -433,6 +433,56 @@ class MushafRequest extends Model
     }
 
     /**
+     * Statistik distribusi per grup kategori lembaga.
+     *
+     * Dihitung dari SELURUH permintaan berstatus `completed`, bukan dari halaman
+     * yang sedang dibuka. Kartu di halaman daftar dulu menjumlahkan
+     * `mushafRequests.data` — yaitu halaman yang sedang tampil — sehingga selalu
+     * bernilai nol selama halaman itu belum memuat satu pun permintaan selesai.
+     * Daftarnya diurutkan terbaru dulu, sementara yang selesai justru yang paling
+     * lama, jadi kartunya memang selalu kosong.
+     *
+     * Pengelompokan memakai accessor `grup_kategori` sebagai satu-satunya sumber
+     * kebenaran. Peta kategori yang pernah disalin ke frontend menjadi basi —
+     * kategori seperti "Lembaga Lainnya" dan "Muallaf" tidak ada di peta itu,
+     * sehingga permintaannya jatuh ke "Tidak Dikategorikan".
+     *
+     * @return array<string, array{count: int, totalMushaf: int, totalIqra: int}>
+     */
+    public static function statistikGrupKategori(): array
+    {
+        $statistik = [];
+
+        foreach (self::KATEGORI_LABELS as $label) {
+            $statistik[$label] = ['count' => 0, 'totalMushaf' => 0, 'totalIqra' => 0];
+        }
+
+        self::query()
+            ->where('status', 'completed')
+            ->get([
+                'id', 'kategori_lembaga',
+                'jumlah_mushaf_a5', 'jumlah_mushaf_a6', 'jumlah_iqra',
+                'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved',
+                'jumlah_mushaf_a6_approved', 'jumlah_iqra_approved',
+            ])
+            ->each(function (self $permintaan) use (&$statistik): void {
+                $label = $permintaan->grup_kategori;
+
+                if (! isset($statistik[$label])) {
+                    $statistik[$label] = ['count' => 0, 'totalMushaf' => 0, 'totalIqra' => 0];
+                }
+
+                $angka = $permintaan->approved_breakdown;
+
+                $statistik[$label]['count']++;
+                $statistik[$label]['totalMushaf'] += $angka['mushaf'];
+                $statistik[$label]['totalIqra'] += $angka['iqra'];
+            });
+
+        return $statistik;
+    }
+
+    /**
      * Accessor untuk check apakah punya koordinat
      */
     public function getHasCoordinatesAttribute()

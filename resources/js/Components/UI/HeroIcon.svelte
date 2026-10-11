@@ -55,6 +55,7 @@
   import IconFacebook from 'lucide-svelte/icons/facebook';
   import IconFolder from 'lucide-svelte/icons/folder';
   import IconGlobeAlt from 'lucide-svelte/icons/globe';
+  import IconHeart from 'lucide-svelte/icons/heart';
   import IconHome from 'lucide-svelte/icons/house';
   import IconInboxStack from 'lucide-svelte/icons/inbox';
   import IconInformationCircle from 'lucide-svelte/icons/info';
@@ -151,6 +152,7 @@
     'facebook': IconFacebook,
     'folder': IconFolder,
     'globe-alt': IconGlobeAlt,
+    'heart': IconHeart,
     'home': IconHome,
     'inbox-stack': IconInboxStack,
     'information-circle': IconInformationCircle,

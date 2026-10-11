@@ -115,6 +115,9 @@ class MushafRequestController extends Controller
             'mushafRequests' => $mushafRequests,
             'filters' => $request->only(['search', 'status', 'start_date', 'end_date']),
             'mapData' => $mapData,
+            // Dihitung di server dari SELURUH permintaan selesai. Kartunya dulu
+            // menjumlahkan halaman yang sedang dibuka, sehingga selalu nol.
+            'kategoriStats' => MushafRequest::statistikGrupKategori(),
             'stats' => [
                 'total' => MushafRequest::count(),
                 'pending' => MushafRequest::pending()->count(),

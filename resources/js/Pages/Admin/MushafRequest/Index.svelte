@@ -125,6 +125,8 @@
   }
   export let filters = {};
   export let mapData = [];
+  // Statistik per grup kategori, dihitung server dari SELURUH permintaan selesai.
+  export let kategoriStats = {};
   export let stats = {
     total: 0,
     pending: 0,
@@ -141,19 +143,27 @@
   $: if (!filters.start_date) filters.start_date = '';
   $: if (!filters.end_date) filters.end_date = '';
 
-  // Angka "disetujui" diambil dari accessor model (`approved_breakdown`) supaya
-  // daftar dan halaman detail tidak pernah menampilkan angka yang berbeda.
-  // Fallback hanya untuk jaga-jaga bila prop tidak lengkap.
-  const approvedBreakdown = (request) => request?.approved_breakdown || {
-    mushaf: request?.jumlah_mushaf || 0,
-    iqra: request?.jumlah_iqra || 0,
-    total: (request?.jumlah_mushaf || 0) + (request?.jumlah_iqra || 0),
-    a5: request?.jumlah_mushaf_a5 || 0,
-    a6: request?.jumlah_mushaf_a6 || 0
+  /**
+   * Ikon tiap grup kategori.
+   *
+   * Kuncinya memakai nama grup apa adanya dari `MushafRequest::KATEGORI_LABELS`.
+   * Peta kategori (sub-kategori → grup) sengaja TIDAK disalin lagi di sini:
+   * salinan itulah yang dulu basi — "Lembaga Lainnya", "Panti Asuhan/Anak
+   * Yatim", dan "Muallaf" tidak ada di salinan itu, sehingga permintaannya jatuh
+   * ke "Tidak Dikategorikan" dan kartunya menampilkan angka yang salah.
+   */
+  const IKON_KATEGORI = {
+    'Lembaga Pendidikan & Pembinaan': 'academic-cap',
+    'Komunitas & Dakwah Kemasyarakatan': 'user-group',
+    'Lembaga Sosial & Pemerintahan': 'building-office-2',
+    'Penerima Manfaat Khusus': 'heart',
+    'Tidak Dikategorikan': 'question-mark-circle'
   };
 
-  const approvedTotal = (request) => approvedBreakdown(request).mushaf;
-  const approvedIqra = (request) => approvedBreakdown(request).iqra;
+  const ikonKategori = (kategori) => IKON_KATEGORI[kategori] || 'question-mark-circle';
+
+  $: totalDistribusi = Object.values(kategoriStats)
+    .reduce((total, data) => total + (data.totalMushaf || 0) + (data.totalIqra || 0), 0);
   
   let search = filters.search || '';
   let statusFilter = filters.status || '';
@@ -724,106 +734,6 @@
     return statusMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
   }
 
-  function getCategoryStats() {
-    // Define kategori mapping
-    const categoryMapping = {
-      // Kategori 1: Lembaga Pendidikan & Pembinaan
-      'Pondok Pesantren': 'Lembaga Pendidikan & Pembinaan',
-      'Rumah Tahfidz/Rumah Qur\'an': 'Lembaga Pendidikan & Pembinaan',
-      'TPQ/TPA/Madin': 'Lembaga Pendidikan & Pembinaan',
-      'Sekolah/Madrasah': 'Lembaga Pendidikan & Pembinaan',
-      
-      // Kategori 2: Komunitas & Dakwah Kemasyarakatan
-      'Masjid/Mushola/Majelis Taklim/Jamaah Masjid': 'Komunitas & Dakwah Kemasyarakatan',
-      'Masyarakat/Jamaah Alfatihah': 'Komunitas & Dakwah Kemasyarakatan',
-      'Organisasi/Paguyuban/Event Sosial/Komunitas': 'Komunitas & Dakwah Kemasyarakatan',
-      'Santri & Karyawan Alfatihah': 'Komunitas & Dakwah Kemasyarakatan',
-      
-      // Kategori 3: Lembaga Sosial & Pemerintahan
-      'Yayasan': 'Lembaga Sosial & Pemerintahan',
-      'Instansi Pemerintah': 'Lembaga Sosial & Pemerintahan',
-      'RS/Klinik/Puskesmas': 'Lembaga Sosial & Pemerintahan',
-      
-      // Kategori 4: Penerima Manfaat Khusus
-      'Lapas/Rutan': 'Penerima Manfaat Khusus',
-      'Penghafal Mushaf': 'Penerima Manfaat Khusus'
-    };
-    
-    const categoryStats = {
-      'Lembaga Pendidikan & Pembinaan': {
-        count: 0,
-        totalMushaf: 0,
-        totalIqra: 0,
-        icon: 'academic-cap'
-      },
-      'Komunitas & Dakwah Kemasyarakatan': {
-        count: 0,
-        totalMushaf: 0,
-        totalIqra: 0,
-        icon: 'user-group'
-      },
-      'Lembaga Sosial & Pemerintahan': {
-        count: 0,
-        totalMushaf: 0,
-        totalIqra: 0,
-        icon: 'building-office-2'
-      },
-      'Penerima Manfaat Khusus': {
-        count: 0,
-        totalMushaf: 0,
-        totalIqra: 0,
-        icon: 'heart'
-      }
-    };
-    
-    if (mushafRequests.data && mushafRequests.data.length > 0) {
-      mushafRequests.data.forEach(request => {
-        // Only count requests with status 'completed' (selesai)
-        if (request.status !== 'completed') {
-          return;
-        }
-        
-        const subCategory = request.kategori_lembaga;
-        const mainCategory = categoryMapping[subCategory] || 'Tidak Dikategorikan';
-        
-        if (categoryStats[mainCategory]) {
-          categoryStats[mainCategory].count++;
-          categoryStats[mainCategory].totalMushaf += approvedTotal(request);
-          categoryStats[mainCategory].totalIqra += approvedIqra(request);
-        } else {
-          // Handle uncategorized
-          if (!categoryStats['Tidak Dikategorikan']) {
-            categoryStats['Tidak Dikategorikan'] = {
-              count: 0,
-              totalMushaf: 0,
-              totalIqra: 0,
-              icon: 'question-mark-circle'
-            };
-          }
-          categoryStats['Tidak Dikategorikan'].count++;
-          categoryStats['Tidak Dikategorikan'].totalMushaf += approvedTotal(request);
-          categoryStats['Tidak Dikategorikan'].totalIqra += approvedIqra(request);
-        }
-      });
-    }
-    
-    // Don't remove empty categories - show all 4 main categories even if 0
-    
-    return categoryStats;
-  }
-
-  function getTotalDistribution() {
-    if (!mushafRequests.data || mushafRequests.data.length === 0) return 0;
-    
-    return mushafRequests.data.reduce((total, request) => {
-      // Only count requests with status 'completed' (selesai)
-      if (request.status !== 'completed') {
-        return total;
-      }
-      return total + approvedTotal(request) + approvedIqra(request);
-    }, 0);
-  }
-
   function exportData() {
     // Build query parameters based on current filters
     const params = new URLSearchParams();
@@ -1006,12 +916,12 @@
       </h3>
       
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {#each Object.entries(getCategoryStats()) as [category, data]}
+        {#each Object.entries(kategoriStats) as [category, data]}
           <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200">
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center space-x-2">
                 <div class="w-8 h-8 rounded-lg bg-red-50 text-[#eb3434] flex items-center justify-center">
-                  <HeroIcon name={data.icon} class="w-5 h-5" />
+                  <HeroIcon name={ikonKategori(category)} class="w-5 h-5" />
                 </div>
                 <h4 class="font-medium text-gray-800 text-sm">{category}</h4>
               </div>
@@ -1039,7 +949,7 @@
       <div class="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
         <div class="flex justify-between items-center">
           <span class="text-sm text-gray-700">Total keseluruhan distribusi:</span>
-          <span class="text-lg font-bold text-blue-700">{getTotalDistribution().toLocaleString('id-ID')} unit</span>
+          <span class="text-lg font-bold text-blue-700">{totalDistribusi.toLocaleString('id-ID')} unit</span>
         </div>
       </div>
     </div>
