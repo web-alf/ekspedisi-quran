@@ -15,6 +15,13 @@ class Pengiriman extends Model
     protected $fillable = [
         'no_resi',
         'donatur_id',
+        // Tanpa baris ini, `Pengiriman::create([...])` dan `$pengiriman->update([...])`
+        // MEMBUANG `mushaf_request_id` diam-diam — mass assignment tidak melempar
+        // galat, nilainya cuma hilang. Dua jalur lain lolos dari jebakan ini karena
+        // memakai query builder (`Pengiriman::whereIn(...)->update([...])`) yang
+        // melewati penjagaan fillable; jalur `processToShipment` memakai model,
+        // sehingga kiriman hasil halaman permintaan tidak pernah tertaut balik.
+        'mushaf_request_id',
         'wakaf_batch_id',
         'sequence_in_batch',
         'donation_id',

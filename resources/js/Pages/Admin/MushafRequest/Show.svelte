@@ -11,6 +11,11 @@
   import { buatFormLembaga } from '../../../utils/mushafLembagaForm.js';
 
   export let mushafRequest;
+  // Daftar donatur untuk modal "Proses ke Pengiriman". Server sudah lama
+  // mengirimkannya (lihat komentar di MushafRequestController::show) tetapi
+  // halaman ini belum pernah menerimanya, sehingga modalnya tidak pernah bisa
+  // dibangun.
+  export let donaturList = [];
   export const wakifList = [];
   export const auth = {};
   export const errors = {};
@@ -19,6 +24,44 @@
   // Permission checks
   $: canUpdate = can.mushafRequests.update();
   $: canRead = can.mushafRequests.read();
+  $: canProcess = can.mushafRequests.process();
+
+  // Modal "Proses ke Pengiriman": satu-satunya jalan yang membuat kiriman
+  // sekaligus menautkannya ke permintaan. Tanpa ini, satu-satunya pilihan
+  // lanjutan bagi permintaan yang sudah disetujui adalah "Ditolak".
+  //
+  // Sengaja memakai objek biasa + `router.post`, bukan `useForm`: nilai store
+  // `useForm` dimutasi di tempat tanpa memberi tahu pelanggannya, sehingga
+  // `disabled={$form.processing || !$form.donatur_id}` bisa macet di keadaan
+  // awal. Pola objek biasa ini sama dengan `quantityForm` di berkas ini.
+  let showProcessModal = false;
+  let sedangMemproses = false;
+  let prosesForm = { donatur_id: '', tanggal_wakaf: '' };
+
+  function openProcessModal() {
+    prosesForm = {
+      donatur_id: '',
+      tanggal_wakaf: new Date().toISOString().slice(0, 10)
+    };
+    showProcessModal = true;
+  }
+
+  function handleProcess() {
+    if (!prosesForm.donatur_id) {
+      showWarning('Donatur Belum Dipilih', 'Pilih donatur sebagai asal wakaf kiriman ini');
+      return;
+    }
+
+    sedangMemproses = true;
+
+    router.post(`/admin/mushaf-requests/${mushafRequest.id}/process`, prosesForm, {
+      onSuccess: () => { showProcessModal = false; },
+      onError: (errs) => {
+        showError('Gagal Memproses', errs.error || 'Permintaan gagal diproses ke pengiriman');
+      },
+      onFinish: () => { sedangMemproses = false; }
+    });
+  }
   
   let showStatusModal = false;
   let showEditQuantityModal = false;
@@ -154,7 +197,12 @@
     const statusFlow = {
       'pending': ['reviewed', 'rejected'],
       'reviewed': ['approved', 'rejected'],
-      'approved': ['processed', 'rejected'],
+      // 'processed' sengaja TIDAK ditawarkan di sini. Status itu hanya boleh
+      // lahir dari tombol "Proses ke Pengiriman`, yang sekalian membuat
+      // kirimannya. Dulu ia ditawarkan sebagai langkah lanjutan, dan backend
+      // cuma menulis statusnya tanpa kiriman — permintaan berlabel "Sudah
+      // Diproses" padahal tak ada kiriman, dan tak bisa diproses lagi.
+      'approved': ['rejected'],
       'rejected': [],
       'processed': ['completed']
     };
@@ -385,6 +433,15 @@
         </div>
         
         <div class="flex space-x-2">
+          {#if canProcess && mushafRequest.status === 'approved'}
+            <button
+              on:click={openProcessModal}
+              class="bg-[#eb3434] hover:bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
+            >
+              <span class="hidden sm:inline">Proses ke Pengiriman</span>
+              <span class="sm:hidden">Proses</span>
+            </button>
+          {/if}
           {#if canUpdate && ['pending', 'reviewed', 'approved', 'processed'].includes(mushafRequest.status)}
             <button 
               on:click={openStatusModal}
@@ -760,6 +817,94 @@
       </div>
     {/if}
   </div>
+
+<!-- Proses ke Pengiriman Modal -->
+{#if showProcessModal}
+  <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="proses-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div
+        class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        on:click={() => showProcessModal = false}
+        on:keydown={(e) => e.key === 'Escape' && (showProcessModal = false)}
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        transition:fade={{ duration: 200 }}
+      ></div>
+
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div
+        class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6"
+        transition:scale={{ duration: 200, start: 0.95 }}
+      >
+        <div>
+          <h3 class="text-lg leading-6 font-medium text-gray-900" id="proses-title">
+            Proses ke Pengiriman
+          </h3>
+          <p class="mt-1 text-sm text-gray-500">
+            Kiriman akan dibuat sekaligus ditautkan ke permintaan ini, sehingga progresnya
+            bisa dilacak di halaman pelacakan.
+          </p>
+
+          <div class="mt-4 space-y-4">
+            <div class="rounded-lg border border-gray-200 px-3 py-2">
+              <p class="text-xs text-gray-500">Yang akan dikirim</p>
+              <p class="mt-0.5 text-sm text-gray-900">
+                <span class="font-semibold">{toInt(approved.total)} mushaf</span> untuk {mushafRequest.nama_lembaga}
+              </p>
+            </div>
+
+            <div>
+              <label for="proses_donatur" class="block text-sm font-medium text-gray-700">Donatur (wakif)</label>
+              <select
+                id="proses_donatur"
+                bind:value={prosesForm.donatur_id}
+                class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#eb3434] focus:border-[#eb3434] sm:text-sm rounded-md"
+              >
+                <option value="">— pilih donatur —</option>
+                {#each donaturList as donatur}
+                  <option value={donatur.id}>
+                    {donatur.nama_donatur}{donatur.kode_donatur ? ` (${donatur.kode_donatur})` : ''}
+                  </option>
+                {/each}
+              </select>
+              <p class="mt-1 text-xs text-gray-500">Kiriman ini dibuat atas nama donatur tersebut.</p>
+            </div>
+
+            <div>
+              <label for="proses_tanggal" class="block text-sm font-medium text-gray-700">Tanggal wakaf</label>
+              <input
+                id="proses_tanggal"
+                type="date"
+                bind:value={prosesForm.tanggal_wakaf}
+                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#eb3434] focus:border-[#eb3434] sm:text-sm"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+          <button
+            type="button"
+            on:click={handleProcess}
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#eb3434] text-base font-medium text-white hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#eb3434] sm:col-start-2 sm:text-sm transition-colors duration-200 disabled:opacity-60"
+            disabled={sedangMemproses || !prosesForm.donatur_id}
+          >
+            {sedangMemproses ? 'Memproses...' : 'Proses ke Pengiriman'}
+          </button>
+          <button
+            type="button"
+            on:click={() => showProcessModal = false}
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#eb3434] sm:mt-0 sm:col-start-1 sm:text-sm transition-colors duration-200"
+            disabled={sedangMemproses}
+          >
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Status Update Modal -->
 {#if showStatusModal}

@@ -162,6 +162,20 @@ class MushafRequestController extends Controller
             'catatan_admin' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        // `processed` BUKAN status yang boleh dipilih langsung oleh admin: status
+        // itu hanya boleh lahir dari `processToShipment`, yang sekalian membuat
+        // kirimannya. Peta status di halaman detail dulu menawarkan "Sudah
+        // Diproses" sebagai langkah lanjutan setelah "Disetujui"; backend hanya
+        // menulis statusnya tanpa membuat kiriman, sementara `processToShipment`
+        // menolak apa pun yang statusnya bukan `approved`. Sekali dipilih,
+        // permintaan itu terperangkap: berlabel "Sudah Diproses" padahal tidak ada
+        // kiriman, dan tidak bisa diproses lagi selamanya.
+        if ($request->status === 'processed') {
+            return back()->withErrors([
+                'error' => 'Status "Sudah Diproses" tidak bisa dipilih langsung. Pakai tombol "Proses ke Pengiriman" agar kirimannya sekalian dibuat.',
+            ]);
+        }
+
         try {
             $oldStatus = $mushafRequest->status;
 
@@ -306,6 +320,11 @@ class MushafRequestController extends Controller
                 // If no existing empty pengiriman, create a new one
                 $pengiriman = Pengiriman::create([
                     'donatur_id' => $request->donatur_id,
+                    // Arah balik juga harus ditulis. Dua jalur lain (set alamat
+                    // massal dan pemindai kerdus gudang) menulis `mushaf_request_id`
+                    // pada kiriman; kalau jalur ini tidak, kiriman hasil halaman
+                    // permintaan tidak bisa ditelusuri balik ke asal permintaannya.
+                    'mushaf_request_id' => $mushafRequest->id,
                     'jenis_quran_id' => $jenisQuranId,
                     'jumlah_quran' => $totalApproved, // ✅ FIX: Use approved quantity
                     'tanggal_wakaf' => $request->tanggal_wakaf,
@@ -326,6 +345,7 @@ class MushafRequestController extends Controller
                     'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
                     'catatan' => $catatan,
                     'jumlah_quran' => $totalApproved, // ✅ FIX: Use approved quantity
+                    'mushaf_request_id' => $mushafRequest->id,
                 ]);
             }
 
