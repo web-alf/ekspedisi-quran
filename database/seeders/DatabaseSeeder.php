@@ -34,6 +34,10 @@ class DatabaseSeeder extends Seeder
             // pengaturan; seeder ini tidak menimpa yang sudah ada).
             WhatsAppTemplateSeeder::class,
 
+            // Template sertifikat bawaan, supaya sertifikat bisa dicetak sejak awal.
+            // Ikut tidak menimpa template yang sudah ada.
+            CertificateTemplateSeeder::class,
+
             // Data transaksional bisa ditambah later
             // WakifSeeder::class,     // Optional: sample data
             // PengirimanSeeder::class, // Optional: sample data
