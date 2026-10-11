@@ -12,9 +12,9 @@ return new class extends Migration
      * Permintaan tim: manajer fokus pada alur permintaan mushaf → pengiriman,
      * bukan mengelola data donatur (wilayah customer-service).
      *
-     * Kenapa lewat migrasi, bukan hanya seeder: story `deploy` di Envoy.blade.php
-     * TIDAK menjalankan seeder (seeder hanya jalan di story `deploy:seed`), jadi
-     * perubahan RolePermissionSeeder saja tidak akan sampai ke server.
+     * Kenapa lewat migrasi, bukan hanya seeder: jalur deploy produksi menjalankan
+     * migrasi saja, bukan seeder, jadi perubahan RolePermissionSeeder saja tidak
+     * akan sampai ke server.
      */
     public function up(): void
     {

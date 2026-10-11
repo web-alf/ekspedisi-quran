@@ -1,9 +1,11 @@
 # Prosedur Deploy Produksi (Ekspedisi Quran)
 
 **Status:** jalur deploy yang benar-benar dipakai per 30 Sep 2026.
-**Penting:** `Envoy.blade.php` di repo **USANG** — jangan dipakai. Isinya masih menunjuk
-repo `git@github.com:agoesset/ekspedisi-quran.git` dan server `root@45.77.42.220`,
-padahal produksi sekarang mengambil dari `https://github.com/anggiadiputra/EQ.git`
+**Penting:** jalur deploy lama sudah **DIHAPUS** dari repo (12 Okt 2026):
+`Envoy.blade.php`, `.github/workflows/deploy.yml`, dan `scripts/deploy-production.sh`.
+Semuanya menunjuk infra yang sudah mati — repo `git@github.com:agoesset/ekspedisi-quran.git`
+dan server `root@45.77.42.220` (tidak merespons ping). Jangan dibuat ulang.
+Produksi sekarang mengambil dari `https://github.com/anggiadiputra/EQ.git`
 di host `ekspedisi-prod` (vps-187.77.113.89).
 
 ## Fakta produksi

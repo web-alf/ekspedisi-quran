@@ -25,8 +25,8 @@ use Spatie\Permission\PermissionRegistrar;
  *    menolak akses langsung ke URL-nya. Kurir tidak perlu data donatur: yang
  *    dibutuhkannya hanya resi, alamat tujuan, dan nama penerima.
  *
- * Kenapa lewat migrasi, bukan seeder: story `deploy` di Envoy.blade.php TIDAK
- * menjalankan seeder, jadi perubahan RolePermissionSeeder saja tidak akan sampai
+ * Kenapa lewat migrasi, bukan seeder: jalur deploy produksi menjalankan migrasi
+ * saja, bukan seeder, jadi perubahan RolePermissionSeeder saja tidak akan sampai
  * ke server produksi.
  */
 return new class extends Migration

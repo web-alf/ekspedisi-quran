@@ -14,8 +14,8 @@ uses(RefreshDatabase::class);
  * Perubahan role & izin untuk Kurir dan role Distribusi.
  *
  * Diuji di atas MIGRASI SUNGGUHAN, bukan meniru isinya di tes: itulah satu-satunya
- * jalur yang benar-benar berjalan saat deploy. Story `deploy` di Envoy.blade.php
- * tidak menjalankan seeder, jadi perubahan di RolePermissionSeeder saja tidak akan
+ * jalur yang benar-benar berjalan saat deploy. Jalur deploy produksi menjalankan
+ * migrasi saja, bukan seeder, jadi perubahan di RolePermissionSeeder saja tidak akan
  * sampai ke produksi — perubahannya harus ada di migrasi.
  */
 beforeEach(function () {

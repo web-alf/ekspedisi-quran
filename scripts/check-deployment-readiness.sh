@@ -20,8 +20,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-SERVER="root@45.77.42.220"
-APP_DIR="/var/www/app"
+SERVER="ekspedisi-prod"
+APP_DIR="/var/www/dash"
 FAILED=0
 
 # -----------------------------------------------------------------------------
@@ -96,12 +96,9 @@ else
     check_fail "Git not found"
 fi
 
-# Check Envoy
-if command -v envoy &> /dev/null || [ -f "$HOME/.composer/vendor/bin/envoy" ]; then
-    check_pass "Laravel Envoy installed"
-else
-    check_warn "Laravel Envoy not found (will be installed during deploy)"
-fi
+# Deploy = rsync manual ke host ekspedisi-prod.
+# Prosedur: docs/03-deployment/DEPLOY-PRODUKSI-2026-09.md
+# (Envoy sudah tidak dipakai — Envoy.blade.php dihapus 12 Okt 2026)
 
 echo ""
 

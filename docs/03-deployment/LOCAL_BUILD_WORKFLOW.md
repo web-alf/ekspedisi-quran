@@ -4,6 +4,12 @@
 
 Workflow ini menggunakan **local build** approach untuk mengurangi beban server dan mempercepat deployment. Semua build assets (Vite/NPM) dibuat di lokal sebelum push.
 
+> ⚠️ **Bagian deploy di dokumen ini sudah usang.** Jalur GitHub Actions + Envoy
+> (`Envoy.blade.php`, `.github/workflows/deploy.yml`) **dihapus 12 Okt 2026** karena
+> menunjuk repo dan server yang sudah mati. Yang masih berlaku dari dokumen ini:
+> kebiasaan **build di lokal + commit `public/build`** dan pre-commit hook-nya.
+> Untuk cara deploy yang benar, lihat [DEPLOY-PRODUKSI-2026-09.md](DEPLOY-PRODUKSI-2026-09.md).
+
 ## Workflow Diagram
 
 ```
@@ -119,12 +125,12 @@ cat .git/hooks/pre-commit | head -5
 | **Code Style** | Laravel Pint pada file yang berubah | 🔧 Auto-fix & restage |
 | **Migration Safety** | Warning jika migration berubah | ⚠️ Warning only |
 
-### GitHub Actions Checks
+### Pemeriksaan di Sisi Server
 
-| Check | Deskripsi | Jika Gagal |
-|-------|-----------|------------|
-| **Build Assets** | Verifikasi `public/build` ada di repo | ❌ Deployment STOP |
-| **SSH Connection** | Koneksi ke server (45.77.42.220) | ❌ Deployment FAIL |
+GitHub Actions **sudah tidak dipakai** — workflow `deploy.yml` dihapus 12 Okt 2026 karena
+menunjuk server yang sudah mati. Verifikasi setelah deploy dilakukan manual:
+bundle baru termuat, bundle lama 404, dan log Laravel bersih. Lihat
+[DEPLOY-PRODUKSI-2026-09.md](DEPLOY-PRODUKSI-2026-09.md).
 
 ## Commands Reference
 
@@ -156,14 +162,10 @@ php artisan test --filter=UserTest
 ### Deployment
 
 ```bash
-# Manual deploy (jika perlu)
-envoy run deploy
-
-# Rollback
-envoy run rollback
-
-# Check deployment status
-ssh root@45.77.42.220 "ls -la /var/www/app/releases/ | head -10"
+# Deploy produksi = rsync ke host ekspedisi-prod (vps-187.77.113.89).
+# Prosedur lengkap (backup, migrasi, verifikasi, rollback):
+#   docs/03-deployment/DEPLOY-PRODUKSI-2026-09.md
+# JANGAN pakai `envoy` — Envoy.blade.php sudah dihapus dari repo.
 ```
 
 ## Directory Structure on Server
@@ -204,12 +206,11 @@ touch .tests-passed
 ### Deployment Fail
 
 ```bash
-# Cek status di server
-ssh root@45.77.42.220 "systemctl status php8.3-fpm"
-ssh root@45.77.42.220 "tail -50 /var/www/app/current/storage/logs/laravel.log"
+# Dash (produksi sehari-hari) — cek langsung dari host ekspedisi-prod
+ssh ekspedisi-prod "systemctl status php8.3-fpm"
+ssh ekspedisi-prod "tail -50 /var/www/dash/storage/logs/laravel.log"
 
-# Manual rollback jika perlu
-envoy run rollback
+# Prosedur rollback ada di docs/03-deployment/DEPLOY-PRODUKSI-2026-09.md
 ```
 
 ## Important Notes
@@ -223,7 +224,7 @@ envoy run rollback
 
 ### ❌ DON'T
 
-- Commit tanpa build (akan gagal di CI)
+- Commit tanpa build (aset basi ikut ter-deploy)
 - Push langsung tanpa test
 - Ubah migration yang sudah di-push
 - Lupa restart PHP-FPM jika manual deploy
@@ -256,10 +257,9 @@ php artisan migrate:fresh --force
 
 Jika ada masalah dengan deployment:
 
-1. Cek GitHub Actions logs
-2. Verifikasi SSH key di secrets
-3. Cek server status
-4. Hubungi DevOps jika perlu
+1. Baca `docs/03-deployment/DEPLOY-PRODUKSI-2026-09.md` — prosedur + jebakan yang sudah menelan korban
+2. Cek log Laravel di host: `ssh ekspedisi-prod "tail -50 /var/www/dash/storage/logs/laravel.log"`
+3. Cek status layanan: nginx, php8.3-fpm, mysql, redis, dash-queue
 
 ---
 
