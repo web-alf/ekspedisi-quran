@@ -433,7 +433,7 @@
         </div>
         
         <div class="flex space-x-2">
-          {#if canProcess && mushafRequest.status === 'approved'}
+          {#if canProcess && mushafRequest.status === 'approved' && !mushafRequest.pengiriman_id}
             <button
               on:click={openProcessModal}
               class="bg-[#eb3434] hover:bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"

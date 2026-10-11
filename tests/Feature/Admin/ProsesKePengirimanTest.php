@@ -129,6 +129,29 @@ it('tetap mengizinkan status lain yang sah', function () {
     expect($mushafRequest->fresh()->status)->toBe('approved');
 });
 
+it('menolak memproses permintaan yang sudah punya kiriman', function () {
+    // Keadaan ini nyata di produksi: 10 permintaan sudah tertaut ke sebuah
+    // kiriman tetapi statusnya masih `approved`. Tanpa penjaga ini, tombol
+    // "Proses ke Pengiriman" ikut tampil untuk mereka, dan menekannya membuat
+    // kiriman KEDUA untuk lembaga yang sama sambil memindahkan tautannya —
+    // sehingga kiriman lama kehilangan asal permintaannya.
+    $mushafRequest = permintaanSiapProses();
+    $kirimanLama = Pengiriman::factory()->create(['mushaf_request_id' => $mushafRequest->id]);
+    $mushafRequest->update(['pengiriman_id' => $kirimanLama->id]);
+
+    $donatur = Donatur::factory()->create();
+
+    $this->actingAs($this->admin)
+        ->post("/admin/mushaf-requests/{$mushafRequest->id}/process", [
+            'donatur_id' => $donatur->id,
+            'tanggal_wakaf' => now()->format('Y-m-d'),
+        ])
+        ->assertSessionHasErrors();
+
+    expect($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanLama->id)
+        ->and(Pengiriman::count())->toBe(1);
+});
+
 it('mengirim daftar donatur ke halaman detail untuk modal pemrosesan', function () {
     $mushafRequest = permintaanSiapProses();
     Donatur::factory()->count(3)->create();

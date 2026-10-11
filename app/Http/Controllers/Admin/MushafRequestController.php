@@ -251,6 +251,18 @@ class MushafRequestController extends Controller
             return back()->withErrors(['error' => 'Hanya permintaan yang disetujui yang bisa diproses']);
         }
 
+        // Permintaan yang SUDAH punya kiriman tidak boleh diproses lagi: jalur ini
+        // membuat kiriman baru bila tidak menemukan kiriman kosong milik donatur
+        // terpilih, lalu memindahkan tautannya ke kiriman baru itu — kiriman lama
+        // kehilangan asal permintaannya. Keadaan "approved tetapi sudah punya
+        // kiriman" nyata ada di produksi, jadi penjaganya dipasang di sini juga,
+        // bukan hanya dengan menyembunyikan tombolnya.
+        if ($mushafRequest->pengiriman_id) {
+            return back()->withErrors([
+                'error' => 'Permintaan ini sudah punya kiriman. Buka kirimannya untuk melanjutkan, jangan diproses ulang.',
+            ]);
+        }
+
         // Jumlah yang akan dikirim dibaca dari `approved_breakdown`, yang otomatis
         // memakai jumlah pengajuan selama jumlah disetujui belum pernah ditetapkan.
         // Penjaga lama berbunyi `has_quantity_change && is_null(jumlah_mushaf_approved)`
