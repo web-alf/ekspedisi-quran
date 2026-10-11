@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Integration;
 
+use App\Jobs\Certificate\GenerateBulkCertificatesJob;
 use App\Models\DailyPackingTask;
 use App\Models\Donatur;
 use App\Models\JenisQuran;
@@ -117,7 +118,7 @@ class OptimizationIntegrationTest extends TestCase
         $start = microtime(true);
 
         // Dispatch bulk job
-        \App\Jobs\Certificate\GenerateBulkCertificatesJob::dispatch($wakafBatch->id);
+        GenerateBulkCertificatesJob::dispatch($wakafBatch->id);
 
         // Process jobs
         Artisan::call('queue:work', [
@@ -151,7 +152,7 @@ class OptimizationIntegrationTest extends TestCase
             $user->assignRole('warehouse');
         });
 
-        $pengiriman = Pengiriman::factory(30)->create();
+        $pengiriman = Pengiriman::factory(30)->create(['jumlah_quran' => 1]);
 
         // Simulate concurrent warehouse operations
         $results = [];

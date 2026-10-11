@@ -7,9 +7,11 @@ use App\Models\WakafItem;
 it('computes total counts from wakaf items correctly', function () {
     $user = User::factory()->create();
     $donatur = Donatur::factory()->create([
-        'total_a5_count' => 10,
-        'total_a6_count' => 5,
-        'total_iqra_count' => 3,
+        // total_*_count adalah kolom donasi yang harus cermin wakaf_item
+        // (8 A5 + 3 A6 + 2 IQRA = 13), sehingga total_quran = 13.
+        'total_a5_count' => 8,
+        'total_a6_count' => 3,
+        'total_iqra_count' => 2,
         'created_by' => $user->id,
         'prayer_mode' => 'semua_donatur',
     ]);

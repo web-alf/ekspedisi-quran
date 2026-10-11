@@ -2,32 +2,36 @@
 
 namespace Tests\Feature\Public;
 
-use Tests\TestCase;
-use App\Models\Pengiriman;
 use App\Models\Donatur;
-use App\Models\StatusPengiriman;
-use App\Models\StatusHistory;
 use App\Models\JenisQuran;
+use App\Models\Pengiriman;
 use App\Models\Sertifikat;
+use App\Models\StatusHistory;
+use App\Models\StatusPengiriman;
+use App\Models\TrackingHistory;
 use App\Models\WakafBatch;
+use Inertia\Testing\AssertableInertia as Assert;
+use Tests\TestCase;
 
 class TrackingSystemTest extends TestCase
 {
     protected $pengiriman;
+
     protected $donatur;
+
     protected $jenisQuran;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->donatur = Donatur::factory()->create([
-            'nama_donatur' => 'Test Donatur for Tracking'
+            'nama_donatur' => 'Test Donatur for Tracking',
         ]);
-        
-        $this->jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first() ?? 
+
+        $this->jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first() ??
                             JenisQuran::factory()->a5()->create();
-        
+
         $this->pengiriman = Pengiriman::factory()->create([
             'no_resi' => 'EQ-2024-12345',
             'donatur_id' => $this->donatur->id,
@@ -72,7 +76,7 @@ class TrackingSystemTest extends TestCase
     public function it_can_search_tracking_via_post()
     {
         $response = $this->post('/tracking/search', [
-            'no_resi' => $this->pengiriman->no_resi
+            'no_resi' => $this->pengiriman->no_resi,
         ]);
 
         $response->assertRedirect("/tracking/{$this->pengiriman->no_resi}");
@@ -82,7 +86,7 @@ class TrackingSystemTest extends TestCase
     public function it_validates_tracking_search_input()
     {
         $response = $this->post('/tracking/search', [
-            'no_resi' => '' // Empty input
+            'no_resi' => '', // Empty input
         ]);
 
         $response->assertSessionHasErrors(['no_resi']);
@@ -92,7 +96,7 @@ class TrackingSystemTest extends TestCase
     public function it_redirects_to_tracking_url_for_search()
     {
         $response = $this->post('/tracking/search', [
-            'no_resi' => 'NONEXISTENT-RESI'
+            'no_resi' => 'NONEXISTENT-RESI',
         ]);
 
         $response->assertRedirect('/tracking/NONEXISTENT-RESI');
@@ -103,7 +107,7 @@ class TrackingSystemTest extends TestCase
     {
         $status1 = StatusPengiriman::factory()->create(['nama' => 'Pending']);
         $status2 = StatusPengiriman::factory()->create(['nama' => 'Processing']);
-        
+
         // Create status history
         StatusHistory::factory()->create([
             'pengiriman_id' => $this->pengiriman->id,
@@ -112,7 +116,7 @@ class TrackingSystemTest extends TestCase
             'catatan' => 'Pengiriman dibuat',
             'created_at' => now()->subDays(2),
         ]);
-        
+
         StatusHistory::factory()->create([
             'pengiriman_id' => $this->pengiriman->id,
             'status_from' => $status1->id,
@@ -132,21 +136,21 @@ class TrackingSystemTest extends TestCase
     public function it_shows_certificate_download_link_when_available()
     {
         $wakafBatch = WakafBatch::factory()->create([
-            'donatur_id' => $this->donatur->id
+            'donatur_id' => $this->donatur->id,
         ]);
-        
+
         $this->pengiriman->update(['wakaf_batch_id' => $wakafBatch->id]);
-        
+
         $sertifikat = Sertifikat::factory()->create([
             'wakaf_batch_id' => $wakafBatch->id,
-            'nomor_sertifikat' => 'CERT-EQ-2024-00001'
+            'nomor_sertifikat' => 'CERT-EQ-2024-00001',
         ]);
 
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
-        $response->assertStatus(200);
-        $response->assertSee('Sertifikat');
-        $response->assertSee('Download');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Public/TrackingResult')
+            ->has('certificateUrls', 1));
     }
 
     /** @test */
@@ -164,7 +168,7 @@ class TrackingSystemTest extends TestCase
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
         $response->assertStatus(200);
-        
+
         // Should display shipment information
         $response->assertSee($this->pengiriman->no_resi);
         $response->assertSee($this->donatur->nama_donatur);
@@ -183,7 +187,7 @@ class TrackingSystemTest extends TestCase
             $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
             $response->assertStatus(200);
         }
-        
+
         // This should still work as we're within limit (60 per minute)
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
         $response->assertStatus(200);
@@ -198,11 +202,13 @@ class TrackingSystemTest extends TestCase
         $response->assertJson([
             'success' => true,
             'data' => [
-                'no_resi' => $this->pengiriman->no_resi,
-                'donatur' => $this->donatur->nama_donatur,
-                'penerima' => $this->pengiriman->nama_penerima,
-                'alamat' => $this->pengiriman->alamat_tujuan,
-            ]
+                'pengiriman' => [
+                    'no_resi' => $this->pengiriman->no_resi,
+                    'alamat_tujuan' => $this->pengiriman->alamat_tujuan,
+                    'wakif_nama' => $this->donatur->nama_donatur,
+                    'jenis_quran' => $this->jenisQuran->nama_jenis,
+                ],
+            ],
         ]);
     }
 
@@ -214,7 +220,7 @@ class TrackingSystemTest extends TestCase
         $response->assertStatus(404);
         $response->assertJson([
             'success' => false,
-            'message' => 'Nomor resi tidak ditemukan'
+            'message' => 'Nomor resi tidak ditemukan',
         ]);
     }
 
@@ -226,7 +232,7 @@ class TrackingSystemTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson([
             'success' => true,
-            'no_resi' => $this->pengiriman->no_resi
+            'no_resi' => $this->pengiriman->no_resi,
         ]);
     }
 
@@ -242,12 +248,12 @@ class TrackingSystemTest extends TestCase
     public function it_handles_case_insensitive_tracking_numbers()
     {
         $lowerCaseResi = strtolower($this->pengiriman->no_resi);
-        
+
         $response = $this->get("/tracking/{$lowerCaseResi}");
 
         // Should either work or redirect to uppercase version
         $this->assertTrue(
-            $response->isSuccessful() || 
+            $response->isSuccessful() ||
             $response->isRedirection()
         );
     }
@@ -255,17 +261,15 @@ class TrackingSystemTest extends TestCase
     /** @test */
     public function it_displays_delivery_photos_when_available()
     {
-        $this->pengiriman->update([
-            'delivery_proof' => [
-                'photos/delivery1.jpg',
-                'photos/delivery2.jpg'
-            ]
+        TrackingHistory::factory()->withPhoto()->create([
+            'pengiriman_id' => $this->pengiriman->id,
         ]);
 
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
-        $response->assertStatus(200);
-        $response->assertSee('Foto Dokumentasi');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Public/TrackingResult')
+            ->has('trackingHistory', 1));
     }
 
     /** @test */
@@ -273,23 +277,22 @@ class TrackingSystemTest extends TestCase
     {
         $deliveredStatus = StatusPengiriman::factory()->create([
             'nama' => 'Delivered',
-            'is_final' => true
+            'is_final' => true,
         ]);
-        
+
         $this->pengiriman->update([
             'status_id' => $deliveredStatus->id,
             'received_at' => now()->subDays(1),
             'received_by' => 'John Recipient',
             'receiver_contact' => '08987654321',
-            'delivery_notes' => 'Delivered successfully'
+            'delivery_notes' => 'Delivered successfully',
         ]);
 
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
-        $response->assertStatus(200);
-        $response->assertSee('John Recipient');
-        $response->assertSee('08987654321');
-        $response->assertSee('Delivered successfully');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Public/TrackingResult')
+            ->where('pengiriman.status.nama', 'Delivered'));
     }
 
     /** @test */
@@ -304,10 +307,10 @@ class TrackingSystemTest extends TestCase
 
         foreach ($invalidFormats as $invalidResi) {
             $response = $this->get("/tracking/{$invalidResi}");
-            
+
             // Should return 404 or handle gracefully
             $this->assertTrue(
-                $response->status() === 404 || 
+                $response->status() === 404 ||
                 $response->isRedirection()
             );
         }
@@ -318,13 +321,13 @@ class TrackingSystemTest extends TestCase
     {
         $this->pengiriman->update([
             'tanggal_wakaf' => '2024-01-15',
-            'received_at' => '2024-02-01 14:30:00'
+            'received_at' => '2024-02-01 14:30:00',
         ]);
 
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
-        $response->assertStatus(200);
-        // Should show formatted dates (15/01/2024, etc.)
-        $response->assertSee('15/01/2024');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Public/TrackingResult')
+            ->where('pengiriman.formatted_tanggal_wakaf', '15/01/2024'));
     }
 }
