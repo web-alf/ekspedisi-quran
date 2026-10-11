@@ -9,6 +9,7 @@ use App\Models\Sertifikat;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ConsolidatedCertificateService
@@ -24,17 +25,21 @@ class ConsolidatedCertificateService
             // Validate donor data
             $this->validateDonaturData($donatur);
 
-            // Get or create consolidated certificate record
-            $sertifikat = $this->getOrCreateConsolidatedSertifikat($donatur, $options);
+            // Sama seperti sertifikat per batch: template diselesaikan LEBIH DULU dan
+            // seluruh pembuatan dibungkus satu transaksi, supaya kegagalan tidak
+            // meninggalkan catatan "sertifikat" yang PDF-nya tidak pernah bisa dibuat.
+            return DB::transaction(function () use ($donatur, $options) {
+                $template = $this->getTemplate($options['template_id'] ?? null);
 
-            // Get template
-            $template = $this->getTemplate($sertifikat->template_id);
+                // Get or create consolidated certificate record
+                $this->getOrCreateConsolidatedSertifikat($donatur, ['template_id' => $template->id]);
 
-            // Prepare consolidated data for the certificate view
-            $certificateData = $this->prepareConsolidatedCertificateData($donatur);
+                // Prepare consolidated data for the certificate view
+                $certificateData = $this->prepareConsolidatedCertificateData($donatur);
 
-            // Generate PDF and stream directly
-            return $this->streamPdf($template, $certificateData, $donatur->kode_donatur);
+                // Generate PDF and stream directly
+                return $this->streamPdf($template, $certificateData, $donatur->kode_donatur);
+            });
 
         } catch (Exception $e) {
             Log::error('Consolidated certificate generation failed', [

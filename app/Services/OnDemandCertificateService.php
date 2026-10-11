@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WakafBatch;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class OnDemandCertificateService
@@ -28,17 +29,23 @@ class OnDemandCertificateService
             // Validate data
             $this->validateWakafBatchData($wakafBatch);
 
-            // Get or create certificate record (without file_path)
-            $sertifikat = $this->getOrCreateSertifikatRecord($wakafBatch, $options);
+            // Seluruh pembuatan dibungkus satu transaksi, dan templatenya diselesaikan
+            // LEBIH DULU. Sebelumnya catatan sertifikat ditulis sebelum template diperiksa,
+            // sehingga kegagalan apa pun — template belum ada, berkas templatenya hilang,
+            // atau PDF-nya gagal dirender — meninggalkan "sertifikat" yang tampak sah,
+            // ikut terhitung di rekap, padahal PDF-nya tidak pernah bisa dibuat.
+            return DB::transaction(function () use ($wakafBatch, $options) {
+                $template = $this->getTemplate($options['template_id'] ?? null);
 
-            // Get template
-            $template = $this->getTemplate($sertifikat->template_id);
+                // Get or create certificate record (without file_path)
+                $this->getOrCreateSertifikatRecord($wakafBatch, ['template_id' => $template->id]);
 
-            // Prepare data for the certificate view
-            $certificateData = $this->prepareCertificateData($wakafBatch);
+                // Prepare data for the certificate view
+                $certificateData = $this->prepareCertificateData($wakafBatch);
 
-            // Generate PDF and stream directly
-            return $this->streamPdf($template, $certificateData, $wakafBatch->batch_code);
+                // Generate PDF and stream directly
+                return $this->streamPdf($template, $certificateData, $wakafBatch->batch_code);
+            });
 
         } catch (Exception $e) {
             Log::error('On-demand certificate generation failed', [

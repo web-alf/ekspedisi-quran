@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\CertificateTemplate;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class CertificateTemplateFactory extends Factory
@@ -21,8 +22,10 @@ class CertificateTemplateFactory extends Factory
                 'date' => ['x' => 100, 'y' => 300],
                 'signature' => ['x' => 400, 'y' => 500],
             ],
+            'width' => 2000,
+            'height' => 1414,
             'is_active' => true,
-            'created_by' => 1,
+            'created_by' => User::factory(),
         ];
     }
 
