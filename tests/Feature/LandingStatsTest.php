@@ -4,17 +4,16 @@ use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Inertia\Testing\Assert as AssertableInertia;
+use Inertia\Testing\AssertableInertia;
 
 uses(RefreshDatabase::class);
 
 it('menghitung Mushaf Tersalurkan dari pengiriman status diterima', function () {
     // Buat status 'diterima'
-    $statusDiterima = StatusPengiriman::factory()->create([
-        'nama' => 'Diterima',
-        'slug' => 'diterima',
-        'is_active' => true,
-    ]);
+    $statusDiterima = StatusPengiriman::firstOrCreate(
+        ['slug' => 'diterima'],
+        ['nama' => 'Diterima', 'is_active' => true],
+    );
 
     // Request 1 + pengiriman diterima (jumlah_quran = 15)
     $req1 = MushafRequest::factory()->completed()->create([
@@ -62,14 +61,9 @@ it('menghitung Mushaf Tersalurkan dari pengiriman status diterima', function () 
     $response = $this->get('/');
 
     $response->assertOk();
-    $response->assertInertia(fn (AssertableInertia $page) =>
-        $page->component('Landing')
-            ->has('stats')
-            ->where('stats.totalMushaf', 40) // 15 + 25 dari pengiriman diterima saja
-            ->has('mapData')
-            ->where('mapData', function ($map) {
-                // Hanya 2 pengiriman diterima yang punya koordinat harus tampil
-                return is_array($map) && count($map) === 2;
-            })
+    $response->assertInertia(fn (AssertableInertia $page) => $page->component('Landing')
+        ->has('stats')
+        ->where('stats.totalMushaf', 40) // 15 + 25 dari pengiriman diterima saja
+        ->has('mapData', 2) // Hanya 2 pengiriman diterima yang punya koordinat harus tampil
     );
 });

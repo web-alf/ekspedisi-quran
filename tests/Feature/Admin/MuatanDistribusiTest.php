@@ -136,7 +136,6 @@ function kurirBawahan(User $manager): User
 function resiSiapDiantar(string $slug = 'selesai-packing'): Pengiriman
 {
     return Pengiriman::factory()->create([
-        'no_resi' => 'EQ-2026-'.str_pad((string) random_int(1, 99999), 5, '0', STR_PAD_LEFT),
         'status_id' => StatusPengiriman::where('slug', $slug)->value('id'),
         'alamat_tujuan' => 'Jl. Contoh No. 1, Surabaya',
     ]);
@@ -731,7 +730,6 @@ it('menolak memuat resi yang belum selesai packing', function () {
     $muatan = Muatan::factory()->untukKurir($kurir)->create();
 
     $belumSiap = Pengiriman::factory()->create([
-        'no_resi' => 'EQ-2026-'.str_pad((string) random_int(1, 99999), 5, '0', STR_PAD_LEFT),
         'status_id' => StatusPengiriman::firstOrCreate(
             ['slug' => 'packing'],
             ['nama' => 'Proses Packing', 'urutan' => 4, 'is_active' => true, 'is_final' => false]

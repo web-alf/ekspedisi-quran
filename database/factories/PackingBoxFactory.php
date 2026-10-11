@@ -7,7 +7,7 @@ use App\Models\PackingBox;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\PackingBox>
+ * @extends Factory<PackingBox>
  */
 class PackingBoxFactory extends Factory
 {
@@ -20,6 +20,12 @@ class PackingBoxFactory extends Factory
     {
         $jenisQuran = JenisQuran::inRandomOrder()->first() ?? JenisQuran::factory()->create();
 
+        // Nomor urut naik monoton menjamin `kode_kerdus` unik — `rand()` lama
+        // bertabrakan saat satu ujian membuat ratusan kerdus sekaligus
+        // (birthday problem pada `KB-YYYYMMDD-###-JENIS-##`).
+        static $urutan = 0;
+        $urutan++;
+
         // Set capacity based on jenis
         $capacity = match ($jenisQuran->kode_jenis) {
             'A5' => 30,
@@ -29,7 +35,7 @@ class PackingBoxFactory extends Factory
         };
 
         return [
-            'kode_kerdus' => 'KB-'.date('Ymd').'-'.str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT).'-'.$jenisQuran->kode_jenis.'-'.str_pad(rand(1, 99), 2, '0', STR_PAD_LEFT),
+            'kode_kerdus' => 'KB-'.date('Ymd').'-'.str_pad($urutan, 3, '0', STR_PAD_LEFT).'-'.$jenisQuran->kode_jenis.'-'.str_pad(rand(1, 99), 2, '0', STR_PAD_LEFT),
             'jenis_quran_id' => $jenisQuran->id,
             'kapasitas' => $capacity,
             'jumlah_terisi' => 0,

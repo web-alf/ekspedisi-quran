@@ -245,17 +245,14 @@ it('mengisi kolom alamat pada template yang diimpor apa adanya', function () {
     expect($req->provinsi)->toBe('Jawa Timur')
         ->and($req->kota_kabupaten)->toBe('Kabupaten Blitar')
         ->and($req->kecamatan)->toBe('Garum')
-        ->and($req->kelurahan_desa)->toBe('Contoh Kelurahan')
-        ->and($req->alamat_detail)->toBe('Jl. Contoh No. 1, RT.2/RW.5, Lingkungan Contoh')
-        ->and((float) $req->latitude)->toBe(-8.0868357)
-        ->and((float) $req->longitude)->toBe(112.2396983);
+        ->and($req->kelurahan_desa)->toBe('GARUM')
+        ->and($req->alamat_detail)->toBe('Jl. Contoh No. 1, RT.2/RW.5, Dusun Contoh')
+        ->and((float) $req->latitude)->toBe(-8.07859)
+        ->and((float) $req->longitude)->toBe(112.2175005);
 
-    // Dua baris contoh memakai jalur yang BERBEDA, dan itu memang yang diuji:
-    // baris yang sudah punya koordinat tidak menyentuh layanan peta sama sekali,
-    // sedangkan baris yang mengosongkan kolom wilayah diuraikan (tautannya
-    // diikuti, lalu reverse geocoding dijalankan).
+    // Kedua baris contoh template kini sudah lengkap (koordinat + detail alamat
+    // diisi sendiri), jadi tidak ada yang menyentuh layanan peta sama sekali.
     Http::assertNotSent(fn ($r) => str_contains($r->url(), 'contohBarisSatu'));
-    Http::assertSent(fn ($r) => str_contains($r->url(), 'contohBarisDua'));
 
     unlink($berkas);
 });

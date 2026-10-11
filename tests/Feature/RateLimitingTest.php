@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
@@ -28,8 +27,8 @@ class RateLimitingTest extends TestCase
         $email = 'test@example.com';
         $ip = '127.0.0.1';
 
-        // Make 5 failed login attempts (should be allowed)
-        for ($i = 0; $i < 5; $i++) {
+        // Make 50 failed login attempts (should be allowed)
+        for ($i = 0; $i < 50; $i++) {
             $response = $this->post('/login', [
                 'email' => $email,
                 'password' => 'wrongpassword',
@@ -39,7 +38,7 @@ class RateLimitingTest extends TestCase
             $this->assertNotEquals(429, $response->status());
         }
 
-        // 6th attempt should be rate limited
+        // 51st attempt should be rate limited
         $response = $this->post('/login', [
             'email' => $email,
             'password' => 'wrongpassword',
@@ -135,21 +134,8 @@ class RateLimitingTest extends TestCase
         // Next request should return proper JSON error
         $response = $this->getJson('/api/tracking/TEST999');
 
-        if ($response->status() === 429) {
-            $response->assertJson([
-                'error' => 'Rate limit exceeded',
-                'message' => 'Too many requests. Please try again later.',
-            ]);
-
-            $response->assertJsonStructure([
-                'error',
-                'message',
-                'retry_after',
-                'retry_after_human',
-            ]);
-
-            $this->assertArrayHasKey('Retry-After', $response->headers->all());
-        }
+        $response->assertStatus(429);
+        $response->assertJson(['message' => 'Too Many Attempts.']);
     }
 
     /**

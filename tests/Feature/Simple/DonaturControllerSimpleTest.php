@@ -17,8 +17,11 @@ class DonaturControllerSimpleTest extends TestCase
     public function it_verifies_data_transformation_works()
     {
         // Create basic data
-        $jenisQuran = JenisQuran::create(['nama_jenis' => 'Al-Quran A5', 'kode_jenis' => 'A5', 'is_active' => true, 'harga' => 50000, 'deskripsi' => 'Test']);
-        $status = StatusPengiriman::create(['nama' => 'Test Status', 'slug' => 'test', 'kode' => 'TEST', 'is_default' => true, 'warna' => 'blue', 'icon' => 'fas fa-clock']);
+        $jenisQuran = JenisQuran::firstOrCreate(
+            ['kode_jenis' => 'A5'],
+            ['nama_jenis' => 'Al-Quran A5', 'is_active' => true, 'harga' => 50000, 'deskripsi' => 'Test'],
+        );
+        $status = StatusPengiriman::factory()->create(['nama' => 'Test Status', 'slug' => 'test-status']);
 
         // Create a donatur with known stored values
         $donatur = Donatur::factory()->create([

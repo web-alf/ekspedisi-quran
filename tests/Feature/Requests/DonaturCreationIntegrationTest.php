@@ -3,6 +3,7 @@
 namespace Tests\Feature\Requests;
 
 use App\Models\User;
+use Database\Seeders\JenisQuranSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -26,7 +27,7 @@ class DonaturCreationIntegrationTest extends TestCase
         $this->admin->assignRole('super_admin');
 
         // Seed required data
-        $this->seed(\Database\Seeders\JenisQuranSeeder::class);
+        $this->seed(JenisQuranSeeder::class);
     }
 
     protected function createRolesAndPermissions()
@@ -59,7 +60,7 @@ class DonaturCreationIntegrationTest extends TestCase
         $donaturData = [
             'kode_donatur' => 'DN-NO-ADDRESS-001',
             'nama_donatur' => 'Test User No Address',
-            'no_hp' => '08123456789',
+            'no_hp' => '+628123456789',
             'email_donatur' => 'no_address@example.com',
             // alamat_donatur is intentionally omitted
             'donation_date' => now()->format('Y-m-d'),
@@ -81,7 +82,7 @@ class DonaturCreationIntegrationTest extends TestCase
         $this->assertDatabaseHas('donatur', [
             'kode_donatur' => 'DN-NO-ADDRESS-001',
             'nama_donatur' => 'Test User No Address',
-            'no_hp' => '08123456789',
+            'no_hp' => '+628123456789',
             'email_donatur' => 'no_address@example.com',
             'alamat_donatur' => null, // Should be null since it wasn't provided
         ]);
@@ -93,7 +94,7 @@ class DonaturCreationIntegrationTest extends TestCase
         $donaturData = [
             'kode_donatur' => 'DN-WITH-ADDRESS-001',
             'nama_donatur' => 'Test User With Address',
-            'no_hp' => '08123456790',
+            'no_hp' => '+628123456790',
             'email_donatur' => 'with_address@example.com',
             'alamat_donatur' => 'Jl. Test Address No. 123, Jakarta',
             'donation_date' => now()->format('Y-m-d'),
@@ -115,7 +116,7 @@ class DonaturCreationIntegrationTest extends TestCase
         $this->assertDatabaseHas('donatur', [
             'kode_donatur' => 'DN-WITH-ADDRESS-001',
             'nama_donatur' => 'Test User With Address',
-            'no_hp' => '08123456790',
+            'no_hp' => '+628123456790',
             'email_donatur' => 'with_address@example.com',
             'alamat_donatur' => 'Jl. Test Address No. 123, Jakarta',
         ]);

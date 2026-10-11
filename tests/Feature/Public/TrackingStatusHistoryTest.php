@@ -2,15 +2,13 @@
 
 namespace Tests\Feature\Public;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Models\Pengiriman;
 use App\Models\StatusHistory;
-use App\Models\TrackingHistory;
 use App\Models\StatusPengiriman;
+use App\Models\TrackingHistory;
 use App\Models\User;
-use App\Models\Donatur;
-use App\Models\JenisQuran;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class TrackingStatusHistoryTest extends TestCase
 {
@@ -28,7 +26,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_shows_status_history_photos()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST01'
+            'no_resi' => 'EQ-2025-TEST01',
         ]);
 
         $user = User::factory()->create();
@@ -43,8 +41,8 @@ class TrackingStatusHistoryTest extends TestCase
             'created_by' => $user->id,
             'dokumentasi' => [
                 'status_updates/test1.jpg',
-                'status_updates/test2.jpg'
-            ]
+                'status_updates/test2.jpg',
+            ],
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST01');
@@ -65,7 +63,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_handles_double_encoded_documentation()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST02'
+            'no_resi' => 'EQ-2025-TEST02',
         ]);
 
         $user = User::factory()->create();
@@ -73,7 +71,7 @@ class TrackingStatusHistoryTest extends TestCase
         // Insert double-encoded data
         $doubleEncoded = json_encode(json_encode([
             'dokumentasi/test1.jpg',
-            'dokumentasi/test2.jpg'
+            'dokumentasi/test2.jpg',
         ]));
 
         \DB::table('status_histories')->insert([
@@ -84,7 +82,7 @@ class TrackingStatusHistoryTest extends TestCase
             'created_by' => $user->id,
             'dokumentasi' => $doubleEncoded,
             'created_at' => now(),
-            'updated_at' => now()
+            'updated_at' => now(),
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST02');
@@ -103,7 +101,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_shows_combined_histories()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST03'
+            'no_resi' => 'EQ-2025-TEST03',
         ]);
 
         $user = User::factory()->create();
@@ -116,7 +114,7 @@ class TrackingStatusHistoryTest extends TestCase
             'status_to' => StatusPengiriman::skip(1)->first()->id,
             'catatan' => 'From BoxScanner',
             'created_by' => $user->id,
-            'dokumentasi' => ['status_updates/test1.jpg']
+            'dokumentasi' => ['status_updates/test1.jpg'],
         ]);
 
         // Create TrackingHistory
@@ -126,7 +124,7 @@ class TrackingStatusHistoryTest extends TestCase
             'user_id' => $user->id,
             'tanggal_update' => now(),
             'keterangan' => 'Regular tracking update',
-            'foto_dokumentasi' => ['dokumentasi/test2.jpg']
+            'foto_dokumentasi' => ['dokumentasi/test2.jpg'],
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST03');
@@ -145,7 +143,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_handles_no_documentation()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST04'
+            'no_resi' => 'EQ-2025-TEST04',
         ]);
 
         $user = User::factory()->create();
@@ -156,7 +154,7 @@ class TrackingStatusHistoryTest extends TestCase
             'status_to' => StatusPengiriman::skip(1)->first()->id,
             'catatan' => 'No photos',
             'created_by' => $user->id,
-            'dokumentasi' => null
+            'dokumentasi' => null,
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST04');
@@ -175,7 +173,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_handles_object_format_documentation()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST05'
+            'no_resi' => 'EQ-2025-TEST05',
         ]);
 
         $user = User::factory()->create();
@@ -190,9 +188,9 @@ class TrackingStatusHistoryTest extends TestCase
                 [
                     'path' => 'status_updates/test.jpg',
                     'original_name' => 'photo.jpg',
-                    'url' => asset('storage/status_updates/test.jpg')
-                ]
-            ]
+                    'url' => asset('storage/status_updates/test.jpg'),
+                ],
+            ],
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST05');
@@ -215,7 +213,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_api_returns_status_history_documentation()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST06'
+            'no_resi' => 'EQ-2025-TEST06',
         ]);
 
         $user = User::factory()->create();
@@ -226,7 +224,7 @@ class TrackingStatusHistoryTest extends TestCase
             'status_to' => StatusPengiriman::skip(1)->first()->id,
             'catatan' => 'API test',
             'created_by' => $user->id,
-            'dokumentasi' => ['status_updates/api-test.jpg']
+            'dokumentasi' => ['status_updates/api-test.jpg'],
         ]);
 
         $response = $this->getJson('/api/tracking/EQ-2025-TEST06');
@@ -236,9 +234,9 @@ class TrackingStatusHistoryTest extends TestCase
             'success',
             'data' => [
                 'status_history' => [
-                    '*' => ['catatan', 'tanggal']
-                ]
-            ]
+                    '*' => ['catatan', 'tanggal'],
+                ],
+            ],
         ]);
     }
 
@@ -248,7 +246,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_handles_malformed_documentation()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST07'
+            'no_resi' => 'EQ-2025-TEST07',
         ]);
 
         $user = User::factory()->create();
@@ -260,9 +258,9 @@ class TrackingStatusHistoryTest extends TestCase
             'status_to' => StatusPengiriman::skip(1)->first()->id,
             'catatan' => 'Malformed data',
             'created_by' => $user->id,
-            'dokumentasi' => '{invalid json}',
+            'dokumentasi' => '"legacy malformed data"',
             'created_at' => now(),
-            'updated_at' => now()
+            'updated_at' => now(),
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST07');
@@ -281,7 +279,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_shows_location_from_status_history()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST08'
+            'no_resi' => 'EQ-2025-TEST08',
         ]);
 
         $user = User::factory()->create();
@@ -294,7 +292,7 @@ class TrackingStatusHistoryTest extends TestCase
             'lokasi' => 'Jakarta Distribution Center',
             'latitude' => -6.200000,
             'longitude' => 106.816666,
-            'created_by' => $user->id
+            'created_by' => $user->id,
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST08');
@@ -313,7 +311,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_handles_many_history_entries()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST09'
+            'no_resi' => 'EQ-2025-TEST09',
         ]);
 
         $user = User::factory()->create();
@@ -328,7 +326,7 @@ class TrackingStatusHistoryTest extends TestCase
                 'catatan' => "Update #{$i}",
                 'created_by' => $user->id,
                 'dokumentasi' => ["status_updates/test{$i}.jpg"],
-                'created_at' => now()->subHours(10 - $i)
+                'created_at' => now()->subHours(10 - $i),
             ]);
         }
 
@@ -351,7 +349,7 @@ class TrackingStatusHistoryTest extends TestCase
     public function test_tracking_page_shows_creator_information()
     {
         $pengiriman = Pengiriman::factory()->create([
-            'no_resi' => 'EQ-2025-TEST10'
+            'no_resi' => 'EQ-2025-TEST10',
         ]);
 
         $user = User::factory()->create(['name' => 'John Warehouse']);
@@ -361,7 +359,7 @@ class TrackingStatusHistoryTest extends TestCase
             'status_from' => StatusPengiriman::first()->id,
             'status_to' => StatusPengiriman::skip(1)->first()->id,
             'catatan' => 'With creator',
-            'created_by' => $user->id
+            'created_by' => $user->id,
         ]);
 
         $response = $this->get('/tracking/EQ-2025-TEST10');

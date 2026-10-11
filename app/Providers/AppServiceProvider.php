@@ -134,6 +134,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(20)->by($request->ip());  // Increased from 10
         });
 
+        // 🌐 Default API rate limiter (dipakai middleware group `api` dan `api-web`)
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
         // 🌐 Public API Rate Limiters - Protect geographic data
         RateLimiter::for('wilayah-public', function (Request $request) {
             return [

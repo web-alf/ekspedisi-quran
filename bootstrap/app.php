@@ -1,8 +1,23 @@
 <?php
 
+use App\Http\Middleware\EncryptCookies;
+use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PerformanceMonitoring;
+use App\Http\Middleware\PermissionMiddleware;
+use App\Http\Middleware\RateLimitHandler;
+use App\Http\Middleware\RoleMiddleware;
+use App\Http\Middleware\WarehouseAccess;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,20 +28,29 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
+            HandleInertiaRequests::class,
+        ]);
+
+        $middleware->group('api-web', [
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            ThrottleRequests::class.':api',
+            SubstituteBindings::class,
         ]);
 
         $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
-            'permission' => \App\Http\Middleware\PermissionMiddleware::class,
-            'active' => \App\Http\Middleware\EnsureUserIsActive::class,
-            'warehouse' => \App\Http\Middleware\WarehouseAccess::class,
-            'rate-limit-handler' => \App\Http\Middleware\RateLimitHandler::class,
-            'performance' => \App\Http\Middleware\PerformanceMonitoring::class,
+            'role' => RoleMiddleware::class,
+            'permission' => PermissionMiddleware::class,
+            'active' => EnsureUserIsActive::class,
+            'warehouse' => WarehouseAccess::class,
+            'rate-limit-handler' => RateLimitHandler::class,
+            'performance' => PerformanceMonitoring::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, \Illuminate\Http\Request $request) {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
             // Handle authentication exceptions for API routes
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([

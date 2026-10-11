@@ -61,7 +61,7 @@ class StoreDonaturRequestTest extends TestCase
         $donaturData = [
             'kode_donatur' => 'DN-OPTIONAL-001',
             'nama_donatur' => 'Test User Without Address',
-            'no_hp' => '08123456789',
+            'no_hp' => '+628123456789',
             'email_donatur' => 'test@example.com',
             'donation_date' => now()->format('Y-m-d'),
             'jenis_wakaf_dipilih' => ['A5'],
@@ -91,7 +91,7 @@ class StoreDonaturRequestTest extends TestCase
         $donaturDataWithAddress = [
             'kode_donatur' => 'DN-ADDRESS-001',
             'nama_donatur' => 'Test User With Address',
-            'no_hp' => '08123456790',
+            'no_hp' => '+628123456790',
             'email_donatur' => 'test2@example.com',
             'alamat_donatur' => 'Jl. Test Address No. 123',
             'donation_date' => now()->format('Y-m-d'),
@@ -121,7 +121,7 @@ class StoreDonaturRequestTest extends TestCase
         $donaturDataTooLong = [
             'kode_donatur' => 'DN-LONG-001',
             'nama_donatur' => 'Test User Long Address',
-            'no_hp' => '08123456791',
+            'no_hp' => '+628123456791',
             'email_donatur' => 'test3@example.com',
             'alamat_donatur' => str_repeat('a', 501), // Exceeds 500 chars
             'donation_date' => now()->format('Y-m-d'),
