@@ -47,16 +47,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // 🚀 Load No Resi Helper
-        if (file_exists(app_path('Helpers/no_resi_helper.php'))) {
-            require_once app_path('Helpers/no_resi_helper.php');
-
-            // Log helper loading only if we're not in console or running tests
-            if (! app()->runningInConsole() && ! app()->runningUnitTests()) {
-                logNoResiHelper();
-            }
-        }
-
         // ⚡ Warm up StatusPengiriman cache untuk eliminasi N+1 queries
         // Skip during unit tests (tables may not exist yet) and only run in non-console or when explicitly needed
         if (! app()->runningInConsole() && ! app()->runningUnitTests()) {
