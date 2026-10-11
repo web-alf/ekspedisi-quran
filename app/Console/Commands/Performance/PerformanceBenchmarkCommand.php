@@ -5,6 +5,7 @@ namespace App\Console\Commands\Performance;
 use App\Models\DailyPackingTask;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
+use Illuminate\Cache\TaggableStore;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -141,20 +142,26 @@ class PerformanceBenchmarkCommand extends Command
         });
         $results['remember_hit'] = (microtime(true) - $start) * 1000;
 
-        // Cache tags performance
-        $start = microtime(true);
-        Cache::tags(['pengiriman', 'benchmark'])->put('tagged_data', $data, 300);
-        $results['tagged_write'] = (microtime(true) - $start) * 1000;
+        // Cache tags performance — hanya bila store mendukung tag (redis/memcached).
+        // Store database/file tidak mendukungnya; memanggil Cache::tags() di sana
+        // melempar BadMethodCallException yang menghentikan seluruh perintah.
+        if (Cache::getStore() instanceof TaggableStore) {
+            $start = microtime(true);
+            Cache::tags(['pengiriman', 'benchmark'])->put('tagged_data', $data, 300);
+            $results['tagged_write'] = (microtime(true) - $start) * 1000;
 
-        $start = microtime(true);
-        $taggedData = Cache::tags(['pengiriman', 'benchmark'])->get('tagged_data');
-        $results['tagged_read'] = (microtime(true) - $start) * 1000;
+            $start = microtime(true);
+            Cache::tags(['pengiriman', 'benchmark'])->get('tagged_data');
+            $results['tagged_read'] = (microtime(true) - $start) * 1000;
+
+            Cache::tags(['benchmark'])->flush();
+        }
 
         // Cleanup
         for ($i = 0; $i < 100; $i++) {
             Cache::forget("benchmark_key_{$i}");
         }
-        Cache::tags(['benchmark'])->flush();
+        Cache::forget('benchmark_remember');
 
         return $results;
     }
@@ -233,8 +240,10 @@ class PerformanceBenchmarkCommand extends Command
         $results['chunked_max_memory'] = ($maxMemory - $initialMemory) / 1024 / 1024; // MB
         $results['processed_records'] = $processedCount;
 
-        // Memory efficiency ratio
-        $results['memory_efficiency'] = $results['large_dataset_memory'] / $results['chunked_max_memory'];
+        // Memory efficiency ratio — chunked_max_memory bisa 0 saat tabel kosong.
+        $results['memory_efficiency'] = $results['chunked_max_memory'] > 0
+            ? $results['large_dataset_memory'] / $results['chunked_max_memory']
+            : 0.0;
 
         return $results;
     }
@@ -266,7 +275,7 @@ class PerformanceBenchmarkCommand extends Command
         $performanceData = DB::table('user_performance')
             ->join('users', 'user_performance.user_id', '=', 'users.id')
             ->select('users.name', 'user_performance.*')
-            ->whereDate('user_performance.tanggal', today())
+            ->where('user_performance.bulan', today()->format('Y-m'))
             ->get();
         $results['performance_metrics'] = (microtime(true) - $start) * 1000;
 
