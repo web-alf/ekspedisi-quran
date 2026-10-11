@@ -35,7 +35,7 @@ trait TracksProgress
                 'total_items' => $totalItems,
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Failed to initialize job progress: '.$e->getMessage());
         }
     }

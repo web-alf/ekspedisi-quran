@@ -38,7 +38,7 @@ class QueuePerformanceTest extends TestCase
 
         // Dispatch multiple jobs
         for ($i = 0; $i < 10; $i++) {
-            BulkBoxProcessingJob::dispatch($boxes->pluck('id')->toArray());
+            BulkBoxProcessingJob::dispatch($boxes->pluck('id')->toArray(), 'validate');
         }
 
         $dispatchTime = (microtime(true) - $start) * 1000;
@@ -62,7 +62,7 @@ class QueuePerformanceTest extends TestCase
         $start = microtime(true);
 
         // Process bulk job
-        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray());
+        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray(), 'validate');
         $job->handle();
 
         $processingTime = (microtime(true) - $start) * 1000;
@@ -82,7 +82,7 @@ class QueuePerformanceTest extends TestCase
         $start = microtime(true);
 
         $job = new GenerateBulkCertificatesJob($certificates->pluck('id')->toArray());
-        $job->handle();
+        app()->call([$job, 'handle']);
 
         $generationTime = (microtime(true) - $start) * 1000;
 
@@ -101,7 +101,7 @@ class QueuePerformanceTest extends TestCase
         $task = DailyPackingTask::factory()->create(['user_id' => $user->id]);
         $boxes = PackingBox::factory(200)->create(['daily_packing_task_id' => $task->id]);
 
-        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray());
+        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray(), 'validate');
         $job->handle();
 
         $finalMemory = memory_get_usage(true);
@@ -126,7 +126,7 @@ class QueuePerformanceTest extends TestCase
         $jobs = [];
         for ($i = 0; $i < 5; $i++) {
             $batchBoxes = $boxes->slice($i * 20, 20);
-            $jobs[] = new BulkBoxProcessingJob($batchBoxes->pluck('id')->toArray());
+            $jobs[] = new BulkBoxProcessingJob($batchBoxes->pluck('id')->toArray(), 'validate');
         }
 
         // Process jobs sequentially (simulating worker processing)
@@ -149,7 +149,7 @@ class QueuePerformanceTest extends TestCase
 
         try {
             // Create job with invalid data to trigger failure
-            $job = new BulkBoxProcessingJob([999999]); // Non-existent ID
+            $job = new BulkBoxProcessingJob([999999], 'validate'); // Non-existent ID
             $job->handle();
         } catch (\Exception $e) {
             // Expected failure
@@ -172,7 +172,7 @@ class QueuePerformanceTest extends TestCase
 
         for ($i = 0; $i < 20; $i++) {
             $boxes = PackingBox::factory(10)->create(['daily_packing_task_id' => $task->id]);
-            BulkBoxProcessingJob::dispatch($boxes->pluck('id')->toArray());
+            BulkBoxProcessingJob::dispatch($boxes->pluck('id')->toArray(), 'validate');
         }
 
         $start = microtime(true);
@@ -202,7 +202,7 @@ class QueuePerformanceTest extends TestCase
         $start = microtime(true);
 
         // Simulate job with progress tracking
-        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray());
+        $job = new BulkBoxProcessingJob($boxes->pluck('id')->toArray(), 'validate');
 
         // Mock progress tracking calls
         for ($i = 0; $i < 10; $i++) {

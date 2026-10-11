@@ -12,7 +12,7 @@ class StatusPengirimanFactory extends Factory
     public function definition(): array
     {
         return [
-            'nama' => $this->faker->unique()->randomElement([
+            'nama' => $this->faker->randomElement([
                 'Pending', 'Processing', 'Shipped', 'Delivered', 'Completed',
             ]),
             'slug' => $this->faker->unique()->slug(),
