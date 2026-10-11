@@ -29,6 +29,14 @@ function managerUser(): User
     return $user;
 }
 
+function boxTrackingAdmin(): User
+{
+    $user = User::factory()->create(['is_active' => true]);
+    $user->assignRole(RoleEnum::SUPER_ADMIN->value);
+
+    return $user;
+}
+
 describe('Poin #4 — halaman Kelola Donatur dihilangkan untuk manager', function () {
     it('mencabut izin donatur dari role manager di seeder', function () {
         $manager = managerUser();
@@ -145,7 +153,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             'kapasitas' => 20,
         ]);
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
@@ -171,7 +179,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             'sealed_at' => now(),
         ]);
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
@@ -194,7 +202,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
         ]);
         $filling = makeBox(['status' => PackingBox::STATUS_FILLING, 'jumlah_terisi' => 3]);
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking?selesai_packing=1')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
@@ -219,7 +227,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
         QrCode::shouldReceive('format')
             ->andThrow(new RuntimeException('You need to install the imagick extension'));
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
@@ -238,7 +246,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
         makeBox(['status' => PackingBox::STATUS_SEALED, 'jenis_quran_id' => $jenisA5->id, 'jumlah_terisi' => 20, 'kapasitas' => 20]);
         makeBox(['status' => PackingBox::STATUS_FILLING, 'jenis_quran_id' => $jenisA5->id, 'jumlah_terisi' => 7, 'kapasitas' => 20]);
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(fn ($page) => $page
@@ -268,7 +276,7 @@ describe('Poin #5 — daftar Quran selesai packing + satuan', function () {
             'kapasitas' => 40,
         ]);
 
-        $this->actingAs(managerUser())
+        $this->actingAs(boxTrackingAdmin())
             ->get('/admin/box-tracking')
             ->assertSuccessful()
             ->assertInertia(function ($page) {

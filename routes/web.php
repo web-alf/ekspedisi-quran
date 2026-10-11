@@ -406,10 +406,10 @@ Route::middleware(['auth'])->group(function () {
                 ->name('preview');
 
             // Box Label Routes
-            Route::get('/box/{packingBox}', [ThermalPrintController::class, 'printBox'])
-                ->name('box');
             Route::get('/box/preview', [ThermalPrintController::class, 'previewBox'])
                 ->name('box.preview');
+            Route::get('/box/{packingBox}', [ThermalPrintController::class, 'printBox'])
+                ->name('box');
             Route::post('/box/bulk', [ThermalPrintController::class, 'printBoxBulk'])
                 ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
                 ->name('box.bulk');

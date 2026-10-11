@@ -36,6 +36,14 @@ function qrManager(): User
     return $user;
 }
 
+function qrBoxAdmin(): User
+{
+    $user = User::factory()->create(['is_active' => true]);
+    $user->assignRole(RoleEnum::SUPER_ADMIN->value);
+
+    return $user;
+}
+
 function kerdusDengan(array $pengirimanList): PackingBox
 {
     $task = DailyPackingTask::factory()->create([
@@ -84,7 +92,7 @@ it('mengirim QR tersendiri untuk tiap eks di dalam kerdus', function () {
 
     $box = kerdusDengan([$quran, $iqra]);
 
-    $props = $this->actingAs(qrManager())
+    $props = $this->actingAs(qrBoxAdmin())
         ->get(route('admin.box-tracking.show', $box))
         ->assertSuccessful()
         ->viewData('page')['props'];
@@ -110,7 +118,7 @@ it('menyertakan tautan tracking untuk tiap eks', function () {
 
     $box = kerdusDengan([$pengiriman]);
 
-    $props = $this->actingAs(qrManager())
+    $props = $this->actingAs(qrBoxAdmin())
         ->get(route('admin.box-tracking.show', $box))
         ->assertSuccessful()
         ->viewData('page')['props'];
@@ -150,7 +158,7 @@ it('tetap menampilkan halaman walau QR satu eks gagal dibuat', function () {
     QrCode::shouldReceive('format')
         ->andThrow(new RuntimeException('imagick tidak tersedia'));
 
-    $props = $this->actingAs(qrManager())
+    $props = $this->actingAs(qrBoxAdmin())
         ->get(route('admin.box-tracking.show', $box))
         ->assertSuccessful()
         ->viewData('page')['props'];
@@ -177,7 +185,7 @@ it('tetap cepat saat kerdus Iqra penuh 160 eks', function () {
 
     $mulai = microtime(true);
 
-    $props = $this->actingAs(qrManager())
+    $props = $this->actingAs(qrBoxAdmin())
         ->get(route('admin.box-tracking.show', $box))
         ->assertSuccessful()
         ->viewData('page')['props'];

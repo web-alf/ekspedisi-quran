@@ -6,6 +6,7 @@ use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
+use App\Models\PackingItem;
 use App\Models\Pengiriman;
 use App\Models\User;
 use App\Services\PackingAssignmentService;
@@ -137,10 +138,10 @@ class PackingConcurrencyTest extends TestCase
         $this->assertCount(1, $exceptions);
 
         // The exception should be about capacity
-        $this->assertStringContainsString('Tidak cukup ruang di kerdus', $exceptions[0]);
+        $this->assertStringContainsString('Kerdus sudah penuh', $exceptions[0]);
 
         // Box should be marked as full
-        $this->assertEquals('full', $box->status);
+        $this->assertEquals('sealed', $box->status);
     }
 
     /**
@@ -275,11 +276,11 @@ class PackingConcurrencyTest extends TestCase
         $taskItem->update(['is_packed' => true, 'packed_at' => now()]);
 
         // Try to process again - should be prevented by the already packed check
-        $alreadyPacked = \App\Models\PackingItem::where('pengiriman_id', $pengiriman->id)->exists();
+        $alreadyPacked = PackingItem::where('pengiriman_id', $pengiriman->id)->exists();
         $this->assertTrue($alreadyPacked);
 
         // Verify only one packing item exists
-        $this->assertEquals(1, \App\Models\PackingItem::where('pengiriman_id', $pengiriman->id)->count());
+        $this->assertEquals(1, PackingItem::where('pengiriman_id', $pengiriman->id)->count());
     }
 
     /**
