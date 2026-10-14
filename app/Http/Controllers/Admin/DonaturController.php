@@ -941,15 +941,6 @@ class DonaturController extends Controller
         $this->authorize('export', Donatur::class);
 
         try {
-            $filters = $request->only(['search', 'kode_donatur', 'start_date', 'end_date']);
-            $filename = 'donatur-'.now()->format('Y-m-d-H-i-s');
-
-            if (isset($filters['kode_donatur']) && $filters['kode_donatur']) {
-                $filename .= '-'.$filters['kode_donatur'];
-            }
-
-            if (isset($filters['start_date']) && $filters['start_date']) {
-                $filename .= '-from-'.$filters['start_date'];
             // Export 26.000+ donatur membuat file XLSX (zipstream) di memori;
             // limit bawaan fpm 128M tidak cukup → 500 dengan
             // "Allowed memory size exhausted" di zipstream-php. Naikkan hanya
@@ -959,6 +950,15 @@ class DonaturController extends Controller
                 ini_set('memory_limit', '512M');
             }
 
+            $filters = $request->only(['search', 'kode_donatur', 'start_date', 'end_date']);
+            $filename = 'donatur-'.now()->format('Y-m-d-H-i-s');
+
+            if (isset($filters['kode_donatur']) && $filters['kode_donatur']) {
+                $filename .= '-'.$filters['kode_donatur'];
+            }
+
+            if (isset($filters['start_date']) && $filters['start_date']) {
+                $filename .= '-from-'.$filters['start_date'];
             }
 
             if (isset($filters['end_date']) && $filters['end_date']) {
