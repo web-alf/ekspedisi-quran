@@ -1,6 +1,6 @@
 /.phpunit.cache
 /node_modules
-# /public/build
+/public/build
 /public/hot
 /public/storage
 /storage/*.key
@@ -9,6 +9,7 @@
 .env
 .env.backup
 .env.production
+.env.testing
 .phpactor.json
 .phpunit.result.cache
 docker-compose.override.yml
@@ -83,6 +84,8 @@ storage/logs/*.log
 # Struktur folder dijaga lewat .gitkeep.
 /storage/app/public/*
 !/storage/app/public/.gitkeep
+/storage/app/Users
+/storage/app/*.xlsx
 /storage/framework/cache/data/*
 /storage/framework/sessions/*
 /storage/framework/views/*
