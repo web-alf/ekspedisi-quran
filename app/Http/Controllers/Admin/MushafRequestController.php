@@ -286,6 +286,22 @@ class MushafRequestController extends Controller
         try {
             \DB::beginTransaction();
 
+            // Penjaga di atas membaca instance hasil route binding tanpa kunci; dua
+            // klik "Proses" (atau dua CS bersamaan) sama-sama lolos dan masing-masing
+            // membuat kiriman. Baris permintaan dikunci lalu dicek ulang di sini agar
+            // proses kedua menunggu, melihat `pengiriman_id` yang sudah terisi, dan ditolak.
+            $terkunci = MushafRequest::whereKey($mushafRequest->getKey())->lockForUpdate()->first();
+
+            if (! $terkunci || $terkunci->status !== 'approved' || $terkunci->pengiriman_id) {
+                \DB::rollBack();
+
+                return back()->withErrors([
+                    'error' => 'Permintaan ini baru saja diproses oleh pengguna lain. Muat ulang halaman untuk melihat kirimannya.',
+                ]);
+            }
+
+            $mushafRequest = $terkunci;
+
             // ✅ FIX: Pakai satu sumber angka (approved_breakdown) agar jumlah yang
             // masuk ke pengiriman sama dengan yang tampil di halaman detail/daftar.
             $approved = $mushafRequest->approved_breakdown;
@@ -320,7 +336,7 @@ class MushafRequestController extends Controller
 
             // Double-check setelah lock diperoleh: request lain mungkin sudah mengklaim
             // pengiriman ini dan mengisi alamat di sela-sela pemilihan baris tadi.
-            if ($pengiriman && ! empty($pengiriman->fresh(['alamat_tujuan', 'nama_penerima'])->alamat_tujuan)) {
+            if ($pengiriman && ! empty($pengiriman->fresh()->alamat_tujuan)) {
                 $pengiriman = null;
             }
 

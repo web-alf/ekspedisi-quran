@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\Admin\MushafRequestController;
 use App\Models\Donatur;
 use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\User;
 use Database\Seeders\JenisQuranSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -163,4 +165,113 @@ it('mengirim daftar donatur ke halaman detail untuk modal pemrosesan', function 
             ->component('Admin/MushafRequest/Show')
             ->has('donaturList', 3)
         );
+});
+
+/**
+ * Race condition: penjaga `status`/`pengiriman_id` di awal processToShipment
+ * membaca instance hasil route binding tanpa kunci. Dua klik "Proses" atau dua
+ * CS bersamaan sama-sama lolos, dan masing-masing membuat kiriman. Request
+ * kedua ditiru dengan memanggil controller memakai instance basi yang dimuat
+ * sebelum request pertama selesai.
+ */
+it('tidak membuat kiriman kedua saat permintaan diproses bersamaan', function () {
+    $mushafRequest = permintaanSiapProses();
+    $donatur = Donatur::factory()->create();
+    $basi = MushafRequest::find($mushafRequest->id);
+
+    $this->actingAs($this->admin)
+        ->post("/admin/mushaf-requests/{$mushafRequest->id}/process", [
+            'donatur_id' => $donatur->id,
+            'tanggal_wakaf' => now()->format('Y-m-d'),
+        ])
+        ->assertRedirect();
+
+    $kirimanPertama = $mushafRequest->fresh()->pengiriman_id;
+
+    $respons = app(MushafRequestController::class)->processToShipment(
+        Request::create('/', 'POST', [
+            'donatur_id' => $donatur->id,
+            'tanggal_wakaf' => now()->format('Y-m-d'),
+        ]),
+        $basi,
+    );
+
+    expect($respons->getSession()->get('errors')->first('error'))->toContain('baru saja diproses')
+        ->and(Pengiriman::count())->toBe(1)
+        ->and($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanPertama);
+});
+
+it('memakai kiriman kosong milik donatur alih-alih membuat kiriman baru', function () {
+    // Cabang ini dulu selalu gagal: `fresh(['alamat_tujuan', ...])` menganggap
+    // nama kolom sebagai nama relasi dan melempar RelationNotFoundException.
+    $mushafRequest = permintaanSiapProses();
+    $donatur = Donatur::factory()->create();
+    $kirimanKosong = Pengiriman::factory()->create([
+        'donatur_id' => $donatur->id,
+        'alamat_tujuan' => null,
+        'nama_penerima' => null,
+    ]);
+
+    $this->actingAs($this->admin)
+        ->post("/admin/mushaf-requests/{$mushafRequest->id}/process", [
+            'donatur_id' => $donatur->id,
+            'tanggal_wakaf' => now()->format('Y-m-d'),
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanKosong->id)
+        ->and(Pengiriman::count())->toBe(1)
+        ->and($kirimanKosong->fresh()->mushaf_request_id)->toBe($mushafRequest->id)
+        ->and($kirimanKosong->fresh()->alamat_tujuan)->toBe($mushafRequest->alamat_lengkap);
+});
+
+function beriIzinSetAlamatMassal(User $admin): void
+{
+    Permission::firstOrCreate(['name' => 'shipments.bulk-update']);
+    $admin->givePermissionTo('shipments.bulk-update');
+}
+
+it('menautkan permintaan ke kiriman lewat set alamat massal', function () {
+    beriIzinSetAlamatMassal($this->admin);
+    $mushafRequest = permintaanSiapProses();
+    $kiriman = Pengiriman::factory()->count(2)->create(['alamat_tujuan' => null]);
+
+    $this->actingAs($this->admin)
+        ->post(route('admin.pengiriman.bulk-alamat'), [
+            'pengiriman_ids' => $kiriman->pluck('id')->all(),
+            'alamat_tujuan' => 'Jl. Masjid No. 1',
+            'mushaf_request_id' => $mushafRequest->id,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $mushafRequest->refresh();
+
+    expect($mushafRequest->status)->toBe('processed')
+        ->and($mushafRequest->pengiriman_id)->toBe($kiriman->min('id'))
+        ->and(Pengiriman::where('mushaf_request_id', $mushafRequest->id)->count())->toBe(2);
+});
+
+it('menolak set alamat massal untuk permintaan yang sudah diproses dan tidak mengubah apa pun', function () {
+    // Kalau dua CS menautkan permintaan yang sama bersamaan, yang kedua melihat
+    // permintaan sudah diproses (setelah menunggu kunci) dan seluruh perubahannya
+    // dibatalkan — bukan menautkan set resi kedua ke permintaan yang sama.
+    beriIzinSetAlamatMassal($this->admin);
+    $mushafRequest = permintaanSiapProses();
+    $kirimanPertama = Pengiriman::factory()->create(['mushaf_request_id' => $mushafRequest->id]);
+    $mushafRequest->markAsProcessed($kirimanPertama->id, $this->admin->id);
+
+    $kirimanLain = Pengiriman::factory()->create(['alamat_tujuan' => 'Alamat lama']);
+
+    $this->actingAs($this->admin)
+        ->post(route('admin.pengiriman.bulk-alamat'), [
+            'pengiriman_ids' => [$kirimanLain->id],
+            'alamat_tujuan' => 'Alamat baru',
+            'mushaf_request_id' => $mushafRequest->id,
+        ])
+        ->assertSessionHasErrors('error');
+
+    expect($kirimanLain->fresh()->alamat_tujuan)->toBe('Alamat lama')
+        ->and($kirimanLain->fresh()->mushaf_request_id)->toBeNull()
+        ->and($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanPertama->id);
 });

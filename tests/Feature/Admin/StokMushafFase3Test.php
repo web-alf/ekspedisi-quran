@@ -314,3 +314,74 @@ it('memvalidasi bentuk permintaan entri dan transfer', function () {
         ->assertStatus(422)
         ->assertJsonValidationErrors('jumlah_eks');
 });
+
+/**
+ * Race condition: penjaga status dulu membaca instance hasil route binding di
+ * luar transaksi. Dua request bersamaan sama-sama membawa instance berstatus
+ * 'diproses', jadi keduanya lolos. Ujian di bawah meniru request kedua dengan
+ * instance basi yang dimuat SEBELUM request pertama selesai.
+ */
+it('tidak memindahkan stok dua kali saat transfer diterima bersamaan', function () {
+    $asal = stokGudang('SMG');
+    $tujuan = stokGudang('BTL');
+    $jenis = stokJenisA5();
+    stokIsiAwal($asal, $jenis, 200);
+
+    $layanan = app(StokMushafService::class);
+    $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 60, null, $manager);
+
+    $basi = TransferStok::find($dokumen->id);
+
+    $layanan->terimaTransfer($dokumen, $manager);
+
+    expect(fn () => $layanan->terimaTransfer($basi, $manager))
+        ->toThrow(Exception::class, 'sudah diterima');
+
+    expect(DB::table('stok_mushaf')->where('gudang_id', $asal->id)->value('jumlah_eks'))->toBe(140)
+        ->and(DB::table('stok_mushaf')->where('gudang_id', $tujuan->id)->value('jumlah_eks'))->toBe(60)
+        ->and(StokMushafPergerakan::where('transfer_id', $dokumen->id)->count())->toBe(2);
+});
+
+it('tidak membatalkan dokumen yang baru saja diterima', function () {
+    $asal = stokGudang('SMG');
+    $tujuan = stokGudang('BTL');
+    $jenis = stokJenisA5();
+    stokIsiAwal($asal, $jenis, 100);
+
+    $layanan = app(StokMushafService::class);
+    $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, null, $manager);
+
+    $basi = TransferStok::find($dokumen->id);
+
+    $layanan->terimaTransfer($dokumen, $manager);
+
+    expect(fn () => $layanan->batalkanTransfer($basi, $manager))
+        ->toThrow(Exception::class, 'masih "diproses"');
+
+    // Stok sudah pindah, jadi dokumennya harus tetap tercatat diterima.
+    expect($dokumen->fresh()->status)->toBe('diterima')
+        ->and(DB::table('stok_mushaf')->where('gudang_id', $tujuan->id)->value('jumlah_eks'))->toBe(40);
+});
+
+it('tidak menerima dokumen yang baru saja dibatalkan', function () {
+    $asal = stokGudang('SMG');
+    $tujuan = stokGudang('BTL');
+    $jenis = stokJenisA5();
+    stokIsiAwal($asal, $jenis, 100);
+
+    $layanan = app(StokMushafService::class);
+    $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, null, $manager);
+
+    $basi = TransferStok::find($dokumen->id);
+
+    $layanan->batalkanTransfer($dokumen, $manager);
+
+    expect(fn () => $layanan->terimaTransfer($basi, $manager))
+        ->toThrow(Exception::class, 'sudah dibatalkan');
+
+    expect(DB::table('stok_mushaf')->where('gudang_id', $asal->id)->value('jumlah_eks'))->toBe(100)
+        ->and(DB::table('stok_mushaf')->where('gudang_id', $tujuan->id)->value('jumlah_eks'))->toBeIn([null, 0]);
+});

@@ -652,32 +652,48 @@ class PengirimanController extends Controller
                 $request->user()
             )->whereIn('id', $request->pengiriman_ids)->pluck('id');
 
-            $updated = Pengiriman::whereIn('id', $visibleIds)
-                ->update([
-                    'alamat_tujuan' => $request->alamat_tujuan,
-                    'nama_penerima' => $request->nama_penerima,
-                    'no_hp_penerima' => $request->no_hp_penerima,
-                    'nama_lembaga' => $request->nama_lembaga,
-                ]);
+            // Satu transaksi: set alamat dan tautan permintaan berhasil atau gagal
+            // bersama. Dulu tanpa transaksi, sehingga kegagalan di tengah
+            // meninggalkan alamat terisi tanpa tautan permintaan.
+            $updated = \DB::transaction(function () use ($request, $visibleIds) {
+                $updated = Pengiriman::whereIn('id', $visibleIds)
+                    ->update([
+                        'alamat_tujuan' => $request->alamat_tujuan,
+                        'nama_penerima' => $request->nama_penerima,
+                        'no_hp_penerima' => $request->no_hp_penerima,
+                        'nama_lembaga' => $request->nama_lembaga,
+                    ]);
 
-            // Tautkan permintaan mushaf terpilih ke pengiriman yang baru di-set
-            // alamatnya. Tanpa tautan ini, `PengirimanObserver` tidak akan pernah
-            // menemukan permintaannya saat pengiriman berstatus 'diterima', sehingga
-            // permintaan tidak pernah selesai dan tidak muncul di peta distribusi.
-            if ($request->filled('mushaf_request_id')) {
-                $mushafRequest = MushafRequest::find($request->mushaf_request_id);
+                // Tautkan permintaan mushaf terpilih ke pengiriman yang baru di-set
+                // alamatnya. Tanpa tautan ini, `PengirimanObserver` tidak akan pernah
+                // menemukan permintaannya saat pengiriman berstatus 'diterima', sehingga
+                // permintaan tidak pernah selesai dan tidak muncul di peta distribusi.
+                if ($request->filled('mushaf_request_id')) {
+                    // Dikunci lalu dicek ulang: dua set alamat (atau set alamat dan
+                    // "Proses ke Pengiriman") untuk permintaan yang sama tidak boleh
+                    // sama-sama menautkan kirimannya.
+                    $mushafRequest = MushafRequest::whereKey($request->mushaf_request_id)
+                        ->lockForUpdate()
+                        ->first();
 
-                if ($mushafRequest && $mushafRequest->status === 'approved') {
-                    $pengirimanId = Pengiriman::whereIn('id', $request->pengiriman_ids)
-                        ->orderBy('id')
-                        ->value('id');
+                    if (! $mushafRequest || $mushafRequest->status !== 'approved' || $mushafRequest->pengiriman_id) {
+                        throw ValidationException::withMessages([
+                            'mushaf_request_id' => 'Permintaan mushaf ini sudah diproses atau belum disetujui. Muat ulang halaman lalu pilih permintaan lain.',
+                        ]);
+                    }
 
-                    Pengiriman::whereIn('id', $request->pengiriman_ids)
-                        ->update(['mushaf_request_id' => $mushafRequest->id]);
+                    $pengirimanId = $visibleIds->sort()->first();
 
-                    $mushafRequest->markAsProcessed($pengirimanId, auth()->id());
+                    if ($pengirimanId) {
+                        Pengiriman::whereIn('id', $visibleIds)
+                            ->update(['mushaf_request_id' => $mushafRequest->id]);
+
+                        $mushafRequest->markAsProcessed($pengirimanId, auth()->id());
+                    }
                 }
-            }
+
+                return $updated;
+            });
 
             return back()->with('success', "{$updated} pengiriman berhasil diset alamat tujuannya.");
 
@@ -1293,6 +1309,8 @@ class PengirimanController extends Controller
             ];
         }
 
+        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
+
         // If old status is final, it cannot be changed
         if ($currentStatus->is_final && $currentStatus->slug !== 'batal') {
             return [
@@ -1301,24 +1319,6 @@ class PengirimanController extends Controller
             ];
         }
 
-        // SPECIAL CASE: Allow 'Diterima' from 'Pengiriman' or 'Dokumentasi'
-        if ($newStatus->slug === 'diterima' &&
-            in_array($currentStatus->slug, ['pengiriman', 'selesai-packing'])) {
-            return [
-                'valid' => true,
-                'message' => 'Perubahan ke status diterima valid dari pengiriman/dokumentasi',
-            ];
-        }
-        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
-
-
-        // Normal progression check - don't allow backwards (except special cases above)
-        if ($newStatus->urutan < $currentStatus->urutan && $newStatus->slug !== 'batal') {
-            return [
-                'valid' => false,
-                'message' => 'Tidak dapat mengubah status ke tahap sebelumnya',
-            ];
-        }
         // Rombakan tahap gudang (2026-10-13): maju dan MUNDUR di dalam tahap
         // gudang dibebaskan — inilah yang membuat tombol update kembali
         // berfungsi untuk resi yang sudah "Proses Packing"/"Selesai Packing".
@@ -1332,6 +1332,22 @@ class PengirimanController extends Controller
             ];
         }
 
+        // SPECIAL CASE: Allow 'Diterima' from 'Pengiriman' or 'Dokumentasi'
+        if ($newStatus->slug === 'diterima' &&
+            in_array($currentStatus->slug, ['pengiriman', 'selesai-packing'])) {
+            return [
+                'valid' => true,
+                'message' => 'Perubahan ke status diterima valid dari pengiriman/dokumentasi',
+            ];
+        }
+
+        // Normal progression check - don't allow backwards (except special cases above)
+        if ($newStatus->urutan < $currentStatus->urutan && $newStatus->slug !== 'batal') {
+            return [
+                'valid' => false,
+                'message' => 'Tidak dapat mengubah status ke tahap sebelumnya',
+            ];
+        }
 
         return [
             'valid' => true,

@@ -100,43 +100,67 @@ class StokMushafService
 
     public function terimaTransfer(TransferStok $transfer, User $pelaku): void
     {
-        if ($transfer->status !== 'diproses') {
-            throw new \Exception('Dokumen transfer ini sudah '.($transfer->status === 'diterima' ? 'diterima' : 'dibatalkan').'.');
-        }
-
         DB::transaction(function () use ($transfer, $pelaku) {
-            $asal = $this->kunciStok($transfer->gudang_asal_id, $transfer->jenis_quran_id);
+            // Status dicek ulang pada baris yang DIKUNCI, bukan pada instance hasil
+            // route binding: dua klik "Terima" (atau SPV dan Manager bersamaan)
+            // sama-sama membawa instance berstatus 'diproses', sehingga tanpa ini
+            // stok berpindah dua kali.
+            $terkunci = $this->kunciTransferDiproses($transfer, fn (string $status) => 'Dokumen transfer ini sudah '.($status === 'diterima' ? 'diterima' : 'dibatalkan').'.');
 
-            if ($asal->jumlah_eks < $transfer->jumlah_eks) {
+            $asal = $this->kunciStok($terkunci->gudang_asal_id, $terkunci->jenis_quran_id);
+
+            if ($asal->jumlah_eks < $terkunci->jumlah_eks) {
                 throw new \Exception('Stok di gudang asal sudah makin berkurang; transfer tidak bisa diterima sebesar itu.');
             }
 
-            $asal->decrement('jumlah_eks', $transfer->jumlah_eks);
-            $tujuan = $this->kunciStok($transfer->gudang_tujuan_id, $transfer->jenis_quran_id);
-            $tujuan->increment('jumlah_eks', $transfer->jumlah_eks);
+            $asal->decrement('jumlah_eks', $terkunci->jumlah_eks);
+            $tujuan = $this->kunciStok($terkunci->gudang_tujuan_id, $terkunci->jenis_quran_id);
+            $tujuan->increment('jumlah_eks', $terkunci->jumlah_eks);
 
-            $this->catatPergerakan($transfer->gudang_asal_id, $transfer->jenis_quran_id, 'transfer_keluar', $transfer->jumlah_eks, 'Transfer '.$transfer->kode, $pelaku, $transfer->id);
-            $this->catatPergerakan($transfer->gudang_tujuan_id, $transfer->jenis_quran_id, 'transfer_masuk', $transfer->jumlah_eks, 'Transfer '.$transfer->kode, $pelaku, $transfer->id);
+            $this->catatPergerakan($terkunci->gudang_asal_id, $terkunci->jenis_quran_id, 'transfer_keluar', $terkunci->jumlah_eks, 'Transfer '.$terkunci->kode, $pelaku, $terkunci->id);
+            $this->catatPergerakan($terkunci->gudang_tujuan_id, $terkunci->jenis_quran_id, 'transfer_masuk', $terkunci->jumlah_eks, 'Transfer '.$terkunci->kode, $pelaku, $terkunci->id);
 
-            $transfer->update([
+            $terkunci->update([
                 'status' => 'diterima',
                 'approved_by' => $pelaku->id,
                 'approved_at' => now(),
             ]);
         });
+
+        $transfer->refresh();
     }
 
     public function batalkanTransfer(TransferStok $transfer, User $pelaku): void
     {
-        if ($transfer->status !== 'diproses') {
-            throw new \Exception('Hanya dokumen yang masih "diproses" yang bisa dibatalkan.');
+        DB::transaction(function () use ($transfer, $pelaku) {
+            // Dikunci agar pembatalan tidak menimpa dokumen yang baru saja diterima
+            // (stok sudah pindah tetapi dokumen tercatat "dibatalkan").
+            $terkunci = $this->kunciTransferDiproses($transfer, fn () => 'Hanya dokumen yang masih "diproses" yang bisa dibatalkan.');
+
+            $terkunci->update([
+                'status' => 'dibatalkan',
+                'approved_by' => $pelaku->id,
+                'approved_at' => now(),
+            ]);
+        });
+
+        $transfer->refresh();
+    }
+
+    /**
+     * Ambil ulang dokumen transfer dengan kunci baris dan pastikan masih 'diproses'.
+     *
+     * @param  \Closure(string): string  $pesanGagal
+     */
+    private function kunciTransferDiproses(TransferStok $transfer, \Closure $pesanGagal): TransferStok
+    {
+        $terkunci = TransferStok::whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
+
+        if ($terkunci->status !== 'diproses') {
+            throw new \Exception($pesanGagal($terkunci->status));
         }
 
-        $transfer->update([
-            'status' => 'dibatalkan',
-            'approved_by' => $pelaku->id,
-            'approved_at' => now(),
-        ]);
+        return $terkunci;
     }
 
     private function kunciStok(int $gudangId, int $jenisId): StokMushaf

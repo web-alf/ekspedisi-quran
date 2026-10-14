@@ -137,6 +137,9 @@ class BulkItemAssignmentJob implements ShouldQueue
                 $pengiriman = Pengiriman::with(['jenisQuran'])->find($pengirimanId);
 
                 if (! $pengiriman) {
+                    // Tanpa rollBack, transaksi ini bocor di queue worker dan semua
+                    // item berikutnya hanya menjadi savepoint yang tak pernah ter-commit.
+                    DB::rollBack();
                     $results['errors'][] = "Pengiriman ID {$pengirimanId} tidak ditemukan";
                     $results['items_failed']++;
 

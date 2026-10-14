@@ -180,6 +180,14 @@ class BulkStatusUpdateJob implements ShouldQueue
         ];
 
         foreach ($boxIds as $boxId) {
+            // Direset per kerdus agar hitungan gagal di blok catch tidak memakai
+            // daftar resi milik kerdus sebelumnya.
+            $pengirimanIds = [];
+
+            // Setiap `continue` di dalam blok ini WAJIB didahului rollBack: queue
+            // worker berumur panjang dan tidak menutup transaksi yang bocor, sehingga
+            // seluruh kerdus berikutnya hanya menjadi savepoint yang tak pernah
+            // ter-commit sementara kunci barisnya terus tertahan.
             DB::beginTransaction();
             try {
                 $box = PackingBox::with('packingItems.pengiriman.status')->find($boxId);
@@ -187,6 +195,7 @@ class BulkStatusUpdateJob implements ShouldQueue
                 if (! $box) {
                     $results['errors'][] = "Box ID {$boxId} tidak ditemukan";
 
+                    DB::rollBack();
                     continue;
                 }
 
@@ -196,6 +205,7 @@ class BulkStatusUpdateJob implements ShouldQueue
                 if (empty($pengirimanIds)) {
                     $results['errors'][] = "Box {$box->kode_kerdus} tidak memiliki item";
 
+                    DB::rollBack();
                     continue;
                 }
 
