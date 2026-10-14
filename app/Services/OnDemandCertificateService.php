@@ -264,9 +264,10 @@ class OnDemandCertificateService
             $templateId = $defaultTemplate ? $defaultTemplate->id : null;
         }
 
-        // Create new certificate record without file_path
-        return Sertifikat::create([
-            'wakaf_batch_id' => $wakafBatch->id,
+        // firstOrCreate, bukan create: dua permintaan bersamaan (klik ganda, atau
+        // jalur sinkron dan job) sama-sama lolos cek di atas. Unique index
+        // sertifikat.wakaf_batch_id membuat yang kedua mengambil record pertama.
+        return Sertifikat::firstOrCreate(['wakaf_batch_id' => $wakafBatch->id], [
             'template_id' => $templateId,
             'template_used' => $templateId ? CertificateTemplate::find($templateId)->slug : 'default',
             'generated_by' => auth()->id() ?? User::query()->value('id'),

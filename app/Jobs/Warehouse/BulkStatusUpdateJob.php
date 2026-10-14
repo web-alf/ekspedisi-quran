@@ -190,12 +190,14 @@ class BulkStatusUpdateJob implements ShouldQueue
             // ter-commit sementara kunci barisnya terus tertahan.
             DB::beginTransaction();
             try {
-                $box = PackingBox::with('packingItems.pengiriman.status')->find($boxId);
+                // Kunci kerdus lalu resinya, sama seperti BoxScannerController::updateStatus.
+                $box = PackingBox::lockForUpdate()->find($boxId);
+                $box?->load('packingItems');
 
                 if (! $box) {
+                    DB::rollBack();
                     $results['errors'][] = "Box ID {$boxId} tidak ditemukan";
 
-                    DB::rollBack();
                     continue;
                 }
 
@@ -203,17 +205,18 @@ class BulkStatusUpdateJob implements ShouldQueue
                 $pengirimanIds = $pengirimanItems->pluck('pengiriman_id')->toArray();
 
                 if (empty($pengirimanIds)) {
+                    DB::rollBack();
                     $results['errors'][] = "Box {$box->kode_kerdus} tidak memiliki item";
 
-                    DB::rollBack();
                     continue;
                 }
 
-                // Store old statuses for history
-                $oldStatuses = [];
-                foreach ($pengirimanItems as $item) {
-                    $oldStatuses[$item->pengiriman_id] = $item->pengiriman->status_id;
-                }
+                // Store old statuses for history (dibaca dari baris yang dikunci)
+                $oldStatuses = Pengiriman::whereIn('id', $pengirimanIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->pluck('status_id', 'id')
+                    ->all();
 
                 // Prepare update data
                 $updateData = ['status_id' => $this->newStatusId];

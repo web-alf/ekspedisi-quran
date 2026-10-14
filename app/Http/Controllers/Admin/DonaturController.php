@@ -183,7 +183,12 @@ class DonaturController extends Controller
             DB::beginTransaction();
 
             // Find existing donatur or create new one
-            $donatur = Donatur::where('kode_donatur', $request->kode_donatur)->first();
+            //
+            // Dikunci: dua donasi bersamaan untuk kode donatur yang sama dulu sama-sama
+            // membaca total lama, lalu yang menulis belakangan menghapus tambahan yang
+            // lain. Kunci ini juga membuat nomor urut item (max sequence) dibaca
+            // setelah donasi pertama ter-commit.
+            $donatur = Donatur::where('kode_donatur', $request->kode_donatur)->lockForUpdate()->first();
 
             // Calculate quantities based on mode
             $currentA5 = 0;
@@ -844,6 +849,10 @@ class DonaturController extends Controller
 
             // Get JenisQuran for validation and type detection
             $jenisQuran = JenisQuran::findOrFail($request->jenis_quran_id);
+
+            // Dikunci sebelum menghitung batch milik donatur: dua tambah-Quran
+            // bersamaan dulu menghasilkan batch_code yang sama.
+            Donatur::whereKey($donatur->id)->lockForUpdate()->first();
 
             // Create new wakaf batch
             $wakafBatch = WakafBatch::create([

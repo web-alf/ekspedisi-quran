@@ -52,6 +52,7 @@ class CreateMissingWakafBatches extends Command
 
                 if ($totalItems == 0) {
                     $this->warn("  No wakif items found for donatur: {$donatur->nama_donatur}");
+
                     continue;
                 }
 
@@ -62,14 +63,14 @@ class CreateMissingWakafBatches extends Command
                 $jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first();
 
                 if (! $jenisQuran) {
-                    $this->warn("JenisQuran not found for type: A5");
+                    $this->warn('JenisQuran not found for type: A5');
+
                     continue;
                 }
 
                 // Generate unique batch code
-                $lastBatch = WakafBatch::orderBy('id', 'desc')->first();
-                $nextNumber = $lastBatch ? $lastBatch->id + 1 : 1;
-                $batchCode = 'WB-'.date('Y').'-'.str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+
+                $batchCode = WakafBatch::buatBatchCodeTahunan();
 
                 // Create ONE consolidated WakafBatch per donatur
                 $wakafBatch = WakafBatch::create([
@@ -80,7 +81,7 @@ class CreateMissingWakafBatches extends Command
                     'tanggal_wakaf' => $donatur->donation_date ?? now(),
                     'status' => 'ready',
                     'created_by' => 1, // System user
-                    'catatan' => "Consolidated batch for wakif names: " . $uniqueWakifNames->implode(', '),
+                    'catatan' => 'Consolidated batch for wakif names: '.$uniqueWakifNames->implode(', '),
                 ]);
 
                 // Update wakaf items with the batch ID (if wakaf_items has wakaf_batch_id column)
@@ -93,7 +94,7 @@ class CreateMissingWakafBatches extends Command
                         ->update(['wakaf_batch_id' => $wakafBatch->id]);
                 }
 
-                $this->info("  Created consolidated batch: {$batchCode} with {$totalItems} items for wakif names: " . $uniqueWakifNames->implode(', '));
+                $this->info("  Created consolidated batch: {$batchCode} with {$totalItems} items for wakif names: ".$uniqueWakifNames->implode(', '));
                 $batchesCreated++;
             }
 
@@ -184,9 +185,7 @@ class CreateMissingWakafBatches extends Command
 
                 // Create one consolidated batch
                 $jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first();
-                $lastBatch = WakafBatch::orderBy('id', 'desc')->first();
-                $nextNumber = $lastBatch ? $lastBatch->id + 1 : 1;
-                $batchCode = 'WB-'.date('Y').'-'.str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+                $batchCode = WakafBatch::buatBatchCodeTahunan();
 
                 $consolidatedBatch = WakafBatch::create([
                     'batch_code' => $batchCode,
@@ -196,7 +195,7 @@ class CreateMissingWakafBatches extends Command
                     'tanggal_wakaf' => $donatur->donation_date ?? now(),
                     'status' => 'pending_distribution',
                     'created_by' => 1,
-                    'catatan' => "Consolidated batch for wakif names: " . $uniqueWakifNames->implode(', '),
+                    'catatan' => 'Consolidated batch for wakif names: '.$uniqueWakifNames->implode(', '),
                 ]);
 
                 // Update wakaf items to point to the new consolidated batch
@@ -207,7 +206,7 @@ class CreateMissingWakafBatches extends Command
                         ->update(['wakaf_batch_id' => $consolidatedBatch->id]);
                 }
 
-                $this->info("    Consolidated into batch: {$batchCode} with {$totalMushaf} items for wakif names: " . $uniqueWakifNames->implode(', '));
+                $this->info("    Consolidated into batch: {$batchCode} with {$totalMushaf} items for wakif names: ".$uniqueWakifNames->implode(', '));
                 $consolidatedCount++;
             }
         }

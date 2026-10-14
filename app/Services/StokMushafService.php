@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Gudang;
 use App\Models\JenisQuran;
+use App\Models\KodeSequence;
 use App\Models\StokMushaf;
 use App\Models\StokMushafPergerakan;
 use App\Models\TransferStok;
@@ -185,11 +186,18 @@ class StokMushafService
         ]);
     }
 
+    /**
+     * Kode TS-YYYYMMDD-NNN dari KodeSequence yang dikunci. Dulu `count() + 1`:
+     * dua transfer dari gudang asal berbeda pada saat bersamaan mendapat kode
+     * sama dan salah satunya gagal kena unique index.
+     */
     private function kodeBaru(): string
     {
-        $urutan = TransferStok::whereDate('created_at', today())->count() + 1;
+        $prefix = 'TS-'.today()->format('Ymd').'-';
 
-        return 'TS-'.today()->format('Ymd').'-'.str_pad((string) $urutan, 3, '0', STR_PAD_LEFT);
+        $urutan = KodeSequence::berikutnya($prefix, fn () => TransferStok::whereDate('created_at', today())->count());
+
+        return $prefix.str_pad((string) $urutan, 3, '0', STR_PAD_LEFT);
     }
 
     private function jumlahBulan(int $jumlah): int

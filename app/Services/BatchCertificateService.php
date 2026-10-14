@@ -12,6 +12,7 @@ use App\Models\WakafBatch;
 use App\Models\WakafItem;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BatchCertificateService
@@ -307,7 +308,19 @@ class BatchCertificateService
             ->get();
 
         foreach ($donatursNeedingBatches as $donatur) {
-            $this->createMissingBatchesForDonatur($donatur);
+            // Jalur cepat tanpa kunci untuk donatur yang jelas sudah punya batch.
+            if ($donatur->wakafBatches()->exists()) {
+                continue;
+            }
+
+            // Dikunci per donatur: dua admin yang membuka halaman ini bersamaan
+            // sama-sama melihat "belum punya batch" dan masing-masing membuatnya.
+            // Dengan kunci, yang kedua menunggu lalu melihat batch yang sudah ada.
+            DB::transaction(function () use ($donatur) {
+                Donatur::whereKey($donatur->id)->lockForUpdate()->first();
+
+                $this->createMissingBatchesForDonatur($donatur);
+            });
         }
     }
 
@@ -363,7 +376,7 @@ class BatchCertificateService
      */
     private function createWakafBatch($donatur, $jenisQuran, $totalQuran, $sequence)
     {
-        $batchCode = 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT);
+        $batchCode = WakafBatch::buatBatchCodeTahunan();
 
         return WakafBatch::create([
             'batch_code' => $batchCode,

@@ -242,6 +242,18 @@ class PackingBox extends Model
     public function seal()
     {
         return DB::transaction(function () {
+            // Status dicek pada baris yang DIKUNCI, bukan instance di memori: auto-seal
+            // saat kerdus penuh bisa bersamaan dengan klik "Segel". Tanpa ini, yang
+            // kedua menimpa seal_code yang sudah tercetak di label dan mengaktifkan
+            // kerdus berikutnya dua kali.
+            $terkunci = static::whereKey($this->getKey())->lockForUpdate()->first();
+
+            if (! $terkunci) {
+                return;
+            }
+
+            $this->setRawAttributes($terkunci->getAttributes(), true);
+
             if ($this->is_sealed) {
                 return;
             }
@@ -290,9 +302,11 @@ class PackingBox extends Model
             ->unique()
             ->values();
 
-        foreach ($pengirimanIds as $pengirimanId) {
-            Pengiriman::whereKey($pengirimanId)->update(['status_id' => $readyStatusId]);
-        }
+        // Syarat status asal diulang di UPDATE: resi yang di sela-sela pembacaan tadi
+        // sudah dimajukan proses lain (mis. ke 'pengiriman') tidak boleh mundur.
+        Pengiriman::whereIn('id', $pengirimanIds)
+            ->where('status_id', $packingStatusId)
+            ->update(['status_id' => $readyStatusId]);
     }
 
     /**

@@ -170,13 +170,13 @@ class ConsolidatedCertificateService
             $templateId = $defaultTemplate ? $defaultTemplate->id : null;
         }
 
-        // Create new consolidated certificate record
-        return Sertifikat::create([
-            'donatur_id' => $donatur->id,
+        // firstOrCreate, bukan create: scheduler wakaf:tutup-pengiriman dan admin
+        // bisa membuat sertifikat donatur yang sama bersamaan. Unique index
+        // donatur_konsolidasi_id membuat yang kedua mengambil record pertama.
+        return Sertifikat::firstOrCreate(['donatur_id' => $donatur->id, 'is_consolidated' => true], [
             'wakaf_batch_id' => null, // No specific batch - this covers all
             'template_id' => $templateId,
             'template_used' => $templateId ? CertificateTemplate::find($templateId)->slug : 'default',
-            'is_consolidated' => true,
             'generated_by' => auth()->id() ?? User::query()->value('id'),
             'generated_at' => now(),
         ]);

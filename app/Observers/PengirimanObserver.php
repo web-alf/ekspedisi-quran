@@ -20,7 +20,7 @@ class PengirimanObserver
         // Check if status was changed and pengiriman belongs to a wakaf batch
         if ($pengiriman->isDirty('status_id') && $pengiriman->wakaf_batch_id) {
             // Auto-update the wakaf batch status
-            $pengiriman->wakafBatch->updateStatus();
+            $pengiriman->wakafBatch?->hitungUlangStatusSetelahCommit();
         }
 
         // Selesaikan permintaan mushaf begitu pengiriman sampai tujuan.
@@ -37,7 +37,7 @@ class PengirimanObserver
     {
         // When new pengiriman is created for a batch, update batch status
         if ($pengiriman->wakaf_batch_id) {
-            $pengiriman->wakafBatch->updateStatus();
+            $pengiriman->wakafBatch?->hitungUlangStatusSetelahCommit();
         }
     }
 
@@ -48,7 +48,7 @@ class PengirimanObserver
     {
         // When pengiriman is deleted from a batch, update batch status
         if ($pengiriman->wakaf_batch_id) {
-            $pengiriman->wakafBatch->updateStatus();
+            $pengiriman->wakafBatch?->hitungUlangStatusSetelahCommit();
         }
     }
 

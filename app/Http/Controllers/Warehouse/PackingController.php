@@ -267,9 +267,18 @@ class PackingController extends Controller
         $maxRetries = 3;
         $baseDelay = 100; // Base delay in milliseconds
 
+        // Diisi bila scan gagal SETELAH resi di-assign ke staf. Kegagalan itu harus
+        // membatalkan transaksi (lewat exception), bukan mengembalikan respons
+        // biasa: kalau tidak, task item ikut ter-commit dan resi terkunci ke staf
+        // ini selamanya tanpa pernah masuk kerdus. Log scan-nya ditulis setelah
+        // rollback supaya tetap tersimpan.
+        $gagalSetelahAssign = null;
+
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            $gagalSetelahAssign = null;
+
             try {
-                return DB::transaction(function () use ($request, $startTime) {
+                return DB::transaction(function () use ($request, $startTime, &$gagalSetelahAssign) {
                     // Use default DB isolation level; rely on explicit row locking
 
                     // Sanitize input
@@ -358,13 +367,15 @@ class PackingController extends Controller
                     $box = $this->getSmartBoxSelection($todayTask, $pengiriman, auth()->id());
 
                     if (! $box) {
-                        return $this->scanFailed(
+                        $gagalSetelahAssign = [
                             'box_selection_failed',
                             "❌ GAGAL MENDAPATKAN KERDUS!\n\nTidak dapat menemukan atau membuat kerdus untuk jenis: {$pengiriman->jenisQuran->nama_jenis}\n\nSilakan hubungi supervisor.",
                             $sanitizedQrData,
                             $noResi,
                             $todayTask->id,
-                        );
+                        ];
+
+                        throw new \RuntimeException('Scan dibatalkan: kerdus tidak didapat.');
                     }
 
                     // Add item to box with enhanced safety checks
@@ -379,7 +390,9 @@ class PackingController extends Controller
                             'message' => $e->getMessage(),
                         ]);
 
-                        return $this->scanFailed('box_add_error', $e->getMessage(), $sanitizedQrData, $noResi, $todayTask->id, $box->id);
+                        $gagalSetelahAssign = ['box_add_error', $e->getMessage(), $sanitizedQrData, $noResi, $todayTask->id, $box->id];
+
+                        throw new \RuntimeException('Scan dibatalkan: gagal menambah ke kerdus.');
                     }
 
                     // Mark task item as packed
@@ -468,6 +481,16 @@ class PackingController extends Controller
                 // Not a retryable error or max retries reached
                 throw $e;
             } catch (\Exception $e) {
+                if ($gagalSetelahAssign !== null) {
+                    // Kerdus yang baru dibuat di transaksi tadi ikut di-rollback; merujuk
+                    // id-nya membuat log gagal kena foreign key dan hilang diam-diam.
+                    if (isset($gagalSetelahAssign[5]) && ! PackingBox::whereKey($gagalSetelahAssign[5])->exists()) {
+                        $gagalSetelahAssign[5] = null;
+                    }
+
+                    return $this->scanFailed(...$gagalSetelahAssign);
+                }
+
                 // Non-database errors should not be retried
                 Log::error('Non-retryable packing scan error', [
                     'user_id' => auth()->id(),
@@ -533,14 +556,27 @@ class PackingController extends Controller
             );
         }
 
+        $pengiriman = null;
+        $todayTask = null;
+        $box = null;
+
         DB::beginTransaction();
         try {
-            $pengiriman = Pengiriman::with('jenisQuran')->find($request->pengiriman_id);
+            // Kunci resi dan tugas dengan urutan yang sama seperti scanItem (resi dulu,
+            // lalu tugas) agar tidak deadlock. Tanpa kunci, klik "Lanjut" ganda atau
+            // scan dari perangkat lain sama-sama lolos sampai insert dan yang kedua
+            // gagal dengan error SQL, atau dua kerdus 'filling' terbuat untuk satu jenis.
+            $pengiriman = Pengiriman::with('jenisQuran')->lockForUpdate()->find($request->pengiriman_id);
+
+            if (PackingItem::where('pengiriman_id', $pengiriman->id)->exists()) {
+                throw new \Exception('Item sudah dipacking sebelumnya');
+            }
 
             // Get today's task
             $todayTask = DailyPackingTask::where('user_id', auth()->id())
                 ->whereDate('tanggal_tugas', today())
                 ->where('status', '!=', DailyPackingTask::STATUS_EXPIRED)
+                ->lockForUpdate()
                 ->first();
 
             if (! $todayTask) {
@@ -571,7 +607,7 @@ class PackingController extends Controller
             }
 
             // Add item to box
-            $packingItem = $box->addItem($pengiriman, auth()->id());
+            $packingItem = $box->addItemSafe($pengiriman, auth()->id());
 
             // Mark task item as packed
             $taskItem->update([
@@ -729,10 +765,11 @@ class PackingController extends Controller
                 ], 400);
             }
 
-            // Update box jumlah_terisi to reflect actual shared contributions
-            $box->update(['jumlah_terisi' => $totalItems]);
-
-            // Seal the box
+            // `jumlah_terisi` TIDAK lagi ditimpa dengan jumlah alokasi: angka itu
+            // dibaca tanpa kunci, sehingga scan yang commit di sela-selanya hilang dari
+            // hitungan (kerdus berisi 19 tetapi tercatat 18). `addItemSafe` sudah
+            // menaikkannya secara atomik di bawah kunci kerdus. Status dicek ulang di
+            // dalam seal() pada baris yang dikunci.
             $box->seal();
 
             // Create sealing notifications for all contributors

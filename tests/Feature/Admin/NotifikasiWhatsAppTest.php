@@ -9,6 +9,7 @@ use App\Services\WhatsApp\WhatsAppNotifier;
 use App\Services\WhatsApp\WhatsAppRateLimiter;
 use App\Services\WhatsApp\WhatsAppTemplateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -294,6 +295,35 @@ it('berhenti mengizinkan kirim setelah batas per menit terlampaui', function () 
     expect($pembatas->bolehKirim(2))->toBeTrue();
     $pembatas->hitungKirim();
     expect($pembatas->bolehKirim(2))->toBeFalse();
+});
+
+it('memesan slot kirim secara atomik sehingga worker ketiga tidak ikut mengirim', function () {
+    // Dulu: cek bolehKirim, kirim, lalu hitungKirim (get lalu put). N worker yang
+    // lolos cek bersamaan semuanya mengirim dan hitungannya hanya naik satu.
+    Cache::flush();
+    $pembatas = app(WhatsAppRateLimiter::class);
+
+    expect($pembatas->ambilSlot(2))->toBeTrue()
+        ->and($pembatas->ambilSlot(2))->toBeTrue()
+        ->and($pembatas->ambilSlot(2))->toBeFalse()
+        ->and($pembatas->bolehKirim(2))->toBeFalse();
+});
+
+it('tidak membatasi bila batas per menit tidak diatur', function () {
+    Cache::flush();
+
+    expect(app(WhatsAppRateLimiter::class)->ambilSlot(0))->toBeTrue();
+});
+
+it('mencegah dua worker memproses notifikasi yang sama bersamaan', function () {
+    // Command kirim-tertunda dan tombol "Kirim ulang" bisa mengantrekan job kedua
+    // untuk notifikasi yang sama selagi job pertama masih jalan.
+    $middleware = (new KirimWhatsAppJob(42))->middleware();
+
+    expect($middleware)->toHaveCount(1)
+        ->and($middleware[0])->toBeInstanceOf(WithoutOverlapping::class)
+        ->and($middleware[0]->key)->toBe('42')
+        ->and($middleware[0]->releaseAfter)->toBe(30);
 });
 
 // ---------------------------------------------------------------------------

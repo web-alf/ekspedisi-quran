@@ -10,6 +10,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -34,6 +35,26 @@ class KirimWhatsAppJob implements ShouldQueue
     public int $tries = 5;
 
     public function __construct(public readonly int $notificationId) {}
+
+    /**
+     * Satu notifikasi hanya boleh diproses satu worker pada satu waktu.
+     *
+     * Command `whatsapp:kirim-tertunda` dan tombol "Kirim ulang" bisa
+     * mengantrekan job kedua untuk notifikasi yang sama selagi job pertama masih
+     * berjalan. Keduanya sama-sama melihat status belum 'terkirim' dan donatur
+     * menerima dua pesan. Dengan kunci ini job kedua menunggu, lalu penjaga
+     * `sudahSelesai()` di handle() menghentikannya.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping((string) $this->notificationId))
+                ->releaseAfter(30)
+                ->expireAfter(180),
+        ];
+    }
 
     public function handle(WhatsAppRateLimiter $pembatasLaju): void
     {
@@ -62,7 +83,7 @@ class KirimWhatsAppJob implements ShouldQueue
 
         // Batas laju: kembalikan ke antrean, bukan gagalkan. Ini satu-satunya
         // alasan yang pantas diulang otomatis.
-        if (! $pembatasLaju->bolehKirim((int) $setting->max_per_minute)) {
+        if (! $pembatasLaju->ambilSlot((int) $setting->max_per_minute)) {
             $this->release(30);
 
             return;
@@ -82,8 +103,6 @@ class KirimWhatsAppJob implements ShouldQueue
 
             return;
         }
-
-        $pembatasLaju->hitungKirim();
 
         if ($hasil['sukses']) {
             $notifikasi->tandaiTerkirim($hasil['mentah']);

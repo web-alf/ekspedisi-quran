@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\OnDemandCertificateService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
 
 class Sertifikat extends Model
 {
@@ -60,24 +59,25 @@ class Sertifikat extends Model
 
     /**
      * Generate nomor sertifikat unik dengan format CERT-EQ-YYYY-XXXXX
+     *
+     * Nomor diambil dari KodeSequence yang dikunci. Pola lama (ambil nomor
+     * terakhir lalu +1) memberi nomor sama ke dua proses bersamaan, dan salah
+     * satunya gagal kena unique index nomor_sertifikat.
      */
     public function generateNomorSertifikat()
     {
         $tahun = date('Y');
         $prefix = "CERT-EQ-{$tahun}-";
-        
-        $lastCert = static::where('nomor_sertifikat', 'LIKE', $prefix . '%')
-            ->orderBy('nomor_sertifikat', 'DESC')
-            ->first();
-        
-        if ($lastCert) {
-            $lastNumber = (int) substr($lastCert->nomor_sertifikat, -5);
-            $nextNumber = $lastNumber + 1;
-        } else {
-            $nextNumber = 1;
-        }
-        
-        return $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+
+        $nomor = KodeSequence::berikutnya($prefix, function () use ($prefix) {
+            $terakhir = static::where('nomor_sertifikat', 'LIKE', $prefix.'%')
+                ->orderBy('nomor_sertifikat', 'DESC')
+                ->value('nomor_sertifikat');
+
+            return $terakhir ? (int) substr($terakhir, -5) : 0;
+        });
+
+        return $prefix.str_pad($nomor, 5, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -125,10 +125,10 @@ class Sertifikat extends Model
      */
     public function getFormattedGeneratedAtAttribute()
     {
-        if (!$this->generated_at) {
+        if (! $this->generated_at) {
             return 'Not Generated';
         }
-        
+
         try {
             return $this->generated_at->format('d M Y H:i');
         } catch (Exception $e) {
@@ -141,12 +141,11 @@ class Sertifikat extends Model
         return $this->sent_at ? $this->sent_at->format('d M Y H:i') : null;
     }
 
-
     public function getDownloadUrlAttribute()
     {
         return route('admin.certificates.download', $this->id);
     }
- 
+
     public function getViewUrlAttribute()
     {
         return route('admin.certificates.view', $this->id);
@@ -162,7 +161,8 @@ class Sertifikat extends Model
      */
     public function generateDownloadToken()
     {
-        $service = app(\App\Services\OnDemandCertificateService::class);
+        $service = app(OnDemandCertificateService::class);
+
         return $service->generateDownloadToken($this);
     }
 
@@ -171,7 +171,8 @@ class Sertifikat extends Model
      */
     public function getPublicDownloadUrl()
     {
-        $service = app(\App\Services\OnDemandCertificateService::class);
+        $service = app(OnDemandCertificateService::class);
+
         return $service->getPublicDownloadUrl($this);
     }
 
@@ -181,12 +182,12 @@ class Sertifikat extends Model
     private function formatBytes($bytes, $precision = 2)
     {
         $units = ['B', 'KB', 'MB', 'GB'];
-        
+
         for ($i = 0; $bytes > 1024; $i++) {
             $bytes /= 1024;
         }
-        
-        return round($bytes, $precision) . ' ' . $units[$i];
+
+        return round($bytes, $precision).' '.$units[$i];
     }
 
     /**
@@ -203,7 +204,7 @@ class Sertifikat extends Model
     public function scopeGeneratedThisMonth($query)
     {
         return $query->whereMonth('generated_at', now()->month)
-                    ->whereYear('generated_at', now()->year);
+            ->whereYear('generated_at', now()->year);
     }
 
     /**
@@ -214,7 +215,6 @@ class Sertifikat extends Model
         return $query->where('is_sent', false);
     }
 
-
     /**
      * Mark as sent
      */
@@ -222,10 +222,9 @@ class Sertifikat extends Model
     {
         return $this->update([
             'is_sent' => true,
-            'sent_at' => now()
+            'sent_at' => now(),
         ]);
     }
-
 
     /**
      * Get certificate status for display

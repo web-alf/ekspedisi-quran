@@ -50,7 +50,9 @@ class DonaturImportService
     {
         return DB::transaction(function () use ($ringkasan, $baris) {
             $kode = KodeDonatur::bersihkan($ringkasan['kode_donatur']);
-            $donatur = Donatur::where('kode_donatur', $kode)->first();
+            // Dikunci: impor yang berjalan bersamaan dengan input CS untuk donatur yang
+            // sama dulu sama-sama membaca total lama dan saling menimpa tambahannya.
+            $donatur = Donatur::where('kode_donatur', $kode)->lockForUpdate()->first();
 
             $totalA5 = 0;
             $totalA6 = 0;

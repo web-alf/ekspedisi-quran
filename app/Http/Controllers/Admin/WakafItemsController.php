@@ -204,8 +204,11 @@ class WakafItemsController extends Controller
             // PERFORMANCE OPTIMIZATION: Batch calculate total items needed
             $totalItemsToCreate = array_sum(array_column($request->items, 'quantity'));
 
-            // RACE CONDITION FIX: Use database transactions for atomic sequence generation
-            // Get base global sequence atomically within transaction
+            // Donatur dikunci agar dua penambahan item bersamaan tidak membaca nomor
+            // urut terakhir yang sama. Pembacaan max di bawah juga memakai kunci
+            // supaya membaca data ter-commit terbaru, bukan snapshot transaksi.
+            Donatur::whereKey($donatur->id)->lockForUpdate()->first();
+
             $baseGlobalSequence = (int) DB::table('wakaf_items')->max('global_sequence') ?: 0;
 
             // Calculate sequences in batch to prevent N+1 queries
@@ -217,6 +220,7 @@ class WakafItemsController extends Controller
                         'base_sequence' => (int) DB::table('wakaf_items')
                             ->where('donatur_id', $donatur->id)
                             ->where('wakaf_type', $wakafType)
+                            ->lockForUpdate()
                             ->max('sequence_in_type') ?: 0,
                         'current_offset' => 0,
                     ];

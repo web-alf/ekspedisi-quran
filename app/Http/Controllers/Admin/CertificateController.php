@@ -421,7 +421,7 @@ class CertificateController extends Controller
                 $jenisQuran = JenisQuran::where('kode_jenis', 'A5')->first();
                 if ($jenisQuran) {
                     WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                        'batch_code' => WakafBatch::buatBatchCodeTahunan(),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_a5_count,
@@ -436,7 +436,7 @@ class CertificateController extends Controller
                 $jenisQuran = JenisQuran::where('kode_jenis', 'A6')->first();
                 if ($jenisQuran) {
                     WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                        'batch_code' => WakafBatch::buatBatchCodeTahunan(),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_a6_count,
@@ -451,7 +451,7 @@ class CertificateController extends Controller
                 $jenisQuran = JenisQuran::where('kode_jenis', 'IQRO')->first();
                 if ($jenisQuran) {
                     WakafBatch::create([
-                        'batch_code' => 'WB-'.date('Y').'-'.str_pad(WakafBatch::count() + 1, 5, '0', STR_PAD_LEFT),
+                        'batch_code' => WakafBatch::buatBatchCodeTahunan(),
                         'donatur_id' => $donatur->id,
                         'jenis_quran_id' => $jenisQuran->id,
                         'total_quran' => $donatur->total_iqra_count,

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class MushafRequest extends Model
@@ -593,11 +594,7 @@ class MushafRequest extends Model
         // Guard: hanya request yang masih pending/reviewed yang bisa disetujui.
         // Mencegah request yang sudah rejected/approved/processed/completed di-approve ulang
         // (race condition: dua admin approve bersamaan, atau approve setelah reject).
-        if (! in_array($this->status, ['pending', 'reviewed'], true)) {
-            throw new \Exception("Permintaan dengan status {$this->status} tidak dapat disetujui");
-        }
-
-        return $this->update([
+        return $this->ubahStatusDariTinjauan('disetujui', [
             'status' => 'approved',
             'approved_at' => now(),
             'reviewed_by' => $adminId,
@@ -608,16 +605,36 @@ class MushafRequest extends Model
     public function reject($adminId, $catatan)
     {
         // Guard: hanya request yang masih pending/reviewed yang bisa ditolak.
-        if (! in_array($this->status, ['pending', 'reviewed'], true)) {
-            throw new \Exception("Permintaan dengan status {$this->status} tidak dapat ditolak");
-        }
-
-        return $this->update([
+        return $this->ubahStatusDariTinjauan('ditolak', [
             'status' => 'rejected',
             'rejected_at' => now(),
             'reviewed_by' => $adminId,
             'catatan_admin' => $catatan,
         ]);
+    }
+
+    /**
+     * Ubah status permintaan yang masih pending/reviewed.
+     *
+     * Status dicek pada baris yang DIKUNCI, bukan pada instance di memori: dulu
+     * CS A menyetujui dan CS B menolak permintaan yang sama hampir bersamaan,
+     * keduanya lolos penjaga, dan penulis terakhir menang.
+     *
+     * @param  array<string, mixed>  $atribut
+     */
+    private function ubahStatusDariTinjauan(string $tindakan, array $atribut): bool
+    {
+        return DB::transaction(function () use ($tindakan, $atribut) {
+            $terkunci = static::whereKey($this->getKey())->lockForUpdate()->firstOrFail();
+
+            $this->setRawAttributes($terkunci->getAttributes(), true);
+
+            if (! in_array($this->status, ['pending', 'reviewed'], true)) {
+                throw new \Exception("Permintaan dengan status {$this->status} tidak dapat {$tindakan}");
+            }
+
+            return $this->update($atribut);
+        });
     }
 
     public function markAsProcessed($pengirimanId, $adminId)

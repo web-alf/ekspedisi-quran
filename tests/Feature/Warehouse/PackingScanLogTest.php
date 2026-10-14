@@ -2,6 +2,7 @@
 
 use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
+use App\Models\DailyPackingTaskItem;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
@@ -205,4 +206,64 @@ it('tanpa tugas aktif, penolakan tetap dicatat (siapa yang mencoba)', function (
     $log = PackingScanLog::first();
     expect($log->type)->toBe('unauthorized')
         ->and($log->user_id)->toBe($petugas->id);
+});
+
+it('membatalkan penugasan resi saat resi gagal masuk kerdus, tetapi tetap mencatat log-nya', function () {
+    // Dulu kegagalan addItemSafe dikembalikan sebagai respons biasa sehingga
+    // transaksi tetap commit: task item tersimpan, resi terkunci ke petugas ini
+    // dan tidak pernah bisa diambil staf lain maupun masuk kerdus.
+    $petugas = petugasGudangDenganTugas();
+
+    $statusPacking = StatusPengiriman::firstOrCreate(
+        ['slug' => 'packing'],
+        ['nama' => 'Proses Packing', 'urutan' => 4],
+    );
+
+    $jenis = jenisA5();
+    $pengiriman = Pengiriman::factory()->create([
+        'jenis_quran_id' => $jenis->id,
+        'status_id' => $statusPacking->id,
+        // Jauh melebihi kapasitas kerdus mana pun.
+        'jumlah_quran' => 10000,
+    ]);
+
+    $this->actingAs($petugas)
+        ->postJson('/admin/warehouse/packing/scan', ['qr_data' => $pengiriman->no_resi])
+        ->assertOk()
+        ->assertJsonPath('success', false)
+        ->assertJsonPath('type', 'box_add_error');
+
+    expect(DailyPackingTaskItem::where('pengiriman_id', $pengiriman->id)->exists())->toBeFalse()
+        ->and(PackingItem::where('pengiriman_id', $pengiriman->id)->exists())->toBeFalse()
+        ->and(PackingScanLog::where('type', 'box_add_error')->where('no_resi', $pengiriman->no_resi)->exists())->toBeTrue();
+});
+
+it('menolak konfirmasi jenis untuk resi yang sudah dipacking tanpa error SQL', function () {
+    // Klik "Lanjut" ganda atau scan dari perangkat lain: jalur konfirmasi dulu
+    // tidak mengunci maupun mengecek PackingItem, sehingga request kedua jatuh
+    // ke duplicate key di database.
+    $petugas = petugasGudangDenganTugas();
+    $task = DailyPackingTask::where('user_id', $petugas->id)->first();
+
+    $jenis = jenisA5();
+    $pengiriman = Pengiriman::factory()->create(['jenis_quran_id' => $jenis->id]);
+    $box = PackingBox::factory()->create([
+        'daily_packing_task_id' => $task->id,
+        'jenis_quran_id' => $jenis->id,
+    ]);
+    PackingItem::factory()->create([
+        'packing_box_id' => $box->id,
+        'pengiriman_id' => $pengiriman->id,
+        'packed_by' => $petugas->id,
+    ]);
+
+    $respons = $this->actingAs($petugas)
+        ->postJson('/admin/warehouse/packing/scan-confirm', [
+            'pengiriman_id' => $pengiriman->id,
+            'confirm_seal_others' => true,
+        ])
+        ->assertJsonPath('success', false);
+
+    expect($respons->json('message'))->toContain('sudah dipacking')
+        ->and(PackingItem::where('pengiriman_id', $pengiriman->id)->count())->toBe(1);
 });
