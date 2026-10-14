@@ -398,6 +398,23 @@
     // For regular menu items and dropdown children:
     // Check if current path starts with the route (to include sub-routes)
     // Also check for exact match with query parameters (e.g., /admin/pengiriman?mode=scan-status)
+    if (!pathMatchesRoute(currentPath, route)) return false;
+
+    // Menu induk-prefix (mis. /admin/warehouse) tidak ikut menyala bila ada
+    // menu lain yang lebih spesifik cocok (mis. /admin/warehouse/packing).
+    const hasMoreSpecificMatch = navigationItems.some(item =>
+      [item, ...(item.children || [])].some(navItem =>
+        navItem.route &&
+        navItem.route.length > route.length &&
+        navItem.route.startsWith(route + '/') &&
+        pathMatchesRoute(currentPath, navItem.route)
+      )
+    );
+
+    return !hasMoreSpecificMatch;
+  }
+
+  function pathMatchesRoute(currentPath, route) {
     return currentPath === route || currentPath.startsWith(route + '/') || currentPath.startsWith(route + '?');
   }
   
