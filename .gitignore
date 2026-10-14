@@ -104,14 +104,8 @@ storage/app/public/qr-codes/*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]
 **/temp/
 **/tmp/
 
-# Development archives (git should track the organized structure)
-docs/development/archived_files/*.php
-docs/development/archived_files/*.log
-docs/development/archived_files/*.png
-
 # Backup files
 /backups
-/docs/development/archived_files
 
 # Laravel specific
 /public/qr-codes

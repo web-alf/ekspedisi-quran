@@ -1,1 +1,0 @@
-chmod +x test-legal-pages.sh
