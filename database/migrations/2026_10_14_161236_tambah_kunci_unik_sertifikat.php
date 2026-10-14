@@ -17,7 +17,11 @@ use Illuminate\Support\Facades\Schema;
  *
  * Sertifikat konsolidasi punya `wakaf_batch_id` NULL, jadi kuncinya memakai
  * kolom turunan `donatur_konsolidasi_id` (= donatur_id hanya bila
- * is_consolidated). NULL tidak bertabrakan di unique index MySQL.
+ * is_consolidated). NULL tidak bertabrakan di unique index MySQL. Kolom itu
+ * WAJIB `VIRTUAL`: MySQL 8 menolak menambah kolom generated STORED pada tabel
+ * yang punya foreign key (error 1215 "Cannot add foreign key constraint"),
+ * sedangkan `sertifikat` punya empat FK. Nilainya sama saja karena hanya
+ * dipakai sebagai kunci.
  *
  * Seperti migrasi kunci wakaf_items, kunci TIDAK dipasang bila masih ada baris
  * lama yang ganda — baris itu menunggu keputusan pemilik data, bukan dihapus
@@ -35,7 +39,7 @@ return new class extends Migration
             Schema::table('sertifikat', function (Blueprint $table) {
                 $table->unsignedBigInteger('donatur_konsolidasi_id')
                     ->nullable()
-                    ->storedAs('IF(is_consolidated = 1, donatur_id, NULL)');
+                    ->virtualAs('IF(is_consolidated = 1, donatur_id, NULL)');
             });
         }
 
