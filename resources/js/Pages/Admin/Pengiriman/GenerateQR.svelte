@@ -1060,7 +1060,7 @@
                     </td>
                     <td class="px-4 py-3">
                       <div>
-                        <div class="text-sm font-medium text-gray-900">{item.nama_penerima || 'Data tidak tersedia'}</div>
+                        <div class="text-sm font-medium text-gray-900">{item.nama_penerima || '-'}</div>
                         <div class="text-sm text-gray-500">{item.nama_lembaga || '-'}</div>
                       </div>
                     </td>
@@ -1232,7 +1232,7 @@
                   </div>
                   <div class="text-xs sm:text-sm">
                     <span class="font-medium text-gray-500">Penerima:</span>
-                    <span class="text-gray-900 ml-2 break-words">{qr.pengiriman.nama_penerima || 'Data tidak tersedia'}</span>
+                    <span class="text-gray-900 ml-2 break-words">{qr.pengiriman.nama_penerima || '-'}</span>
                   </div>
                   <div class="text-xs sm:text-sm">
                     <span class="font-medium text-gray-500">Alamat:</span>

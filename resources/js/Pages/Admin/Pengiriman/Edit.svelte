@@ -201,14 +201,14 @@
 </script>
 
 <svelte:head>
-  <title>Edit Pengiriman {pengiriman.no_resi} - Admin</title>
+  <title>Edit Resi {pengiriman.no_resi} - Admin</title>
 </svelte:head>
 
 <AdminLayout>
   <div class="mb-8">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900 mb-2">Edit Pengiriman</h2>
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Edit Resi</h2>
         <p class="text-gray-600">Edit data pengiriman {pengiriman.no_resi}</p>
       </div>
       <button

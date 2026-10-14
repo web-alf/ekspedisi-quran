@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
+use App\Models\JenisQuran;
 use App\Models\PackingNotification;
 use App\Models\Pengiriman;
 use App\Models\User;
@@ -498,6 +499,188 @@ class PackingAssignmentService
         ]);
 
         return $taskItem;
+    }
+
+    /**
+     * Catat kerdus pada alur "packing kardus".
+     *
+     * Arti di lapangan: mushaf datang SUDAH dalam kardus/dos dari produksi,
+     * gudang hanya menempel label kerdus dan mencatatnya — tiap mushaf tidak
+     * dipindai. Supaya tautan ke resi tetap utuh (sertifikat & pelacakan
+     * donatur menempel ke resi), sistem memilihkan resi dari kolam berstatus
+     * `packing` untuk jenis yang sama secara FIFO (resi paling lama menunggu
+     * lebih dulu), lalu memasukkan tiap resi ke kerdus sebagai satu baris
+     * `packing_items` — sama seperti hasil pemindaian satuan.
+     *
+     * Konsekuensi yang disengaja:
+     * - progres tugas naik sebesar jumlah mushaf (eks) yang masuk kerdus;
+     * - target harian BOLEH terlewati, karena satu kardus fisik tidak bisa
+     *   dicatat separuh — pelampauan dilaporkan lewat `melebihi_target`;
+     * - bila resi berikutnya tidak cukup ruang di sisa kerdus (mis. resi 60
+     *   eks pada kerdus A5 yang sisa 8), kerdus ditutup apa adanya dan
+     *   penghalangnya dilaporkan lewat `tertahan` — urutan FIFO tidak dilanggar.
+     *
+     * @return array{jenis: array<string, mixed>, jumlah_kerdus: int, kerdus: array<int, array<string, mixed>>, total_mushaf: int, diminta: int, kekurangan: int, tertahan: array<string, mixed>|null, target: int, selesai: int, melebihi_target: bool, tugas_selesai: bool}
+     */
+    public function catatKerdus(User $user, int $jenisQuranId, int $jumlahKerdus = 1, $date = null): array
+    {
+        $date = $date ? Carbon::parse($date) : today();
+        $jumlahKerdus = max(1, (int) $jumlahKerdus);
+
+        return DB::transaction(function () use ($user, $jenisQuranId, $jumlahKerdus, $date) {
+            $task = DailyPackingTask::where('user_id', $user->id)
+                ->whereDate('tanggal_tugas', $date)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $task) {
+                throw new \Exception('Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor.');
+            }
+
+            if ($task->is_completed) {
+                throw new \Exception('Tugas hari ini sudah selesai.');
+            }
+
+            $jenis = JenisQuran::find($jenisQuranId);
+
+            if (! $jenis) {
+                throw new \Exception('Jenis Quran tidak ditemukan.');
+            }
+
+            $kapasitas = max(1, (int) $jenis->getDefaultCapacity());
+            $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
+
+            if (! $packingStatusId) {
+                throw new \Exception('Status "packing" tidak ada di master status.');
+            }
+
+            $diminta = $kapasitas * $jumlahKerdus;
+            $kandidat = $this->kandidatKerdus($jenisQuranId, (int) $packingStatusId, $diminta);
+
+            if ($kandidat->isEmpty()) {
+                throw new \Exception("Tidak ada resi berstatus packing untuk {$jenis->nama_jenis} yang belum dikemas.");
+            }
+
+            $kerdus = [];
+            $posisi = 0;
+            $totalMushaf = 0;
+            $tertahan = null;
+
+            for ($i = 0; $i < $jumlahKerdus && $posisi < $kandidat->count(); $i++) {
+                $box = $task->getOrActivateBoxForJenis($jenisQuranId);
+
+                if (! $box) {
+                    throw new \Exception('Gagal membuat kerdus untuk jenis ini.');
+                }
+
+                $resi = [];
+
+                while ($posisi < $kandidat->count()) {
+                    $sisaRuang = (int) $box->kapasitas - (int) $box->jumlah_terisi;
+
+                    if ($sisaRuang <= 0) {
+                        // Kerdus sudah penuh: lanjut ke kerdus berikutnya, bukan
+                        // dianggap penghalang.
+                        break;
+                    }
+
+                    $pengiriman = $kandidat[$posisi];
+                    $eks = max(1, (int) ($pengiriman->jumlah_quran ?? 1));
+
+                    if ($eks > $sisaRuang) {
+                        $tertahan = [
+                            'no_resi' => $pengiriman->no_resi,
+                            'butuh' => $eks,
+                            'tersedia' => $sisaRuang,
+                        ];
+
+                        break;
+                    }
+
+                    $box->addItemSafe($pengiriman, $user->id);
+                    $task->createDynamicTaskItem($pengiriman);
+                    $task->incrementProgress($eks);
+
+                    $resi[] = $pengiriman->no_resi;
+                    $totalMushaf += $eks;
+                    $posisi++;
+                }
+
+                $box->refresh();
+
+                $kerdus[] = [
+                    'id' => $box->id,
+                    'kode_kerdus' => $box->kode_kerdus,
+                    'jumlah_terisi' => (int) $box->jumlah_terisi,
+                    'kapasitas' => (int) $box->kapasitas,
+                    'status' => $box->status,
+                    'penuh' => (int) $box->jumlah_terisi >= (int) $box->kapasitas,
+                    'resi' => $resi,
+                ];
+
+                if ((int) $box->jumlah_terisi >= (int) $box->kapasitas) {
+                    $box->seal();
+                }
+
+                if ($tertahan) {
+                    break;
+                }
+            }
+
+            $task->refresh();
+
+            Log::info('Packing kardus dicatat tanpa pindai satuan', [
+                'user_id' => $user->id,
+                'task_id' => $task->id,
+                'jenis_quran_id' => $jenisQuranId,
+                'jumlah_kerdus' => count($kerdus),
+                'total_mushaf' => $totalMushaf,
+                'tertahan' => $tertahan,
+            ]);
+
+            return [
+                'jenis' => [
+                    'id' => $jenis->id,
+                    'kode_jenis' => $jenis->kode_jenis,
+                    'nama_jenis' => $jenis->nama_jenis,
+                    'kapasitas' => $kapasitas,
+                ],
+                'jumlah_kerdus' => count($kerdus),
+                'kerdus' => $kerdus,
+                'total_mushaf' => $totalMushaf,
+                'diminta' => $diminta,
+                'kekurangan' => max(0, $diminta - $totalMushaf),
+                'tertahan' => $tertahan,
+                'target' => (int) $task->total_target,
+                'selesai' => (int) $task->total_selesai,
+                'melebihi_target' => (int) $task->total_selesai > (int) $task->total_target,
+                'tugas_selesai' => (bool) $task->is_completed,
+            ];
+        });
+    }
+
+    /**
+     * Kolam resi FIFO untuk packing kardus.
+     *
+     * Resi yang sudah pernah di-assign ke tugas mana pun atau sudah punya baris
+     * kerdus dikeluarkan dari kolam, karena `daily_packing_task_items.pengiriman_id`
+     * unik global (kalau tidak, insert-nya meledak) dan satu mushaf tidak boleh
+     * tercatat di dua kerdus.
+     */
+    public function kandidatKerdus(int $jenisQuranId, int $packingStatusId, int $limit)
+    {
+        return Pengiriman::where('status_id', $packingStatusId)
+            ->where('jenis_quran_id', $jenisQuranId)
+            ->whereDoesntHave('packingItem')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('daily_packing_task_items')
+                    ->whereColumn('daily_packing_task_items.pengiriman_id', 'pengiriman.id');
+            })
+            ->orderBy('id')
+            ->limit($limit)
+            ->lockForUpdate()
+            ->get();
     }
 
     /**

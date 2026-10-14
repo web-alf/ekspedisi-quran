@@ -3,6 +3,7 @@
 namespace App\Services\Cache;
 
 use Carbon\Carbon;
+use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -23,6 +24,20 @@ abstract class BaseCacheService
     protected function key(string $key): string
     {
         return $this->prefix.':'.$key;
+    }
+
+    /**
+     * Pemeriksaan mandiri read/write/forget yang BOLEH dipakai di luar kelas
+     * (CacheManager::testCache memakai ini; method store/retrieve/forget tetap
+     * protected agar seluruh subkelas tidak bisa dilewati remember()-nya).
+     */
+    public function selfTest(string $key, mixed $value, int $ttl = 60): bool
+    {
+        $this->store($key, $value, $ttl);
+        $retrieved = $this->retrieve($key);
+        $this->forget($key);
+
+        return $retrieved === $value;
     }
 
     /**
@@ -168,7 +183,7 @@ abstract class BaseCacheService
             // Pattern-based flush for prefixed keys
             $pattern = $this->prefix.':*';
 
-            if (Cache::getStore() instanceof \Illuminate\Cache\RedisStore) {
+            if (Cache::getStore() instanceof RedisStore) {
                 $redis = Redis::connection();
                 $keys = $redis->keys($pattern);
 
@@ -195,7 +210,7 @@ abstract class BaseCacheService
      */
     protected function supportsTagging(): bool
     {
-        return Cache::getStore() instanceof \Illuminate\Cache\RedisStore;
+        return Cache::getStore() instanceof RedisStore;
     }
 
     /**
@@ -204,7 +219,7 @@ abstract class BaseCacheService
     public function getStats(): array
     {
         try {
-            if (Cache::getStore() instanceof \Illuminate\Cache\RedisStore) {
+            if (Cache::getStore() instanceof RedisStore) {
                 $redis = Redis::connection();
                 $pattern = $this->prefix.':*';
                 $keys = $redis->keys($pattern);

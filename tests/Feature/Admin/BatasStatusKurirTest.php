@@ -18,11 +18,11 @@ uses(RefreshDatabase::class);
 /**
  * Batas status untuk KURIR.
  *
- * Kurir mengantar barang dan mengabarkan PERJALANANNYA. Tahap gudang (pemesanan,
- * produksi, kedatangan, packing, selesai packing) bukan wewenang mereka, dan
- * "Diterima Penerima" punya jalur sendiri yang hanya boleh diselesaikan role
- * distribusi/manager. "Batal" selalu ikut: kurir yang menemukan alamat tidak ada
- * harus bisa mengabarkannya.
+ * Kurir mengantar barang dan mengabarkan PERJALANANNYA. Tahap gudang hasil
+ * rombakan 2026-10-13 (pemesanan, antrian, packing, selesai packing) bukan
+ * wewenang mereka, dan "Diterima Penerima" punya jalur sendiri yang hanya boleh
+ * diselesaikan role distribusi/manager. "Batal" selalu ikut: kurir yang
+ * menemukan alamat tidak ada harus bisa mengabarkannya.
  *
  * Dua hal yang dijaga di sini dan mudah tertukar:
  *
@@ -66,30 +66,33 @@ beforeEach(function () {
 
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-    // Delapan status seperti di produksi, lengkap dengan urutannya — aturan
-    // maju/mundur bergantung pada urutan, jadi urutannya harus nyata.
+    // Status seperti di produksi setelah rombakan tahap gudang, lengkap dengan
+    // urutannya — aturan maju/mundur bergantung pada urutan, jadi urutannya
+    // harus nyata. `kedatangan` dihapus dari alur (nonaktif, hanya untuk label
+    // resi lama); `antrian` masuk sebagai tahap gudang.
     //
     // Dibersihkan lebih dulu: basis data uji bisa membawa status sisa dari
-    // migrasi/seeder lain, dan tes yang menghitung "8 status" akan gagal karena
-    // kelebihan yang tidak ada hubungannya dengan yang sedang diuji.
+    // migrasi/seeder lain, dan tes yang menghitung jumlah status akan gagal
+    // karena kelebihan yang tidak ada hubungannya dengan yang sedang diuji.
     StatusPengiriman::query()->delete();
 
     foreach ([
         'pemesanan' => 1,
         'produksi' => 2,
         'kedatangan' => 3,
+        'antrian' => 3,
         'packing' => 4,
         'selesai-packing' => 5,
         'pengiriman' => 6,
         'diterima' => 7,
         'batal' => 99,
     ] as $slug => $urutan) {
-        StatusPengiriman::firstOrCreate(
+        StatusPengiriman::updateOrCreate(
             ['slug' => $slug],
             [
                 'nama' => ucwords(str_replace('-', ' ', $slug)),
                 'urutan' => $urutan,
-                'is_active' => true,
+                'is_active' => $slug !== 'kedatangan',
                 'is_final' => in_array($slug, ['diterima', 'batal'], true),
             ]
         );
@@ -132,13 +135,13 @@ it('tidak membatasi role lain', function () {
     }
 });
 
-it('membatasi pilihan gudang ke tahap awal distribusi', function () {
+it('membatasi pilihan gudang ke tahap gudang', function () {
     // slugStatus() mengembalikan array PHP, bukan Collection — jadi ->sort()
     // tidak ada dan urutannya dirapikan dengan sort() biasa.
     $slug = slugStatus(pengguna(RoleEnum::WAREHOUSE->value));
     sort($slug);
 
-    expect($slug)->toBe(['kedatangan', 'packing', 'pemesanan', 'produksi']);
+    expect($slug)->toBe(['antrian', 'packing', 'pemesanan', 'selesai-packing']);
 });
 
 it('gagal-tertutup: daftar kosong berarti kurir tidak bisa memilih apa pun', function () {

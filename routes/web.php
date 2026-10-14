@@ -45,6 +45,7 @@ use App\Http\Controllers\Warehouse\BoxScannerController;
 use App\Http\Controllers\Warehouse\JobMonitorController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\PerformanceController;
+use App\Http\Controllers\Warehouse\StokMushafController;
 use App\Models\Faq;
 use App\Models\Gallery;
 use App\Models\MushafRequest;
@@ -251,6 +252,7 @@ Route::middleware(['auth'])->group(function () {
         // User Management - Super Admin Only
         Route::middleware('permission:users.read')->group(function () {
             Route::resource('users', UserController::class)
+                ->except(['show'])
                 ->middlewareFor(['create', 'store'], 'permission:users.create')
                 ->middlewareFor(['edit', 'update'], 'permission:users.update')
                 ->middlewareFor('destroy', 'permission:users.delete');
@@ -263,6 +265,7 @@ Route::middleware(['auth'])->group(function () {
         // Role Management - Super Admin Only
         Route::middleware('permission:roles.read')->group(function () {
             Route::resource('roles', RoleController::class)
+                ->except(['show'])
                 ->middlewareFor(['create', 'store'], 'permission:roles.create')
                 ->middlewareFor(['edit', 'update'], 'permission:roles.update')
                 ->middlewareFor('destroy', 'permission:roles.delete');
@@ -271,6 +274,7 @@ Route::middleware(['auth'])->group(function () {
         // Permission Management - Super Admin Only
         Route::middleware('permission:permissions.read')->group(function () {
             Route::resource('permissions', PermissionController::class)
+                ->except(['show'])
                 ->middlewareFor(['create', 'store'], 'permission:permissions.create')
                 ->middlewareFor(['edit', 'update'], 'permission:permissions.update')
                 ->middlewareFor('destroy', 'permission:permissions.delete');
@@ -335,19 +339,25 @@ Route::middleware(['auth'])->group(function () {
             Route::put('pengiriman/{pengiriman}', [PengirimanController::class, 'update'])
                 ->middleware('permission:shipments.update')
                 ->name('pengiriman.update');
-            Route::delete('pengiriman/{pengiriman}', [PengirimanController::class, 'destroy'])
-                ->middleware('permission:shipments.delete')
-                ->name('pengiriman.destroy');
-
+            // Bulk ubah status memakai izin yang SAMA dengan halaman Ubah Status
+            // per-resi (`shipments.update-status`): memindahkan status banyak resi
+            // sekaligus adalah operasi yang sama, hanya jumlahnya lebih dari satu.
+            // Tanpa OR ini, staff gudang — yang justru mengerjakan tahap awal dan
+            // sudah boleh memindahkan status satu per satu — melihat panel "Update
+            // Status Massal" TANPA tombolnya, karena tombol di halaman digerbangi
+            // izin yang sama dengan rute ini (lihat Pengiriman/Index.svelte).
+            //
+            // Aman: status TUJUAN tetap dibatasi PengirimanStageVisibility::
+            // bolehPilihStatus() (config/pengiriman.php) dan resinya dibatasi
+            // applyToQuery(), tepat seperti jalur per-resi.
             Route::post('pengiriman/bulk-status', [PengirimanController::class, 'bulkUpdateStatus'])
-                ->middleware('permission:shipments.bulk-update')
+                ->middleware('permission:shipments.bulk-update|shipments.update-status')
                 ->name('pengiriman.bulk-status');
+            // Set alamat massal TETAP izin bulk (manager/super-admin): ia menautkan
+            // permintaan mushaf dan menandainya diproses, bukan pekerjaan gudang.
             Route::post('pengiriman/bulk-alamat', [PengirimanController::class, 'bulkSetAlamat'])
                 ->middleware('permission:shipments.bulk-update')
                 ->name('pengiriman.bulk-alamat');
-            Route::get('pengiriman-export', [PengirimanController::class, 'export'])
-                ->middleware('permission:shipments.export')
-                ->name('pengiriman.export');
         });
 
         // 🚚 Pengiriman Tracking Routes
@@ -424,6 +434,11 @@ Route::middleware(['auth'])->group(function () {
             ->name('pengiriman.scan-status.update');
 
         // 📦 Warehouse Packing System Routes (Permission-based access)
+        // Jalur lama /admin/warehouse/dashboard diterahkan ke dashboard gudang
+        // yang sebenarnya (/admin/warehouse) supaya tautan lama tidak 404.
+        // Tujuan HARUS absolut diberi awalan /admin/ — tanpa itu hasilnya
+        // /warehouse (di root, 404).
+        Route::redirect('warehouse/dashboard', '/admin/warehouse', 301);
         Route::prefix('warehouse')->name('warehouse.')->middleware('permission:warehouse.dashboard')->group(function () {
             // Dashboard
             Route::get('/', [App\Http\Controllers\Warehouse\DashboardController::class, 'index'])
@@ -446,12 +461,36 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/packing/scan-confirm', [PackingController::class, 'processWithJenisConfirmation'])
                 ->middleware('permission:warehouse.packing.scan')
                 ->name('packing.scan-confirm');
+            Route::post('/packing/catat-kerdus', [PackingController::class, 'catatKerdus'])
+                ->middleware('permission:warehouse.packing.scan')
+                ->name('packing.catat-kerdus');
+            Route::get('/packing/scan-logs', [PackingController::class, 'scanLogs'])
+                ->middleware('permission:warehouse.packing.view')
+                ->name('packing.scan-logs');
             Route::post('/packing/box/{box}/seal', [PackingController::class, 'sealBox'])
                 ->middleware('permission:warehouse.packing.seal|warehouse.boxes.seal')
                 ->name('packing.seal-box');
             Route::get('/packing/history', [PackingController::class, 'history'])
                 ->middleware('permission:warehouse.packing.view')
                 ->name('packing.history');
+
+            // Stok mushaf tanpa muwakif + dokumen transfer antar gudang (Fase 3)
+            Route::get('/stok', [StokMushafController::class, 'index'])
+                ->middleware('permission:stok.read|stok.update')
+                ->name('stok.index');
+            Route::post('/stok/entri', [StokMushafController::class, 'entri'])
+                ->middleware('permission:stok.update')
+                ->name('stok.entri');
+            Route::post('/stok/transfer', [StokMushafController::class, 'buatTransfer'])
+                ->middleware('permission:stok.transfer')
+                ->name('stok.transfer.buat');
+            Route::post('/stok/transfer/{transfer}/terima', [StokMushafController::class, 'terimaTransfer'])
+                ->middleware('permission:stok.transfer')
+                ->whereNumber('transfer')
+                ->name('stok.transfer.terima');
+            Route::post('/stok/transfer/{transfer}/batalkan', [StokMushafController::class, 'batalkanTransfer'])
+                ->middleware('permission:stok.transfer')
+                ->name('stok.transfer.batalkan');
 
             // Shared Box Collaboration
             Route::get('/shared-boxes-status', [App\Http\Controllers\Warehouse\DashboardController::class, 'getSharedBoxesStatus'])
@@ -1025,7 +1064,6 @@ Route::middleware(['auth'])->group(function () {
         // FAQs
         Route::middleware(['permission:settings.read'])->group(function () {
             Route::get('faqs', [FaqController::class, 'index'])->name('faqs.index');
-            Route::get('faqs/{faq}', [FaqController::class, 'show'])->name('faqs.show');
         });
         Route::middleware(['permission:settings.write'])->group(function () {
             Route::get('faqs/create', [FaqController::class, 'create'])->name('faqs.create');

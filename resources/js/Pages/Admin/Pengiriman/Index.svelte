@@ -11,6 +11,8 @@
   import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import PerPageSelector from '../../../Components/PerPageSelector.svelte';
   import { can } from '../../../utils/permissions.js';
+  import { pesanKonfirmasiUpdateStatus } from '../../../utils/konfirmasiBulk.js';
+  import { ringkasStatusTerpilih, labelPilihStatus, adalahStatusSekarang } from '../../../utils/statusTerpilih.js';
   
   // Props from Inertia
   export let pengiriman = [];
@@ -27,8 +29,16 @@
   export const flash = {};
   
   // Permission checks
+  //
+  // Setiap tombol memakai izin yang SAMA dengan rutenya:
+  // - Update Status Massal  -> rute `permission:shipments.bulk-update|shipments.update-status`
+  //   (staff gudang memegang update-status, jadi panel ini harus bisa dipakai)
+  // - Set Alamat Massal     -> rute tetap `permission:shipments.bulk-update`
+  //   (manager/super-admin; sebelumnya digerbangi shipments.update sehingga
+  //   tampil untuk gudang padahal server selalu menolaknya)
   $: canUpdate = can.shipments.update();
   $: canBulkUpdate = can.shipments.bulkUpdate();
+  $: canBulkStatus = canBulkUpdate || can.shipments.updateStatus();
 
   // Initialize filter values to prevent undefined errors
   $: if (!filters.search) filters.search = '';
@@ -101,6 +111,11 @@
 
   // Toggle bulk actions visibility
   $: showBulkActions = selectedItems.length > 0;
+
+  // Status resi yang sedang dipilih — dipakai untuk menyebut status sekarang di
+  // field "Status Baru" dan menandai opsinya di dropdown.
+  $: barisTerpilih = (pengiriman?.data ?? []).filter((p) => selectedItems.includes(p.id));
+  $: ringkasanStatus = ringkasStatusTerpilih(barisTerpilih);
   let showDetailModal = false;
   let selectedItem = null;
   let isLoading = false;
@@ -189,9 +204,11 @@
     }
     
     // Show confirmation modal
+    // Pesannya menyebut STATUS TUJUAN, bukan hanya jumlah baris: jumlah saja
+    // tidak memberi apa pun untuk diperiksa ulang sebelum menyetujui.
     showConfirmModal(
       'Konfirmasi Update Status', 
-      `Apakah Anda yakin ingin mengupdate status ${selectedItems.length} pengiriman?`,
+      pesanKonfirmasiUpdateStatus(selectedItems.length, statusList, bulkStatus),
       () => {
         // This callback will execute the actual update
         performBulkUpdate();
@@ -773,15 +790,15 @@
 </script>
 
 <svelte:head>
-  <title>Pengiriman - Ekspedisi Qur'an</title>
+  <title>Data Resi - Ekspedisi Qur'an</title>
 </svelte:head>
 
 <AdminLayout>
   <div class="mb-6 md:mb-8">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
       <div>
-        <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">Manajemen Pengiriman</h2>
-        <p class="text-sm md:text-base text-gray-600">Kelola pengiriman Al-Quran wakaf</p>
+        <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">Data Resi</h2>
+        <p class="text-sm md:text-base text-gray-600">Kelola resi Al-Qur'an wakaf — dari pemesanan sampai diterima</p>
       </div>
       
     </div>
@@ -862,7 +879,7 @@
       <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
         <!-- Search - Takes 3/5 of width -->
         <div class="md:col-span-3">
-          <label for="search_input" class="block text-sm font-medium text-gray-700 mb-1">Cari Pengiriman</label>
+          <label for="search_input" class="block text-sm font-medium text-gray-700 mb-1">Cari Resi</label>
           <div class="relative">
             <input
               id="search_input"
@@ -1073,7 +1090,9 @@
         </button>
       </div>
       
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Satu kolom bila tombol Set Alamat tidak berwenang: kartu kosong terbaca
+           sebagai kerusakan. -->
+      <div class="grid grid-cols-1 {canBulkUpdate ? 'lg:grid-cols-2' : ''} gap-4">
         <!-- Bulk Update Status -->
         <div class="bg-white rounded-lg p-4 border">
           <div class="flex items-center gap-2 font-medium text-gray-900 mb-3">
@@ -1088,11 +1107,23 @@
                 bind:value={bulkStatus}
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
-                <option value="">Pilih Status Baru...</option>
+                <option value="">{labelPilihStatus(ringkasanStatus)}</option>
                 {#each statusList as status}
-                  <option value={status.id}>{status.nama}</option>
+                  {@const sekarang = adalahStatusSekarang(ringkasanStatus, status.id)}
+                  <option value={status.id} disabled={sekarang}>
+                    {status.nama}{sekarang ? ' (status sekarang)' : ''}
+                  </option>
                 {/each}
               </select>
+              {#if ringkasanStatus.beragam}
+                <p class="text-xs text-amber-600 mt-1">
+                  Resi terpilih punya {ringkasanStatus.jumlahStatus} status berbeda — periksa lagi tujuan yang dipilih.
+                </p>
+              {:else if ringkasanStatus.nama}
+                <p class="text-xs text-gray-500 mt-1">
+                  Status sekarang: <span class="font-medium text-gray-700">{ringkasanStatus.nama}</span>
+                </p>
+              {/if}
             </div>
             <div>
               <label for="bulk_catatan_input" class="block text-sm font-medium text-gray-700 mb-1">Catatan (Opsional)</label>
@@ -1154,7 +1185,7 @@
               />
               <p class="text-xs text-gray-500 mt-1">Lokasi di mana update status dilakukan</p>
             </div>
-            {#if canBulkUpdate}
+            {#if canBulkStatus}
             <button
               on:click={bulkUpdateStatus}
               disabled={!bulkStatus || isBulkProcessing || selectedItems.length === 0}
@@ -1173,6 +1204,7 @@
         </div>
         
         <!-- Bulk Set Alamat dari Mushaf Request -->
+        {#if canBulkUpdate}
         <div class="bg-white rounded-lg p-4 border">
           <div class="flex items-center gap-2 font-medium text-gray-900 mb-3">
             <HeroIcon name="map-pin" class="w-5 h-5 text-green-600" />
@@ -1217,7 +1249,6 @@
               {/if}
             {/if}
             
-            {#if canUpdate}
             <button
               on:click={bulkSetAlamat}
               disabled={!bulkMushafRequest || isBulkProcessing}
@@ -1231,17 +1262,17 @@
                 <span>Set Alamat ({selectedItems.length} item)</span>
               {/if}
             </button>
-            {/if}
           </div>
         </div>
+        {/if}
       </div>
     </div>
   {/if}
   
-  <!-- Pengiriman Table -->
+  <!-- Tabel Resi -->
   <div class="bg-white rounded-xl shadow-sm border border-gray-100">
     <div class="px-6 py-4 border-b border-gray-200">
-      <h3 class="text-lg font-semibold text-gray-900">Daftar Pengiriman</h3>
+      <h3 class="text-lg font-semibold text-gray-900">Daftar Resi</h3>
       <p class="text-sm text-gray-500">Kelola pengiriman Al-Quran ke seluruh Indonesia</p>
     </div>
     
@@ -1546,7 +1577,7 @@
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" on:click|self={() => showDetailModal = false} on:keydown={(e) => e.key === 'Escape' && (showDetailModal = false)} role="button" tabindex="0" aria-label="Close modal">
     <div class="bg-white rounded-2xl p-4 sm:p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" role="dialog">
       <div class="flex justify-between items-center mb-4 sm:mb-6">
-        <h3 class="text-lg sm:text-xl font-bold text-gray-900">Detail Pengiriman</h3>
+        <h3 class="text-lg sm:text-xl font-bold text-gray-900">Detail Resi</h3>
         <button on:click={() => showDetailModal = false} class="text-gray-400 hover:text-gray-600 p-1">
           <HeroIcon name="x-mark" class="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
@@ -1619,7 +1650,7 @@
         <!-- Delivery Info -->
         {#if selectedItem.alamat_tujuan}
           <div class="bg-gray-50 rounded-lg p-3 sm:p-4">
-            <h5 class="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Informasi Pengiriman</h5>
+            <h5 class="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Informasi Resi</h5>
             <div class="space-y-2 text-xs sm:text-sm">
               <div>
                 <span class="text-gray-600 font-medium">Alamat Tujuan:</span>
@@ -1666,7 +1697,7 @@
             on:click={() => handleEdit(selectedItem.id)}
             class="flex-1 px-4 py-2.5 bg-[#eb3434] text-white font-medium rounded-lg hover:bg-red-600 transition-colors text-sm"
           >
-            Edit Pengiriman
+            Edit Resi
           </button>
           <button
             on:click={() => showDetailModal = false}

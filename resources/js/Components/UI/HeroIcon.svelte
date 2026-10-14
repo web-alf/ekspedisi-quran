@@ -61,6 +61,7 @@
   import IconInformationCircle from 'lucide-svelte/icons/info';
   import IconInstagram from 'lucide-svelte/icons/instagram';
   import IconKey from 'lucide-svelte/icons/key';
+  import IconKeyboard from 'lucide-svelte/icons/keyboard';
   import IconLightBulb from 'lucide-svelte/icons/lightbulb';
   import IconLockClosed from 'lucide-svelte/icons/lock';
   import IconMagnifyingGlass from 'lucide-svelte/icons/search';
@@ -157,6 +158,7 @@
     'inbox-stack': IconInboxStack,
     'information-circle': IconInformationCircle,
     'instagram': IconInstagram,
+    'keyboard': IconKeyboard,
     'key': IconKey,
     'light-bulb': IconLightBulb,
     'lock-closed': IconLockClosed,

@@ -375,20 +375,15 @@ class CacheManager
 
         foreach ($this->getServices() as $name => $service) {
             try {
-                // Test write
-                $service->store($testKey, $testValue, 60);
-
-                // Test read
-                $retrieved = $service->retrieve($testKey);
-
-                // Test delete
-                $service->forget($testKey);
-
+                // Tes lewat selfTest(): store/retrieve/forget itu protected,
+                // tidak boleh disentuh kelas luar (mengakibatkan 500 di
+                // /admin/cache/test lama). selfTest merangkai ketiganya.
+                $baca = $service->selfTest($testKey, $testValue, 60);
                 $testResults[$name] = [
                     'write' => true,
-                    'read' => $retrieved === $testValue,
+                    'read' => $baca,
                     'delete' => true,
-                    'overall' => $retrieved === $testValue,
+                    'overall' => $baca,
                     'error' => null,
                 ];
             } catch (\Exception $e) {

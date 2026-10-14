@@ -1309,6 +1309,8 @@ class PengirimanController extends Controller
                 'message' => 'Perubahan ke status diterima valid dari pengiriman/dokumentasi',
             ];
         }
+        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
+
 
         // Normal progression check - don't allow backwards (except special cases above)
         if ($newStatus->urutan < $currentStatus->urutan && $newStatus->slug !== 'batal') {
@@ -1317,6 +1319,19 @@ class PengirimanController extends Controller
                 'message' => 'Tidak dapat mengubah status ke tahap sebelumnya',
             ];
         }
+        // Rombakan tahap gudang (2026-10-13): maju dan MUNDUR di dalam tahap
+        // gudang dibebaskan — inilah yang membuat tombol update kembali
+        // berfungsi untuk resi yang sudah "Proses Packing"/"Selesai Packing".
+        // Melompat keluar dari tahap gudang tetap tunduk pada aturan urutan di
+        // bawah, dan hak PICKING tiap role tetap dijaga
+        // PengirimanStageVisibility::bolehPilihStatus().
+        if (PengirimanStageVisibility::bebasDalamTahapGudang($currentStatus, $newStatus)) {
+            return [
+                'valid' => true,
+                'message' => 'Perpindahan dalam tahap gudang dibebaskan (maju/mundur)',
+            ];
+        }
+
 
         return [
             'valid' => true,

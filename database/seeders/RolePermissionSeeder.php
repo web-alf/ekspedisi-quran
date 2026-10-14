@@ -129,6 +129,12 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::WAKAF_BATCH_UPDATE->value,
             PermissionEnum::WAKAF_BATCH_DELETE->value,
 
+            // Stok mushaf tanpa muwakif (Fase 3 rombakan gudang): baca bebas,
+            // tulis & transfer untuk SPV/Manager Repacking — lihat daftar peran di bawah.
+            PermissionEnum::STOK_READ->value,
+            PermissionEnum::STOK_UPDATE->value,
+            PermissionEnum::STOK_TRANSFER->value,
+
             // Settings management
             PermissionEnum::SETTINGS_READ->value,
             PermissionEnum::SETTINGS_WRITE->value,
@@ -210,7 +216,10 @@ class RolePermissionSeeder extends Seeder
         );
         $warehouse->syncPermissions([
             PermissionEnum::DASHBOARD_VIEW->value,
-            PermissionEnum::DONATUR_READ->value,
+            // DONATUR_READ sengaja DIHAPUS (keputusan pemilik sistem
+            // 2026-10-13): halaman Donatur tidak diperlukan di sisi gudang —
+            // nama muwakif yang tampil di Data Resi tetap dibawa lewat prop
+            // model, bukan lewat izin ini.
             PermissionEnum::SHIPMENTS_CREATE->value,
             PermissionEnum::SHIPMENTS_READ->value,
             PermissionEnum::SHIPMENTS_UPDATE->value,
@@ -250,7 +259,85 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value,
             PermissionEnum::STATUS_UPDATE->value,
             PermissionEnum::WAKAF_BATCH_READ->value,
+            // Fase 3 rombakan gudang: stok mushaf tanpa muwakif.
+            // Freelancer hanya boleh MEMPERBACA stok; entri/pengurangan/transfer
+            // adalah kerja SPV Gudang & Manager Repacking (lihat daftar peran
+            // mereka di bawah).
+            PermissionEnum::STOK_READ->value,
         ]);
+
+        /*
+         * Rombakan gudang Fase 2 (2026-10-13): dua gudang (Semarang & Boyolali)
+         * dengan jenjang kepemimpinan baru.
+         *
+         * - Manager Repacking  = Manager Gudang (PJ): penanggung jawab, melihat
+         *   informasi LENGKAP kedua gudang, boleh assign kerjaan packing ke
+         *   freelancer.
+         * - SPV Gudang         = eksekutor per gudang; yang benar-benar assign
+         *   kerjaan packing ke freelancer. Gudangnya ditetapkan di users.gudang_id,
+         *   dan tugas yang ia assign ikut mewarisi gudang itu.
+         *
+         * Keduanya diberi izin operasional gudang yang sama dengan Staff Gudang
+         * (mereka memang harus bisa mengerjakan) DITAMBAH izin penugasan
+         * supervisor (monitor + assign target). Yang sengaja TIDAK diberikan:
+         * donatur.* (halaman Donatur bukan ranah sisi gudang — keputusan sama
+         * dengan role warehouse) dan shipments.bulk-update di sisi Data Resi
+         * tetap lewat jalur update-status.
+         *
+         * Role `warehouse` tetap ada sebagai FREELANCER: pekerja yang menerima
+         * tugas dari SPV, tanpa hak penugasan.
+         */
+        $izinOperasionalGudang = [
+            PermissionEnum::DASHBOARD_VIEW->value,
+            PermissionEnum::SHIPMENTS_READ->value,
+            // Fase 3 rombakan gudang: SPV/Manager Repacking menangani stok —
+            // entri/pengurangan dan dokumen transfer antar gudang.
+            PermissionEnum::STOK_READ->value,
+            PermissionEnum::STOK_UPDATE->value,
+            PermissionEnum::STOK_TRANSFER->value,
+            PermissionEnum::SHIPMENTS_TRACK->value,
+            PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
+            PermissionEnum::SHIPMENTS_EXPORT->value,
+            PermissionEnum::MUSHAF_REQUESTS_READ->value,
+            PermissionEnum::MUSHAF_REQUESTS_PROCESS->value,
+            PermissionEnum::CERTIFICATES_GENERATE->value,
+            PermissionEnum::CERTIFICATES_READ->value,
+            PermissionEnum::CERTIFICATES_DOWNLOAD->value,
+            PermissionEnum::WAREHOUSE_DASHBOARD->value,
+            PermissionEnum::WAREHOUSE_PACKING_VIEW->value,
+            PermissionEnum::WAREHOUSE_PACKING_SCAN->value,
+            PermissionEnum::WAREHOUSE_PACKING_SEAL->value,
+            PermissionEnum::WAREHOUSE_QR_GENERATE->value,
+            PermissionEnum::WAREHOUSE_QR_SCAN->value,
+            PermissionEnum::WAREHOUSE_QR_VERIFY->value,
+            PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value,
+            PermissionEnum::WAREHOUSE_PERFORMANCE_VIEW->value,
+            PermissionEnum::WAREHOUSE_TASKS_VIEW->value,
+            PermissionEnum::WAREHOUSE_TASKS_UPDATE->value,
+            PermissionEnum::WAREHOUSE_BOXES_VIEW->value,
+            PermissionEnum::WAREHOUSE_BOXES_SEAL->value,
+            PermissionEnum::WAREHOUSE_BOX_UPDATE_SEALED->value,
+            PermissionEnum::WAREHOUSE_BOX_UPDATE_ANY->value,
+            PermissionEnum::QR_GENERATE->value,
+            PermissionEnum::QR_SCAN->value,
+            PermissionEnum::QR_VERIFY->value,
+            PermissionEnum::STATUS_UPDATE->value,
+            PermissionEnum::WAKAF_BATCH_READ->value,
+            PermissionEnum::SUPERVISOR_WAREHOUSE_MONITOR->value,
+            PermissionEnum::SUPERVISOR_WAREHOUSE_ASSIGN->value,
+        ];
+
+        $managerRepacking = Role::firstOrCreate(
+            ['name' => RoleEnum::MANAGER_REPACKING->value],
+            ['display_name' => 'Manager Repacking (PJ Gudang)', 'guard_name' => 'web']
+        );
+        $managerRepacking->syncPermissions($izinOperasionalGudang);
+
+        $spvGudang = Role::firstOrCreate(
+            ['name' => RoleEnum::SPV_GUDANG->value],
+            ['display_name' => 'SPV Gudang', 'guard_name' => 'web']
+        );
+        $spvGudang->syncPermissions($izinOperasionalGudang);
 
         // Supervisor Role - can monitor and manage warehouse operations (but NOT operational warehouse tasks)
         $supervisor = Role::firstOrCreate(

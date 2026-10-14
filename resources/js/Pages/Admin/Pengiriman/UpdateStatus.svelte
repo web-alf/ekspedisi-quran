@@ -140,7 +140,7 @@
 </script>
 
 <svelte:head>
-    <title>Update Status Pengiriman - Ekspedisi Quran</title>
+    <title>Update Status Resi - Ekspedisi Quran</title>
 </svelte:head>
 
 <AdminLayout>

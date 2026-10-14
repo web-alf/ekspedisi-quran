@@ -24,6 +24,12 @@
   $: currentUser = $page.props.auth?.user || {};
   $: userPermissions = currentUser.permissions || [];
   $: userRolesDisplay = currentUser.roles_display || [];
+  // Menu khusus peran gudang (keputusan pemilik sistem): Manager Repacking
+  // (gudang@), SPV Gudang, dan freelancer warehouse — sidebar-nya SELURUHNYA
+  // daftar menu gudang, bukan menu admin yang tersisa lolos filter izin.
+  // Isinya tetap difilter izin (mata SPV dan freelancer otomatis berbeda).
+  $: peranNama = (currentUser.roles || []).map((r) => (typeof r === 'string' ? r : r?.name));
+  $: isPeranGudang = peranNama.some((r) => ['warehouse', 'manager-repacking', 'spv-gudang'].includes(r));
   $: primaryRoleDisplay = userRolesDisplay[0] || 'User';
   
   // Get settings for logo
@@ -73,6 +79,48 @@
   }
   
   function getAllNavigationItems() {
+    if (isPeranGudang) {
+      // Menu gudang: satu daftar, isi tetap ikut izin masing-masing akun.
+      // PJ & SPV sama daftarnya — beda hanya isi data (scoping di server).
+      return [
+        {
+          label: 'Dashboard Gudang',
+          route: '/admin/warehouse',
+          requiredPermissions: ['warehouse.dashboard']
+        },
+        {
+          label: 'Proses Packing',
+          route: '/admin/warehouse/packing',
+          requiredPermissions: ['warehouse.packing.view']
+        },
+        {
+          label: 'Stok Mushaf',
+          route: '/admin/warehouse/stok',
+          requiredPermissions: ['stok.read']
+        },
+        {
+          label: 'Daftar Kerdus',
+          route: '/admin/box-tracking',
+          requiredPermissions: ['warehouse.boxes.view']
+        },
+        {
+          label: 'Monitor & Penugasan',
+          route: '/admin/supervisor/warehouse-monitor',
+          requiredPermissions: ['supervisor.warehouse.monitor']
+        },
+        {
+          label: 'Data Resi',
+          route: '/admin/pengiriman',
+          requiredPermissions: ['shipments.read']
+        },
+        {
+          label: 'Performa Kerja',
+          route: '/admin/warehouse/performance',
+          requiredPermissions: ['warehouse.performance.view']
+        },
+      ];
+    }
+
     return [
       { 
         label: 'Dashboard', 
@@ -84,10 +132,17 @@
         route: '/admin/donatur',
         requiredPermissions: ['donatur.read']
       },
-      { 
-        label: 'Pengemasan', 
+      {
+        label: 'Data Resi',
         route: '/admin/pengiriman',
         requiredPermissions: ['shipments.read']
+      },
+      {
+        // Fase 3 rombakan gudang: stok mushaf belum ada muwakif per gudang +
+        // dokumen transfer antar gudang (Semarang/Boyolali).
+        label: 'Stok Mushaf',
+        route: '/admin/warehouse/stok',
+        requiredPermissions: ['stok.read']
       },
       { 
         label: 'Sertifikat', 
@@ -482,20 +537,20 @@
       // Main menu items
       'Dashboard': 'chart-bar',
       'Kelola Donatur': 'users',
-      // Menu ini menangani pengemasan, jadi ikonnya kardus kemasan
-      // (archive-box -> package-check), BUKAN truck.
+      // Menu ini REGISTRY RESI: seluruh record pengiriman (EQ-*) dari status
+      // pemesanan sampai diterima - bukan pekerjaan gudang, bukan tahap
+      // pengantaran. Ikonnya papan catatan berisi daftar.
       //
-      // Sebelumnya di sini 'truck', sisa dari waktu labelnya masih "Pengiriman".
-      // Setelah labelnya diganti "Pengemasan", truk jadi tidak nyambung: menu
-      // ini soal mengemas barang, bukan mengangkutnya. Ikon adalah janji visual
-      // pertama sebelum orang membaca labelnya - kalau tidak cocok, yang
-      // terlihat lebih dulu justru yang salah.
-      'Pengemasan': 'archive-box',
+      // Sejarah label: "Pengiriman" (bertabrakan dengan status `pengiriman`
+      // dan menu Muatan), lalu "Pengemasan" (salah sasaran - mengemas itu
+      // pekerjaan halaman Proses Packing, halaman ini tidak pernah mengemas
+      // apa pun). "Data Resi" sesuai isinya.
+      'Data Resi': 'clipboard-document-list',
       'Sertifikat': 'academic-cap',
       'Permintaan Mushaf': 'book-open',
-      // Ikon truk untuk muatan: ini menu soal MENGANGKUT barang, bukan mengemas.
-      // Sengaja beda dari 'Pengemasan' (kardus) supaya keduanya tidak terbaca
-      // sebagai hal yang sama.
+      // Ikon truk untuk muatan: ini menu soal MENGANGKUT barang. Sengaja beda
+      // dari 'Data Resi' (papan daftar) supaya keduanya tidak terbaca sebagai
+      // hal yang sama.
       'Muatan & Distribusi': 'truck',
       'Tugas Kurir': 'id-card',
       'Scan Barang': 'qr-code',

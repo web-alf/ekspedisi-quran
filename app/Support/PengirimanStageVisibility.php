@@ -287,9 +287,9 @@ class PengirimanStageVisibility
      *   manager  → tahap perjalanan DItambah tahap yang datanya ia tangani
      *              (termasuk "diterima", yang diselesaikan dengan verifikasi
      *              manual). Tahap gudang tetap tertutup baginya.
-     *   gudang   → tahap awal distribusi saja (pemesanan, produksi,
-     *              kedatangan, packing). Tahap perjalanan dan penyelesaian
-     *              tetap tertutup baginya; pengiriman/diterima adalah wewenang
+     *   gudang   → tahap gudang saja (pemesanan, antrian, packing,
+     *              selesai-packing). Tahap perjalanan dan penyelesaian tetap
+     *              tertutup baginya; pengiriman/diterima adalah wewenang
      *              kurir, manager, dan role distribusi.
      *   lainnya  → tidak dibatasi di sini
      */
@@ -326,6 +326,29 @@ class PengirimanStageVisibility
     }
 
     /**
+     * Apakah kedua status ini berada di dalam ranah gudang?
+     *
+     * Keputusan pemilik sistem (2026-10-13): di DALAM tahap gudang
+     * (pemesanan, antrian, packing, selesai-packing) perpindahan dibebaskan —
+     * maju maupun MUNDUR. Dulu mundur selalu ditolak ("Tidak dapat mengubah
+     * status ke tahap sebelumnya"), sehingga resi yang sudah "Selesai Packing"
+     * tidak bisa dikembalikan ke "Proses Packing" walau salah catat — tombol
+     * update terasa macet. Karena tahap gudang adalah ranah kerja harian, bukan
+     * penanda legal, arah geraknya dibebaskan; yang tetap tertutup adalah
+     * melompat keluar dari tiga status perjalanan/akhir (pengiriman, diterima,
+     * batal) — itu tetap dijaga bolehPilihStatus().
+     *
+     * Metode ini dipakai KEDUA validator transisi (halaman Data Resi dan
+     * halaman tracking per-resi) supaya aturannya tidak menyeleweng di salah
+     * satu jalur.
+     */
+    public static function bebasDalamTahapGudang(StatusPengiriman $dari, StatusPengiriman $ke): bool
+    {
+        return in_array($dari->slug, static::allowedGudangSlugs(), true)
+            && in_array($ke->slug, static::allowedGudangSlugs(), true);
+    }
+
+    /**
      * Alasan penolakan yang bisa ditampilkan ke pengguna.
      */
     public static function alasanTidakBolehPilih(?User $user, StatusPengiriman $status): ?string
@@ -335,8 +358,10 @@ class PengirimanStageVisibility
         }
 
         if (static::adalahGudang($user)) {
-            return 'Tahap awal distribusi (pemesanan, produksi, kedatangan, packing) '
-                ."adalah wewenang gudang. Status \"{$status->nama}\" bukan bagian dari tahap itu.";
+            $tahap = implode(', ', static::allowedGudangSlugs());
+
+            return "Tahap yang menjadi wewenang gudang: {$tahap}. "
+                ."Status \"{$status->nama}\" bukan bagian dari tahap itu.";
         }
 
         return 'Status yang boleh dipindahkan hanya tahap perjalanan pengiriman. '

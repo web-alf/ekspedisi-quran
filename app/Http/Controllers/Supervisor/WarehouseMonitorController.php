@@ -2,20 +2,23 @@
 
 namespace App\Http\Controllers\Supervisor;
 
+use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
 use App\Models\DailyPackingTask;
+use App\Models\Gudang;
 use App\Models\JenisQuran;
+use App\Models\PackingBox;
 use App\Models\PackingNotification;
 use App\Models\Pengiriman;
-use App\Models\StatusPengiriman;
+use App\Models\StokMushaf;
 use App\Models\User;
+use App\Services\Cache\StatusPengirimanCache;
 use App\Services\PackingAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use App\Services\Cache\StatusPengirimanCache;
 
 class WarehouseMonitorController extends Controller
 {
@@ -113,8 +116,18 @@ class WarehouseMonitorController extends Controller
 
         // Get today's tasks for all warehouse users
         $todayTasks = DailyPackingTask::whereDate('tanggal_tugas', today())
-            ->with(['user', 'packingBoxes'])
+            ->with(['user', 'user.gudang', 'packingBoxes', 'gudang'])
             ->get();
+
+        // Fase 3 revisi: SPV Gudang tercakup ke gudangnya — daftar tugas di
+        // Monitor hanya menampilkan tugas gudangnya sendiri (PJ & peran lain
+        // melihat kedua gudang). Agregat statistik tetap global.
+        $tercakupGudang = auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value)
+            ? auth()->user()->gudang_id
+            : null;
+        if ($tercakupGudang !== null) {
+            $todayTasks = $todayTasks->filter(fn ($task) => $task->gudang_id === $tercakupGudang)->values();
+        }
 
         // Get warehouse users stats
         $warehouseUsers = User::permission('warehouse.dashboard')
@@ -145,6 +158,9 @@ class WarehouseMonitorController extends Controller
                         'name' => $task->user->name,
                         'email' => $task->user->email,
                     ],
+                    // Fase 2 rombakan gudang: tugas bertagih gudang penugasa
+                    // (Semarang/Boyolali); null = tidak bertagih.
+                    'gudang' => $task->gudang?->nama,
                     'target_quantity' => $task->total_target - ($task->sisa_kemarin ?? 0),
                     'carry_over_quantity' => $task->sisa_kemarin ?? 0,
                     'total_target' => $task->total_target,
@@ -157,9 +173,14 @@ class WarehouseMonitorController extends Controller
                     'sealed_boxes' => $task->packingBoxes->where('status', 'sealed')->count(),
                 ];
             }),
+            'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
             'warehouseUsers' => $this->getWarehouseUsers(),
             'recentActivities' => $this->getRecentActivities(),
             'summary' => $this->getSummaryStats(),
+            'kartuGudang' => $this->kartuGudang($tercakupGudang),
+            // PJ/admin boleh MEMILIH gudang saat assign (SPV tidak — otomatis
+            // gudangnya).
+            'pilihGudang' => ! $tercakupGudang,
             'availablePengirimanCount' => $availablePengirimanCount,
             'stockInfo' => $stockInfo,
             // Add performance data to initial load
@@ -500,6 +521,8 @@ class WarehouseMonitorController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'target' => 'required|integer|min:1|max:200',
+            // Hanya bermakna bagi PJ/admin (bukan SPV terikat gudang).
+            'gudang_id' => 'nullable|integer|exists:gudang,id',
         ]);
 
         try {
@@ -513,10 +536,45 @@ class WarehouseMonitorController extends Controller
                 true // Allow update
             );
 
+            // Fase 2/3: tugas mewarisi gudang PENUGASANYA.
+            // - SPV terikat gudang → tugas bertagih gudangnya (SPV lain melihat
+            //   tugas itu di Monitor sesuai scoping);
+            // - PJ/admin (tanpa terikat gudang) boleh MEMILIH gudang lewat
+            //   gudang_id — kalau tidak memilih, tugas tak bertagih dan hanya
+            //   PJ/super-admin yang melihatnya di Monitor.
+            $penugasan = auth()->user();
+            $adalahSpvTercakup = $penugasan->hasRole(RoleEnum::SPV_GUDANG->value) && $penugasan->gudang_id !== null;
+            $tagihan = $adalahSpvTercakup
+                ? $penugasan->gudang_id
+                : ($request->filled('gudang_id') ? (int) $request->gudang_id : null);
+            $namaGudang = null;
+
+            if ($tagihan !== null) {
+                $gudang = Gudang::find($tagihan);
+                if (! $gudang) {
+                    throw new \Exception('Gudang penugasan tidak ditemukan.');
+                }
+                $namaGudang = $gudang->nama;
+            }
+
+            if ($tagihan !== null) {
+                DailyPackingTask::where('user_id', $user->id)
+                    ->whereDate('tanggal_tugas', today())
+                    ->update(['gudang_id' => $tagihan]);
+            }
+
+            if ($namaGudang !== null) {
+                $result['gudang'] = $namaGudang;
+            }
+
             // Determine success message based on status
             $message = $result['status'] === 'target_updated'
                 ? "Target berhasil diperbarui menjadi {$result['new_target']} mushaf untuk {$user->name}"
                 : "Target {$request->target} mushaf berhasil di-assign ke {$user->name}";
+
+            if (! empty($result['gudang'])) {
+                $message .= " ({$result['gudang']})";
+            }
 
             return response()->json([
                 'success' => true,
@@ -616,19 +674,127 @@ class WarehouseMonitorController extends Controller
     /**
      * Helper method to get warehouse users
      */
+    /**
+     * Kartu ringkasan per gudang (Fase 3b) — satu sumber untuk kartu di Monitor:
+     * - pemesanan: resi yang masih menunggu dijahit ke muwakif/dikirim ke gudang;
+     * - ready: stok mushaf belum ada muwakif per gudang (dari stok_mushaf);
+     * - packing: eks di dalam kerdus yang sedang diisi hari ini, bertagih gudang
+     *   tugasnya + jumlah resi yang statusnya masih "Proses Packing";
+     * - selesai: eks di dalam kerdus tersegel per gudang + resi "Selesai Packing"
+     *   (siap distribusi).
+     *
+     * Resi TIDAK membawa gudang sendiri: pemecahan per gudang hanya lewat kerdus
+     * → tugas → gudang, jadi hanya mushaf yang sudah masuk kerdus yang bisa
+     * dipecah. Angka global tetap disertakan supaya kartu tidak berbohong.
+     */
+    private function kartuGudang(?int $gudangTerbatas = null): array
+    {
+        $statusId = fn (string $slug) => StatusPengirimanCache::getIdBySlug($slug);
+
+        // SPV tercakup: baris per gudang hanya gudangnya (pemesanan tetap global
+        // karena resi belum muncak ke gudang).
+        $saring = function ($daftar) use ($gudangTerbatas) {
+            if ($gudangTerbatas === null) {
+                return $daftar;
+            }
+
+            return collect($daftar)->filter(fn ($baris) => ($baris['gudang_id'] ?? null) === $gudangTerbatas)->values()->all();
+        };
+
+        $perGudang = function (array $statusKerdus, ?Carbon $tanggal = null) use ($gudangTerbatas) {
+            return PackingBox::query()
+                ->join('daily_packing_tasks as t', 't.id', '=', 'packing_boxes.daily_packing_task_id')
+                ->whereIn('packing_boxes.status', $statusKerdus)
+                ->when($tanggal !== null, fn ($q) => $q->whereDate('t.tanggal_tugas', $tanggal))
+                ->when($gudangTerbatas !== null, fn ($q) => $q->where('t.gudang_id', $gudangTerbatas))
+                ->whereNotNull('t.gudang_id')
+                ->groupBy('t.gudang_id')
+                ->get(['t.gudang_id',
+                    DB::raw('sum(packing_boxes.jumlah_terisi) as eks'),
+                    DB::raw('count(*) as kerdus'),
+                ])
+                ->mapWithKeys(fn ($baris) => [$baris->gudang_id => [
+                    'eks' => (int) $baris->eks,
+                    'kerdus' => (int) $baris->kerdus,
+                ]])
+                ->all();
+        };
+
+        $namaGudang = Gudang::query()
+            ->when($gudangTerbatas !== null, fn ($q) => $q->where('id', $gudangTerbatas))
+            ->pluck('nama', 'id');
+
+        $susun = function (array $angka) use ($namaGudang) {
+            $hasil = [];
+            foreach ($namaGudang as $id => $nama) {
+                $hasil[$id] = [
+                    'gudang' => $nama,
+                    'gudang_id' => $id,
+                    'eks' => $angka[$id]['eks'] ?? 0,
+                    'kerdus' => $angka[$id]['kerdus'] ?? 0,
+                ];
+            }
+
+            return array_values($hasil);
+        };
+
+        // Stok belum ada muwakif: dus per jenis digabung per gudang, eks lewat
+        // kapasitas jenis masing-masing (BoxUnits).
+        $ready = StokMushaf::with(['gudang', 'jenisQuran'])
+            ->when($gudangTerbatas !== null, fn ($q) => $q->where('gudang_id', $gudangTerbatas))
+            ->get()
+            ->groupBy('gudang_id')
+            ->map(function ($baris) {
+                return [
+                    'dus' => (int) $baris->sum(fn ($stok) => $stok->jumlahDus()),
+                    'eks' => (int) $baris->sum('jumlah_eks'),
+                ];
+            });
+
+        $readyPerGudang = collect($namaGudang)->map(fn ($nama, $id) => [
+            'gudang' => $nama,
+            'gudang_id' => $id,
+            'dus' => $ready[$id]['dus'] ?? 0,
+            'eks' => $ready[$id]['eks'] ?? 0,
+        ])->values()->all();
+
+        return [
+            'pemesanan' => Pengiriman::where('status_id', $statusId('pemesanan'))->count(),
+            'ready' => $saring($readyPerGudang),
+            'packing' => [
+                'total' => Pengiriman::where('status_id', $statusId('packing'))->count(),
+                'per_gudang' => $saring($susun($perGudang(['filling', 'full'], today()))),
+            ],
+            'selesai' => [
+                'total' => Pengiriman::where('status_id', $statusId('selesai-packing'))->count(),
+                'per_gudang' => $saring($susun($perGudang(['sealed']))),
+            ],
+        ];
+    }
+
     private function getWarehouseUsers()
     {
-        return User::permission('warehouse.dashboard')
+        // Daftar KANDIDAT PENUGASAN PACKING: hanya role `warehouse` (freelancer
+        // pekerja). Dulu memakai penyaring izin `warehouse.dashboard`, sehingga
+        // super-admin (memegang semua izin) dan peran lain ikut tampil di modal
+        // Assign Target padahal bukan pekerja packing.
+        return User::role(RoleEnum::WAREHOUSE->value)
             ->where('is_active', true)
-            ->with(['dailyPackingTasks' => function ($query) {
-                $query->whereDate('tanggal_tugas', today());
-            }])
+            ->with([
+                'dailyPackingTasks' => function ($query) {
+                    $query->whereDate('tanggal_tugas', today());
+                },
+                'gudang',
+            ])
             ->get()
             ->map(function ($user) {
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    // Fase 2 rombakan gudang: anggota gudang diberi label
+                    // gudangnya (Semarang/Boyolali) agar SPV tidak salah assign.
+                    'gudang' => $user->gudang?->nama,
                 ];
             });
     }
@@ -831,16 +997,18 @@ class WarehouseMonitorController extends Controller
 
             // Get status IDs for calculation
             $statusIds = [
-                'kedatangan' => StatusPengirimanCache::getIdBySlug('kedatangan'),
+                // 'antrian' menggantikan 'kedatangan' (rombakan tahap gudang
+                // 2026-10-13): stok masuk gudang = resi yang sedang antre packing.
+                'antrian' => StatusPengirimanCache::getIdBySlug('antrian'),
                 'packing' => StatusPengirimanCache::getIdBySlug('packing'),
                 'selesai-packing' => StatusPengirimanCache::getIdBySlug('selesai-packing'),
                 'pengiriman' => StatusPengirimanCache::getIdBySlug('pengiriman'),
                 'diterima' => StatusPengirimanCache::getIdBySlug('diterima'),
             ];
 
-            // Incoming stock (status: kedatangan - ready to pack)
+            // Incoming stock (status: antrian - ready to pack)
             $incoming = Pengiriman::where('jenis_quran_id', $jenis->id)
-                ->where('status_id', $statusIds['kedatangan'])
+                ->where('status_id', $statusIds['antrian'])
                 ->sum('jumlah_quran');
 
             // Siap Distribusi (hanya status selesai packing)

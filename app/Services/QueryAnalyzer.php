@@ -410,30 +410,40 @@ class QueryAnalyzer
 
     private function calculatePerformanceGrade(): string
     {
-        $metrics = $this->getPerformanceMetrics();
+        // Hitung metrik secara LOKAL. Memanggil getPerformanceMetrics() di sini
+        // memicu rekursi silang (getPerformanceMetrics → grade → metrics → …)
+        // yang meledak "Maximum call stack" (QueryAnalyzer) begitu ada query
+        // lambat di log — membuat halaman /admin/query-optimization 500.
+        $totalQueries = count($this->queryLog);
+        $slowQueries = array_filter($this->queryLog, fn ($q) => $q['execution_time'] > self::SLOW_QUERY_THRESHOLD);
+        $slowPercentage = $totalQueries > 0 ? (count($slowQueries) / $totalQueries) * 100 : 0;
+        $nPlusOnePatterns = count($this->detectNPlusOnePatterns());
+        $avgTime = $totalQueries > 0
+            ? array_sum(array_column($this->queryLog, 'execution_time')) / $totalQueries
+            : 0;
 
         $score = 100;
 
         // Deduct points for slow queries
-        if ($metrics['slow_query_percentage'] > 20) {
+        if ($slowPercentage > 20) {
             $score -= 30;
-        } elseif ($metrics['slow_query_percentage'] > 10) {
+        } elseif ($slowPercentage > 10) {
             $score -= 15;
-        } elseif ($metrics['slow_query_percentage'] > 5) {
+        } elseif ($slowPercentage > 5) {
             $score -= 10;
         }
 
         // Deduct points for N+1 patterns
-        if ($metrics['n_plus_one_patterns'] > 0) {
-            $score -= $metrics['n_plus_one_patterns'] * 15;
+        if ($nPlusOnePatterns > 0) {
+            $score -= $nPlusOnePatterns * 15;
         }
 
         // Deduct points for average execution time
-        if ($metrics['average_execution_time'] > 100) {
+        if ($avgTime > 100) {
             $score -= 20;
-        } elseif ($metrics['average_execution_time'] > 50) {
+        } elseif ($avgTime > 50) {
             $score -= 10;
-        } elseif ($metrics['average_execution_time'] > 25) {
+        } elseif ($avgTime > 25) {
             $score -= 5;
         }
 

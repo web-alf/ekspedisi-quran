@@ -13,8 +13,9 @@ use Spatie\Permission\PermissionRegistrar;
 uses(RefreshDatabase::class);
 
 /**
- * Tahap awal distribusi (pemesanan, produksi, kedatangan, packing) adalah ranah
- * staff gudang.
+ * Tahap gudang hasil rombakan 2026-10-13: Pemesanan → Antrian → Packing →
+ * Selesai Packing. `kedatangan` dihapus dari alur (master dinonaktifkan) dan
+ * `produksi` keluar dari ranah gudang (proses cetak di luar gudang).
  *
  * Yang diuji di sini adalah BATASNYA, bukan hanya "izinnya ada". Menambah izin
  * `shipments.update-status` ke gudang membuka seluruh jalur ubah status — dan
@@ -22,11 +23,18 @@ uses(RefreshDatabase::class);
  * batas tahapnya tidak ditegakkan di semua jalur, gudang justru bisa
  * memindahkan resi ke "pengiriman" atau "diterima", yang bukan wewenangnya.
  *
- * Catatan penting soal bentuk uji: `PengingirimanTrackingController` menolak
- * lompatan (status hanya boleh maju SATU langkah). Karena itu uji "penolakan"
- * harus memakai tujuan yang HANYA ditolak oleh batas tahap — kalau tidak, uji
- * itu lulus karena aturan urutan, bukan karena batas wewenang, dan batasnya
- * bisa dihapus tanpa ada uji yang gagal.
+ * Dua aturan baru yang ikut diuji di sini:
+ * - Dalam ranah gudang (bebasDalamTahapGudang), maju dan MUNDUR dibebaskan —
+ *   dulu resi yang sudah "Selesai Packing" tidak bisa dikembalikan ke
+ *   "Proses Packing" dan tombol update terasa macet.
+ * - Gudang kini TIDAK lagi boleh menyentuh resi yang sedang berada di
+ *   produksi/kedatangan (di luar rantainya) — kebalikan dari dulu.
+ *
+ * Catatan penting soal bentuk uji: uji "penolakan" harus memakai tujuan yang
+ * HANYA ditolak oleh batas tahap — mis. maju jauh atau ke tahap perjalanan.
+ * Bila pilihannya juga ditolak aturan urutan, uji itu lulus karena aturan
+ * urutan, bukan karena batas wewenang, dan batasnya bisa dihapus tanpa ada
+ * uji yang gagal.
  */
 beforeEach(function () {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -34,12 +42,37 @@ beforeEach(function () {
     $this->seed(RolePermissionSeeder::class);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-    foreach (['pemesanan', 'produksi', 'kedatangan', 'packing', 'selesai-packing', 'pengiriman'] as $i => $slug) {
-        StatusPengiriman::firstOrCreate(
-            ['slug' => $slug],
-            ['nama' => ucfirst(str_replace('-', ' ', $slug)), 'urutan' => $i + 1, 'is_active' => true, 'is_final' => false]
-        );
-    }
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'pemesanan'],
+        ['nama' => 'Proses Pemesanan', 'urutan' => 1, 'is_active' => true, 'is_final' => false]
+    );
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'produksi'],
+        ['nama' => 'Proses Produksi', 'urutan' => 2, 'is_active' => true, 'is_final' => false]
+    );
+    // Dihapus dari alur: hanya dipertahankan agar resi lama tetap punya label.
+    // updateOrCreate (bukan firstOrCreate) karena migrasi uji bisa saja sudah
+    // membuat barisnya AKTIF — keputusan skill ini harus menang.
+    StatusPengiriman::updateOrCreate(
+        ['slug' => 'kedatangan'],
+        ['nama' => 'Proses Kedatangan/Penurunan', 'urutan' => 3, 'is_active' => false, 'is_final' => false]
+    );
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'antrian'],
+        ['nama' => 'Antrian', 'urutan' => 3, 'is_active' => true, 'is_final' => false]
+    );
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'packing'],
+        ['nama' => 'Proses Packing', 'urutan' => 4, 'is_active' => true, 'is_final' => false]
+    );
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'selesai-packing'],
+        ['nama' => 'Selesai Packing', 'urutan' => 5, 'is_active' => true, 'is_final' => false]
+    );
+    StatusPengiriman::firstOrCreate(
+        ['slug' => 'pengiriman'],
+        ['nama' => 'Proses Pengiriman', 'urutan' => 6, 'is_active' => true, 'is_final' => false]
+    );
     StatusPengiriman::firstOrCreate(
         ['slug' => 'diterima'],
         ['nama' => 'Diterima Penerima', 'urutan' => 7, 'is_active' => true, 'is_final' => true]
@@ -78,40 +111,60 @@ it('memberi izin ubah status dan lacak resi kepada gudang', function () {
         ->and($gudang->hasPermissionTo(PermissionEnum::SHIPMENTS_TRACK->value))->toBeTrue();
 });
 
-it('membatasi pilihan status gudang ke tahap awal saja', function () {
+it('membatasi pilihan status gudang ke tahap gudang saja', function () {
     $gudang = gudangUser();
 
-    foreach (['pemesanan', 'produksi', 'kedatangan', 'packing'] as $slug) {
+    foreach (['pemesanan', 'antrian', 'packing', 'selesai-packing'] as $slug) {
         expect(PengirimanStageVisibility::bolehPilihStatus($gudang, StatusPengiriman::where('slug', $slug)->first()))
             ->toBeTrue("gudang seharusnya boleh memilih {$slug}");
     }
 
-    foreach (['selesai-packing', 'pengiriman', 'diterima', 'batal'] as $slug) {
+    foreach (['produksi', 'kedatangan', 'pengiriman', 'diterima', 'batal'] as $slug) {
         expect(PengirimanStageVisibility::bolehPilihStatus($gudang, StatusPengiriman::where('slug', $slug)->first()))
             ->toBeFalse("gudang seharusnya TIDAK boleh memilih {$slug}");
     }
 });
 
-it('hanya mengizinkan gudang menyentuh resi yang masih di tahap awal', function () {
+it('hanya mengizinkan gudang menyentuh resi yang masih di tahap gudang', function () {
     // Batas per-baris: tahap tujuan boleh sah, tetapi resinya sudah bukan
-    // tanggung jawab gudang lagi.
+    // tanggung jawab gudang lagi. Sejak produksi keluar dari rantai gudang,
+    // resi yang sedang di produksi juga tidak boleh disentuh gudang.
     $gudang = gudangUser();
-    $produksi = StatusPengiriman::where('slug', 'produksi')->first();
+    $packing = StatusPengiriman::where('slug', 'packing')->first();
 
-    expect(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('pemesanan'), $produksi))->toBeTrue()
-        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('kedatangan'), $produksi))->toBeTrue()
-        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('diterima'), $produksi))->toBeFalse()
-        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('pengiriman'), $produksi))->toBeFalse();
+    expect(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('pemesanan'), $packing))->toBeTrue()
+        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('selesai-packing'), $packing))->toBeTrue()
+        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('produksi'), $packing))->toBeFalse()
+        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('diterima'), $packing))->toBeFalse()
+        ->and(PengirimanStageVisibility::bolehPindahkan($gudang, resiStatus('pengiriman'), $packing))->toBeFalse();
 });
 
-it('menawarkan hanya empat tahap awal pada dropdown pemindahan gudang', function () {
+it('menawarkan tahap gudang (pemesanan sampai selesai-packing) pada dropdown pemindahan', function () {
     $gudang = gudangUser();
 
     expect(collect(PengirimanStageVisibility::visibleProgressStatuses($gudang))->pluck('slug')->sort()->values()->all())
-        ->toBe(['kedatangan', 'packing', 'pemesanan', 'produksi']);
+        ->toBe(['antrian', 'packing', 'pemesanan', 'selesai-packing']);
 });
 
-it('gudang tetap melihat semua status pada filter daftar pengiriman', function () {
+it('dalam ranah gudang, maju dan mundur dibebaskan', function () {
+    // Satu predikat dipakai dua validator + penyusun dropdown. Ini mengunci
+    // keputusan pemilik sistem: resi yang salah catat harus bisa dikembalikan
+    // tanpa meminta admin.
+    $dariPemesanan = StatusPengiriman::where('slug', 'pemesanan')->first();
+    $antrian = StatusPengiriman::where('slug', 'antrian')->first();
+    $packing = StatusPengiriman::where('slug', 'packing')->first();
+    $selesai = StatusPengiriman::where('slug', 'selesai-packing')->first();
+    $pengiriman = StatusPengiriman::where('slug', 'pengiriman')->first();
+
+    foreach ([[$antrian, $dariPemesanan], [$dariPemesanan, $antrian], [$packing, $antrian], [$antrian, $packing]] as [$dari, $ke]) {
+        expect(PengirimanStageVisibility::bebasDalamTahapGudang($dari, $ke))->toBeTrue();
+    }
+
+    expect(PengirimanStageVisibility::bebasDalamTahapGudang($selesai, $pengiriman))->toBeFalse()
+        ->and(PengirimanStageVisibility::bebasDalamTahapGudang($pengiriman, $selesai))->toBeFalse();
+});
+
+it('gudang tetap melihat semua status aktif pada filter daftar pengiriman', function () {
     // Filter bukan pemindahan: gudang perlu melihat resi lintas status supaya
     // pekerjaannya terlihat. Yang dibatasi adalah pilihannya, bukan filternya.
     $gudang = gudangUser();
@@ -119,44 +172,73 @@ it('gudang tetap melihat semua status pada filter daftar pengiriman', function (
     expect(collect(PengirimanStageVisibility::visibleStatuses($gudang))->pluck('slug'))
         ->toContain('pengiriman')
         ->toContain('diterima')
-        ->toContain('produksi');
+        ->toContain('produksi')
+        ->toContain('antrian')
+        ->not->toContain('kedatangan');
 });
 
-it('mengizinkan gudang memajukan pemesanan ke produksi lewat ubah status', function () {
+it('mengizinkan gudang memindahkan pemesanan ke antrian lewat ubah status', function () {
     $resi = resiStatus('pemesanan');
 
     $this->actingAs(gudangUser())
         ->post(route('admin.pengiriman.update-status', $resi), [
-            'status_id' => statusId('produksi'),
-            'catatan' => 'Mushaf masuk proses produksi',
+            'status_id' => statusId('antrian'),
+            'catatan' => 'Mushaf sudah siap di gudang',
         ]);
 
-    expect($resi->fresh()->status_id)->toBe(statusId('produksi'));
+    expect($resi->fresh()->status_id)->toBe(statusId('antrian'));
 });
 
-it('mengizinkan gudang melangkah dari produksi ke kedatangan', function () {
-    $resi = resiStatus('produksi');
+it('mengizinkan gudang memajukan antrian ke proses packing', function () {
+    $resi = resiStatus('antrian');
 
     $this->actingAs(gudangUser())
         ->post(route('admin.pengiriman.update-status', $resi), [
-            'status_id' => statusId('kedatangan'),
+            'status_id' => statusId('packing'),
         ]);
 
-    expect($resi->fresh()->status_id)->toBe(statusId('kedatangan'));
+    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
+});
+
+it('mengizinkan gudang mengembalikan selesai-packing ke proses packing (fleksibel)', function () {
+    // Inilah keluhan "tombol update belum berfungsi ketika sudah di proses
+    // packing": dulu mundur selalu ditolak ("Tidak dapat mengubah status ke
+    // tahap sebelumnya") walaupun kedua tahapnya ranah gudang.
+    $resi = resiStatus('selesai-packing');
+
+    $this->actingAs(gudangUser())
+        ->post(route('admin.pengiriman.update-status', $resi), [
+            'status_id' => statusId('packing'),
+            'catatan' => 'Dikembalikan untuk packing ulang',
+        ]);
+
+    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
+});
+
+it('mengizinkan gudang melompati tahap dalam ranahnya (pemesanan ke packing)', function () {
+    // Bebas berarti bebas: tidak dipaksa satu langkah.
+    $resi = resiStatus('pemesanan');
+
+    $this->actingAs(gudangUser())
+        ->post(route('admin.pengiriman.update-status', $resi), [
+            'status_id' => statusId('packing'),
+        ]);
+
+    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
 });
 
 it('menolak gudang memindahkan resi ke pengiriman', function () {
-    // Resi di "kedatangan" (urutan 3) → "pengiriman" (urutan 6) ditolak DUA
-    // aturan sekaligus (lompatan urutan dan batas tahap), jadi bentuk lain
-    // dipakai untuk membuktikan batas tahapnya sendiri ada di bawah.
-    $resi = resiStatus('kedatangan');
+    // "pemesanan" (1) → "pengiriman" (6) SAH menurut aturan urutan (maju),
+    // jadi satu-satunya yang menolaknya adalah batas tahap gudang. Kalau batas
+    // itu dihapus, uji ini gagal — inilah yang menggigit.
+    $resi = resiStatus('pemesanan');
 
     $this->actingAs(gudangUser())
         ->post(route('admin.pengiriman.update-status', $resi), [
             'status_id' => statusId('pengiriman'),
         ]);
 
-    expect($resi->fresh()->status_id)->toBe(statusId('kedatangan'));
+    expect($resi->fresh()->status_id)->toBe(statusId('pemesanan'));
 });
 
 it('menolak gudang menandai resi diterima penerima', function () {
@@ -170,29 +252,40 @@ it('menolak gudang menandai resi diterima penerima', function () {
     expect($resi->fresh()->status_id)->toBe(statusId('selesai-packing'));
 });
 
-it('menolak gudang memindahkan resi packing ke selesai-packing', function () {
-    // Uji penentu: "packing" (4) → "selesai-packing" (5) SAH menurut aturan
-    // urutan, jadi satu-satunya yang menolaknya adalah batas tahap gudang.
-    // Kalau batas itu dihapus, uji ini gagal — inilah yang "menggigit".
+it('mengizinkan gudang menandai packing selesai (serah terima ke distribusi)', function () {
+    // "packing" (4) → "selesai-packing" (5): tahap pamungkas gudang, titik
+    // serah-terima ke distribusi. Distribusi (muatan) menganggap tahap ini
+    // "siap dimuat".
     $resi = resiStatus('packing');
 
     $this->actingAs(gudangUser())
         ->post(route('admin.pengiriman.update-status', $resi), [
             'status_id' => statusId('selesai-packing'),
+            'catatan' => 'Packing selesai',
         ]);
 
-    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
+    expect($resi->fresh()->status_id)->toBe(statusId('selesai-packing'));
+
+    // Distribusi melihat datanya: manager hanya boleh melihat tahap akhir, dan
+    // `selesai-packing` termasuk di dalamnya.
+    $manager = User::factory()->create(['is_active' => true]);
+    $manager->assignRole(RoleEnum::MANAGER->value);
+    $manager = $manager->fresh();
+
+    expect(PengirimanStageVisibility::isVisible($manager, $resi->fresh()))->toBeTrue();
 });
 
 it('menolak gudang membatalkan pengiriman', function () {
-    $resi = resiStatus('kedatangan');
+    // "batal" selalu sah menurut aturan transisi; yang menolak adalah batas
+    // tahap gudang.
+    $resi = resiStatus('packing');
 
     $this->actingAs(gudangUser())
         ->post(route('admin.pengiriman.update-status', $resi), [
             'status_id' => statusId('batal'),
         ]);
 
-    expect($resi->fresh()->status_id)->toBe(statusId('kedatangan'));
+    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
 });
 
 it('menolak gudang menarik kembali resi yang sudah diterima', function () {
@@ -223,12 +316,12 @@ it('menutup lubang di endpoint batch status', function () {
 });
 
 it('menutup lubang di endpoint bulk status', function () {
-    // Endpoint bulk TIDAK memakai batas DATA (applyToQuery) dan sebelumnya juga
-    // tanpa batas pilihan sama sekali. Yang bisa membuktikannya hanya role yang
-    // benar-benar memegang `shipments.bulk-update` SEKALIGUS punya batas
-    // pilihan — yaitu manager. Memakai gudang/kurir di sini tidak menguji apa
-    // pun: keduanya tidak punya izin bulk, jadi ditolak middleware lebih dulu
-    // dan uji akan tetap lulus walau penjaganya dihapus.
+    // Endpoint bulk memeriksa batas PILIHAN (bolehPilihStatus) sendiri, terpisah
+    // dari batas data (applyToQuery). Uji ini memakai manager karena batas
+    // pilihannya BERBEDA dari gudang — manager hanya boleh tahap akhir — sehingga
+    // yang diuji benar-benar batas tujuan, bukan middleware izin. Gudang kini juga
+    // boleh memakai endpoint ini (lihat uji di bawah), jadi memakai gudang di sini
+    // tidak lagi membedakan kedua lapisan itu.
     $manager = User::factory()->create(['is_active' => true]);
     $manager->assignRole(RoleEnum::MANAGER->value);
     $manager = $manager->fresh();
@@ -273,7 +366,7 @@ it('menyaring pilihan status di form edit dengan predikat yang sama', function (
         ->viewData('page')['props'];
 
     expect(collect($props['statusList'])->pluck('slug')->sort()->values()->all())
-        ->toBe(['kedatangan', 'packing', 'pemesanan', 'produksi']);
+        ->toBe(['antrian', 'packing', 'pemesanan', 'selesai-packing']);
 });
 
 it('gudang masih boleh menyunting alamat tanpa mengubah status', function () {
@@ -332,7 +425,7 @@ it('tidak membatasi super-admin', function () {
     $superAdmin = User::factory()->create(['is_active' => true]);
     $superAdmin->assignRole(RoleEnum::SUPER_ADMIN->value);
 
-    $resi = resiStatus('kedatangan');
+    $resi = resiStatus('antrian');
 
     $this->actingAs($superAdmin)
         ->post(route('admin.pengiriman.update-status', $resi), [
@@ -347,7 +440,7 @@ it('menutup rapat bila daftar tahap gudang dikosongkan', function () {
 
     $gudang = gudangUser();
 
-    expect(PengirimanStageVisibility::bolehPilihStatus($gudang, StatusPengiriman::where('slug', 'produksi')->first()))
+    expect(PengirimanStageVisibility::bolehPilihStatus($gudang, StatusPengiriman::where('slug', 'antrian')->first()))
         ->toBeFalse()
         ->and(collect(PengirimanStageVisibility::visibleProgressStatuses($gudang)))->toBeEmpty();
 });
@@ -359,4 +452,90 @@ it('menjaga integritas: slug tahap gudang harus ada di basis data', function () 
     foreach (PengirimanStageVisibility::allowedGudangSlugs() as $slug) {
         expect($slugs)->toContain($slug);
     }
+});
+
+it('mengizinkan gudang memakai tombol Update Status Massal', function () {
+    // Tombol di halaman digerbangi izin yang SAMA dengan rutenya. Dulu rute ini
+    // hanya menerima `shipments.bulk-update` — izin yang tidak dipegang satu pun
+    // akun gudang — sehingga panel "Update Status Massal" muncul TANPA tombol
+    // Update, sementara jalur per-resi justru boleh.
+    $gudang = gudangUser();
+    $resi = resiStatus('pemesanan');
+
+    expect($gudang->hasPermissionTo(PermissionEnum::SHIPMENTS_UPDATE_STATUS->value))->toBeTrue();
+
+    $this->actingAs($gudang)
+        ->postJson(route('admin.pengiriman.bulk-status'), [
+            'pengiriman_ids' => [$resi->id],
+            'status_id' => statusId('packing'),
+            'catatan' => 'bulk oleh gudang',
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('success', true);
+
+    expect($resi->fresh()->status_id)->toBe(statusId('packing'));
+
+    $this->assertDatabaseHas('status_histories', [
+        'pengiriman_id' => $resi->id,
+        'status_to' => statusId('packing'),
+        'created_by' => $gudang->id,
+    ]);
+});
+
+it('tetap menolak gudang memindahkan status di luar tahapnya lewat bulk', function () {
+    // Batas tahap berlaku juga di jalur massal: "pengiriman" sah menurut urutan
+    // (maju dari pemesanan), ditolak hanya karena bukan wewenang gudang.
+    $gudang = gudangUser();
+    $resi = resiStatus('pemesanan');
+
+    $this->actingAs($gudang)
+        ->postJson(route('admin.pengiriman.bulk-status'), [
+            'pengiriman_ids' => [$resi->id],
+            'status_id' => statusId('pengiriman'),
+        ]);
+
+    expect($resi->fresh()->status_id)->toBe(statusId('pemesanan'));
+    $this->assertDatabaseCount('status_histories', 0);
+});
+
+it('tidak memberi gudang wewenang set alamat massal', function () {
+    // Set alamat massal menautkan permintaan mushaf dan menandainya diproses —
+    // bukan pekerjaan gudang. Rutenya tetap hanya `shipments.bulk-update`, dan
+    // tombolnya di halaman kini ikut disembunyikan (dulu digerbangi
+    // shipments.update sehingga tampil padahal server selalu menolak).
+    $gudang = gudangUser();
+    $resi = resiStatus('pemesanan');
+
+    $this->actingAs($gudang)
+        ->postJson(route('admin.pengiriman.bulk-alamat'), [
+            'pengiriman_ids' => [$resi->id],
+            'alamat_tujuan' => 'Alamat uji gudang',
+        ])
+        ->assertForbidden();
+});
+
+it('tidak lagi memberi gudang izin halaman donatur', function () {
+    // Keputusan pemilik sistem: halaman Donatur tidak diperlukan di sisi gudang.
+    // Tanpa izin ini menu "Kelola Donatur" hilang dari navigasi SEKALIGUS
+    // rutenya ditolak server — bukan sekadar disembunyikan.
+    $gudang = gudangUser();
+
+    expect($gudang->hasPermissionTo(PermissionEnum::DONATUR_READ->value))->toBeFalse();
+
+    $this->actingAs($gudang)
+        ->get(route('admin.donatur.index'))
+        ->assertForbidden();
+});
+
+it('mengirim izin yang dibutuhkan tombol bulk ke halaman pengiriman', function () {
+    $gudang = gudangUser();
+
+    $izin = $this->actingAs($gudang)
+        ->get(route('admin.pengiriman.index'))
+        ->assertSuccessful()
+        ->viewData('page')['props']['auth']['user']['permissions'];
+
+    expect($izin)->toContain(PermissionEnum::SHIPMENTS_UPDATE_STATUS->value)
+        ->and($izin)->not->toContain(PermissionEnum::SHIPMENTS_BULK_UPDATE->value)
+        ->and($izin)->not->toContain(PermissionEnum::DONATUR_READ->value);
 });

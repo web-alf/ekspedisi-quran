@@ -124,6 +124,9 @@ enum PermissionEnum: string
     // Wakaf batch
     case WAKAF_BATCH_CREATE = 'wakaf-batch.create';
     case WAKAF_BATCH_READ = 'wakaf-batch.read';
+    case STOK_READ = 'stok.read';
+    case STOK_UPDATE = 'stok.update';
+    case STOK_TRANSFER = 'stok.transfer';
     case WAKAF_BATCH_UPDATE = 'wakaf-batch.update';
     case WAKAF_BATCH_DELETE = 'wakaf-batch.delete';
 

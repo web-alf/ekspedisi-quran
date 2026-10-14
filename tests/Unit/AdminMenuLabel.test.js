@@ -144,30 +144,31 @@ describe('Sidebar admin', () => {
         expect(item.querySelector('svg')?.getAttribute('class') ?? '').toContain('lucide-box');
     });
 
-    it('menu Pengemasan memakai ikon kardus, bukan truck', async () => {
-        // Ikon truk adalah sisa dari waktu label menu ini masih "Pengiriman".
-        // Setelah labelnya jadi "Pengemasan", truk tidak nyambung - ikon adalah
-        // hal pertama yang terlihat sebelum labelnya dibaca. Dikunci eksplisit
-        // supaya sisa lama itu tidak kembali tanpa ketahuan.
+    it('menu Data Resi memakai ikon papan daftar, bukan truck', async () => {
+        // Halaman ini registry resi, bukan pekerjaan gudang ataupun tahap
+        // pengantaran, jadi ikonnya papan catatan berisi daftar
+        // (clipboard-document-list -> list-checks). Truk tetap dikunci keluar:
+        // itu janji visual MENGANGKUT, kini dipakai menu Muatan & Distribusi.
         const { container } = render(AdminLayout);
 
         const item = [...container.querySelectorAll('a')]
-            .find((a) => a.textContent.trim() === 'Pengemasan');
+            .find((a) => a.textContent.trim() === 'Data Resi');
 
-        expect(item, 'menu Pengemasan tidak ditemukan').toBeTruthy();
+        expect(item, 'menu Data Resi tidak ditemukan').toBeTruthy();
 
         const kelas = item.querySelector('svg')?.getAttribute('class') ?? '';
 
-        expect(kelas).toContain('lucide-package-check');
-        expect(kelas, 'ikon truck tidak boleh dipakai lagi di menu Pengemasan').not.toContain('lucide-truck');
+        expect(kelas).toContain('lucide-list-checks');
+        expect(kelas, 'ikon truck tidak boleh dipakai di menu Data Resi').not.toContain('lucide-truck');
     });
 
-    it('menu Pengemasan tetap mengarah ke halaman pengiriman', async () => {
-        // Hanya label dan ikon yang berubah; route dan izinnya tidak disentuh.
+    it('menu Data Resi tetap mengarah ke halaman pengiriman', async () => {
+        // Label pernah "Pengiriman" lalu "Pengemasan"; route, izin, dan
+        // fungsinya tidak pernah disentuh - yang berubah hanya label dan ikon.
         const { container } = render(AdminLayout);
 
         const item = [...container.querySelectorAll('a')]
-            .find((a) => a.textContent.trim() === 'Pengemasan');
+            .find((a) => a.textContent.trim() === 'Data Resi');
 
         expect(item.getAttribute('href')).toContain('/admin/pengiriman');
     });
@@ -254,7 +255,7 @@ describe('Sidebar per peran', () => {
 
         const label = labelMenu(container);
 
-        for (const menu of ['Muatan & Distribusi', 'Pengemasan', 'Permintaan Mushaf', 'Dashboard']) {
+        for (const menu of ['Muatan & Distribusi', 'Data Resi', 'Permintaan Mushaf', 'Dashboard']) {
             expect(label, `menu "${menu}" hilang dari manager`).toContain(menu);
         }
     });

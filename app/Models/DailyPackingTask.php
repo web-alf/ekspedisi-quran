@@ -66,6 +66,18 @@ class DailyPackingTask extends Model
         return $this->belongsTo(User::class, 'assigned_by');
     }
 
+    /**
+     * Gudang tempat tugas ini dikerjakan (Fase 2 rombakan gudang).
+     *
+     * Diisi saat SPV Gudang/Manager Repacking assign target — berasal dari
+     * gudang penugasa. NULL berarti tugas tidak bertagih gudang (penugasan
+     * admin/otomatis tanpa gudang).
+     */
+    public function gudang()
+    {
+        return $this->belongsTo(Gudang::class);
+    }
+
     public function packingBoxes()
     {
         return $this->hasMany(PackingBox::class);
@@ -352,7 +364,7 @@ class DailyPackingTask extends Model
     public function createDynamicBoxForJenisSafe($jenisQuranId)
     {
         // This method should be called within a transaction
-        $jenis = \App\Models\JenisQuran::lockForUpdate()->find($jenisQuranId);
+        $jenis = JenisQuran::lockForUpdate()->find($jenisQuranId);
         if (! $jenis) {
             return null;
         }
@@ -372,7 +384,7 @@ class DailyPackingTask extends Model
             $boxCode = $this->generateDynamicBoxCode($date, $jenis->kode_jenis, $boxCount + $attempts);
 
             // Check if code already exists
-            $existingBox = \App\Models\PackingBox::where('kode_kerdus', $boxCode)
+            $existingBox = PackingBox::where('kode_kerdus', $boxCode)
                 ->lockForUpdate()
                 ->first();
 

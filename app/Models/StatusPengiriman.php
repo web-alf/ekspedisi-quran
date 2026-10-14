@@ -19,7 +19,7 @@ class StatusPengiriman extends Model
         'icon',
         'urutan',
         'is_active',
-        'is_final'
+        'is_final',
     ];
 
     protected $casts = [
@@ -75,7 +75,7 @@ class StatusPengiriman extends Model
      */
     public function getBadgeClassAttribute()
     {
-        return match($this->warna) {
+        return match ($this->warna) {
             'gray' => 'bg-gray-100 text-gray-800',
             'blue' => 'bg-blue-100 text-blue-800',
             'yellow' => 'bg-yellow-100 text-yellow-800',
@@ -94,9 +94,9 @@ class StatusPengiriman extends Model
      */
     public function getCategoryAttribute()
     {
-        return match($this->slug) {
+        return match ($this->slug) {
             'pemesanan', 'produksi' => 'pending',
-            'kedatangan', 'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
+            'antrian', 'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
             'diterima' => 'completed',
             'batal' => 'cancelled',
             default => 'unknown'
@@ -108,9 +108,9 @@ class StatusPengiriman extends Model
      */
     public function getDashboardLabelAttribute()
     {
-        return match($this->slug) {
+        return match ($this->slug) {
             'pemesanan', 'produksi' => 'Pending/Diproses',
-            'kedatangan', 'packing', 'selesai-packing', 'pengiriman' => 'Dalam Perjalanan',
+            'antrian', 'packing', 'selesai-packing', 'pengiriman' => 'Dalam Perjalanan',
             'diterima' => 'Selesai',
             'batal' => 'Dibatalkan',
             default => $this->nama
@@ -123,8 +123,8 @@ class StatusPengiriman extends Model
         if ($value) {
             return $value;
         }
-        
-        return match($this->slug) {
+
+        return match ($this->slug) {
             'pending' => '⏳',
             'dikemas' => '📦',
             'dikirim' => '🚚',
@@ -132,7 +132,7 @@ class StatusPengiriman extends Model
             'batal' => '❌',
             'pemesanan' => '📝',
             'produksi' => '🏭',
-            'kedatangan' => '📦',
+            'antrian' => '📋',
             'packing' => '🎁',
             'selesai-packing' => '✅',
             'pengiriman' => '🚚',
@@ -183,6 +183,20 @@ class StatusPengiriman extends Model
                 'deskripsi' => 'Quran sudah datang dan dalam proses penurunan',
                 'warna' => 'cyan',
                 'icon' => '📦',
+                'urutan' => 3,
+                // Nonaktif sejak alur gudang dirombak (2026-10-13): pemilik sistem
+                // menghapus tahap kedatangan/penurunan — mushaf datang langsung
+                // masuk "Antrian". Barisnya dipertahankan hanya agar resi lama
+                // yang menyimpan status_id ini tetap punya label.
+                'is_active' => false,
+                'is_final' => false,
+            ],
+            [
+                'nama' => 'Antrian',
+                'slug' => 'antrian',
+                'deskripsi' => 'Quran siap di gudang, menunggu packing',
+                'warna' => 'cyan',
+                'icon' => '📋',
                 'urutan' => 3,
                 'is_active' => true,
                 'is_final' => false,
@@ -236,7 +250,7 @@ class StatusPengiriman extends Model
                 'urutan' => 99,
                 'is_active' => true,
                 'is_final' => true,
-            ]
+            ],
         ];
     }
 }

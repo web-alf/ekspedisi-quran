@@ -31,6 +31,7 @@ class User extends Authenticatable
         'role_id',
         'is_active',
         'manager_id',
+        'gudang_id',
     ];
 
     /**
@@ -96,6 +97,18 @@ class User extends Authenticatable
     public function bawahan(): HasMany
     {
         return $this->hasMany(User::class, 'manager_id');
+    }
+
+    /**
+     * Gudang utama akun (Fase 2 rombakan gudang).
+     *
+     * Dipakai SPV Gudang: wewenangnya dipasangkan dengan gudang ini, dan tugas
+     * packing yang ia assign kepada freelancer menandahi gudang itu. Super-admin
+     * tidak memakainya; NULL berarti akun tidak terpasang di gudang tertentu.
+     */
+    public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(Gudang::class);
     }
 
     /**

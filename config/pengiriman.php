@@ -69,10 +69,15 @@ return [
     | Tahap yang boleh dipindahkan STAFF GUDANG
     |--------------------------------------------------------------------------
     |
-    | Tahap awal distribusi — Pemesanan, Produksi, Kedatangan/Penurunan, dan
-    | Packing — adalah ranah gudang: mereka yang menerima kiriman mushaf,
-    | memantau produksi, mencatat penurunan, dan mengerjakan packing. Karena itu
-    | hanya role `warehouse` yang boleh memindahkan status ke tahap-tahap ini.
+    | Rombakan 2026-10-13 (keputusan pemilik sistem): tahap gudang kini
+    | Pemesanan → Antrian → Packing → Selesai Packing.
+    |
+    | - `antrian` = status BARU: mushaf sudah di gudang, mengantre packing.
+    | - `produksi` KELUAR dari ranah gudang (proses cetak di luar gudang; status
+    |   master tetap ada untuk kebutuhan lain).
+    | - `kedatangan` DIHAPUS dari alur (status master dinonaktifkan — lihat
+    |   StatusPengiriman::getDefaultStatuses()); mushaf datang langsung masuk
+    |   Antrian.
     |
     | Mengapa `packing` ikut ada: alur packing dimulai dari resi yang SUDAH
     | berstatus packing (PackingAssignmentService::assignPengirimanOnScan
@@ -80,17 +85,26 @@ return [
     | tidak akan pernah bisa memulai pekerjaan packing-nya sendiri dan tiap
     | pemindahan tetap harus lewat super-admin.
     |
-    | Yang TIDAK termasuk: pengiriman, diterima, batal, dan selesai-packing.
-    | Selesai-packing dihasilkan otomatis saat kerdus disegel (bukan pilihan
-    | manual); pengiriman/diterima/batal adalah wewenang kurir, manager, dan
-    | role distribusi.
+    | Yang TIDAK termasuk: pengiriman, diterima, dan batal — semuanya wewenang
+    | kurir, manager, dan role distribusi.
     |
-    | Batas ini berlaku MUTLAK untuk gudang — bukan sekadar pilihan yang
-    | disembunyikan. Semua jalur pemindahan status (ubah status, batch, bulk,
-    | form edit, scan QR gudang) menolak tahap di luar daftar ini dan menolak
-    | memindahkan resi yang sudah lewat tahap awal, walau ID-nya dikirim
-    | langsung. Tanpa batas itu, izin `shipments.update-status` yang mereka
-    | pegang akan membuka pengiriman/diterima lewat endpoint yang tidak dijaga.
+    | `selesai-packing` TERMASUK sebagai tahap pamungkas gudang: itulah titik
+    | serah-terima ke distribusi. MuatanController menganggap resi pada
+    | `selesai-packing`/`pengiriman` sebagai "siap dimuat", dan manager hanya
+    | melihat tahap akhir — jadi tanpa status ini gudang tidak punya cara
+    | menyatakan bahwa packing-nya rampung, dan distribusi tidak pernah melihat
+    | datanya.
+    |
+    | Perpindahan di DALAM keempat tahap ini dibebaskan MAJU dan MUNDUR (lihat
+    | PengirimanStageVisibility::bebasDalamTahapGudang() yang dipakai kedua
+    | validator transisi) — pengguna bisa salah memindah dan harus bisa
+    | mengembalikannya tanpa meminta admin.
+    |
+    | Dua jalur sampai ke `selesai-packing`, keduanya sah:
+    |   1. OTOMATIS saat kerdus disegel (`PackingBox::seal()` →
+    |      advancePackedShipmentsToReady()), dan
+    |   2. MANUAL oleh gudang lewat ubah status (bulk/per-resi), untuk pekerjaan
+    |      yang tidak lewat fitur kerdus.
     |
     | Mengosongkan daftar = gudang tidak bisa memindahkan status apa pun
     | (gagal-tertutup), bukan "boleh semua".
@@ -99,9 +113,9 @@ return [
 
     'warehouse_stage_slugs' => [
         'pemesanan',
-        'produksi',
-        'kedatangan',
+        'antrian',
         'packing',
+        'selesai-packing',
     ],
 
 ];

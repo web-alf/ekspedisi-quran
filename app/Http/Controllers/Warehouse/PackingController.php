@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskTarget;
+use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
 use App\Models\PackingNotification;
+use App\Models\PackingScanLog;
 use App\Models\Pengiriman;
 use App\Models\SharedBoxAssignment;
 use App\Models\User;
@@ -45,6 +47,19 @@ class PackingController extends Controller
         // Additional authorization check
         Gate::authorize('viewPacking', $user);
 
+        // Daftar jenis untuk tab "Packing Kardus": gudang memilih jenis + jumlah
+        // kerdus, isinya dipilih sistem FIFO (tanpa memindai tiap mushaf).
+        $jenisList = JenisQuran::active()
+            ->orderBy('id')
+            ->get(['id', 'kode_jenis', 'nama_jenis', 'default_capacity'])
+            ->map(fn (JenisQuran $jenis) => [
+                'id' => $jenis->id,
+                'kode_jenis' => $jenis->kode_jenis,
+                'nama_jenis' => $jenis->nama_jenis,
+                'kapasitas' => $jenis->getDefaultCapacity(),
+            ])
+            ->values();
+
         // OPTIMIZED: Get today's task with constrained eager loading
         $todayTask = DailyPackingTask::where('user_id', $user->id)
             ->whereDate('tanggal_tugas', today())
@@ -64,6 +79,7 @@ class PackingController extends Controller
                 'allBoxes' => [],
                 'nextItems' => [],
                 'packedItems' => [],
+                'jenisList' => $jenisList,
                 'noTaskMessage' => 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor untuk mendapatkan tugas.',
             ]);
         }
@@ -121,6 +137,7 @@ class PackingController extends Controller
             ->get() : collect();
 
         return Inertia::render('Warehouse/Packing', [
+            'jenisList' => $jenisList,
             'task' => [
                 'id' => $todayTask->id,
                 'total_target' => $todayTask->total_target,
@@ -224,11 +241,11 @@ class PackingController extends Controller
 
         // Authorization check (graceful JSON response instead of 403 page)
         if (! Gate::allows('scanItems', auth()->user())) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses scan ditolak: tidak ada tugas aktif atau tidak memiliki izin.',
-                'type' => 'unauthorized',
-            ], 200);
+            return $this->scanFailed(
+                'unauthorized',
+                'Akses scan ditolak: tidak ada tugas aktif atau tidak memiliki izin.',
+                (string) $request->qr_data,
+            );
         }
 
         // Log scan attempt for audit trail
@@ -269,11 +286,7 @@ class PackingController extends Controller
                             'ip_address' => request()->ip(),
                         ]);
 
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'QR Code tidak valid',
-                            'type' => 'invalid_qr',
-                        ], 200);
+                        return $this->scanFailed('invalid_qr', 'QR Code tidak valid', $sanitizedQrData);
                     }
 
                     // OPTIMIZED: Find pengiriman with lock and required columns
@@ -284,11 +297,7 @@ class PackingController extends Controller
                         ->first();
 
                     if (! $pengiriman) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Resi tidak ditemukan: '.$noResi,
-                            'type' => 'not_found',
-                        ], 200);
+                        return $this->scanFailed('not_found', 'Resi tidak ditemukan: '.$noResi, $sanitizedQrData, $noResi);
                     }
 
                     // Check if already packed with lock
@@ -296,11 +305,7 @@ class PackingController extends Controller
                         ->lockForUpdate()
                         ->exists();
                     if ($alreadyPacked) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Item sudah dipacking sebelumnya',
-                            'type' => 'already_packed',
-                        ], 200);
+                        return $this->scanFailed('already_packed', 'Item sudah dipacking sebelumnya', $sanitizedQrData, $noResi);
                     }
 
                     // Get user's task with lock
@@ -310,11 +315,12 @@ class PackingController extends Controller
                         ->first();
 
                     if (! $todayTask) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor.',
-                            'type' => 'no_task',
-                        ], 200);
+                        return $this->scanFailed(
+                            'no_task',
+                            'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor.',
+                            $sanitizedQrData,
+                            $noResi,
+                        );
                     }
 
                     // Check box status for warning system BEFORE assignment
@@ -345,22 +351,20 @@ class PackingController extends Controller
                             $pengiriman
                         );
                     } catch (\Exception $e) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => $e->getMessage(),
-                            'type' => 'assignment_error',
-                        ], 200);
+                        return $this->scanFailed('assignment_error', $e->getMessage(), $sanitizedQrData, $noResi, $todayTask->id);
                     }
 
                     // SMART BOX SELECTION: Choose box based on assignment method
                     $box = $this->getSmartBoxSelection($todayTask, $pengiriman, auth()->id());
 
                     if (! $box) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => "❌ GAGAL MENDAPATKAN KERDUS!\n\nTidak dapat menemukan atau membuat kerdus untuk jenis: {$pengiriman->jenisQuran->nama_jenis}\n\nSilakan hubungi supervisor.",
-                            'type' => 'box_selection_failed',
-                        ], 200);
+                        return $this->scanFailed(
+                            'box_selection_failed',
+                            "❌ GAGAL MENDAPATKAN KERDUS!\n\nTidak dapat menemukan atau membuat kerdus untuk jenis: {$pengiriman->jenisQuran->nama_jenis}\n\nSilakan hubungi supervisor.",
+                            $sanitizedQrData,
+                            $noResi,
+                            $todayTask->id,
+                        );
                     }
 
                     // Add item to box with enhanced safety checks
@@ -375,11 +379,7 @@ class PackingController extends Controller
                             'message' => $e->getMessage(),
                         ]);
 
-                        return response()->json([
-                            'success' => false,
-                            'type' => 'box_add_error',
-                            'message' => $e->getMessage(),
-                        ], 200);
+                        return $this->scanFailed('box_add_error', $e->getMessage(), $sanitizedQrData, $noResi, $todayTask->id, $box->id);
                     }
 
                     // Mark task item as packed
@@ -476,11 +476,11 @@ class PackingController extends Controller
                 ]);
 
                 // Return as business error to keep frontend UX consistent
-                return response()->json([
-                    'success' => false,
-                    'type' => 'unexpected_error',
-                    'message' => 'Gagal memproses scan: '.$e->getMessage(),
-                ], 200);
+                return $this->scanFailed(
+                    'unexpected_error',
+                    'Gagal memproses scan: '.$e->getMessage(),
+                    (string) $request->qr_data,
+                );
             }
         }
 
@@ -490,11 +490,11 @@ class PackingController extends Controller
             'max_retries' => $maxRetries,
         ]);
 
-        return response()->json([
-            'success' => false,
-            'message' => 'Sistem sedang sibuk. Silakan coba lagi dalam beberapa saat.',
-            'type' => 'retry_exhausted',
-        ], 200);
+        return $this->scanFailed(
+            'retry_exhausted',
+            'Sistem sedang sibuk. Silakan coba lagi dalam beberapa saat.',
+            (string) $request->qr_data,
+        );
     }
 
     /**
@@ -510,11 +510,11 @@ class PackingController extends Controller
 
         // Authorization check (graceful JSON response)
         if (! Gate::allows('scanItems', auth()->user())) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses scan ditolak: tidak ada tugas aktif atau tidak memiliki izin.',
-                'type' => 'unauthorized',
-            ], 200);
+            return $this->scanFailed(
+                'unauthorized',
+                'Akses scan ditolak: tidak ada tugas aktif atau tidak memiliki izin.',
+                'pengiriman_id:'.$request->pengiriman_id,
+            );
         }
 
         // Log confirmation process for audit trail
@@ -526,11 +526,11 @@ class PackingController extends Controller
         ]);
 
         if (! $request->confirm_seal_others) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Scan dibatalkan',
-                'type' => 'cancelled',
-            ], 200);
+            return $this->scanFailed(
+                'cancelled',
+                'Scan dibatalkan setelah peringatan jenis berbeda',
+                'pengiriman_id:'.$request->pengiriman_id,
+            );
         }
 
         DB::beginTransaction();
@@ -598,6 +598,19 @@ class PackingController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
+
+            // Catat kegagalan konfirmasi (siapa + pengiriman mana) setelah rollback
+            // supaya barisnya benar-benar tersimpan. Respons 500 dipertahankan
+            // karena frontend membedakan lewat response.ok.
+            PackingScanLog::recordFailed(
+                (int) auth()->id(),
+                'pengiriman_id:'.$request->pengiriman_id,
+                $pengiriman?->no_resi,
+                'confirmation_error',
+                'Gagal memproses: '.$e->getMessage(),
+                $todayTask?->id,
+                $box?->id,
+            );
 
             return response()->json([
                 'success' => false,
@@ -834,6 +847,122 @@ class PackingController extends Controller
 
         return Inertia::render('Warehouse/PackingHistory', [
             'history' => $history,
+        ]);
+    }
+
+    /**
+     * Riwayat scan yang gagal/dibatalkan (packing_scan_logs).
+     *
+     * Petugas gudang melihat jejaknya sendiri; pemegang gate viewAllHistory
+     * (supervisor/super-admin) melihat seluruh petugas sekaligus — lengkap
+     * dengan nama siapa yang melakukan scan-nya.
+     */
+    public function scanLogs()
+    {
+        $user = auth()->user();
+        $semuaStaf = Gate::allows('viewAllHistory', $user);
+
+        $logs = PackingScanLog::query()
+            ->with('user:id,name')
+            ->when(! $semuaStaf, fn ($query) => $query->where('user_id', $user->id))
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get()
+            ->map(function (PackingScanLog $log) {
+                return [
+                    'no_resi' => $log->no_resi,
+                    'qr_data' => $log->qr_data,
+                    'type' => $log->type,
+                    'message' => $log->message,
+                    'oleh' => $log->user?->name,
+                    'waktu' => $log->created_at->format('H:i:s'),
+                    'hari' => $log->created_at->isToday() ? null : $log->created_at->format('d/m'),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $logs,
+            'semua_staf' => $semuaStaf,
+        ]);
+    }
+
+    /**
+     * Balas kegagalan scan sekaligus mencatatnya ke packing_scan_logs
+     * (siapa yang scan, QR mentah, penyebab) supaya jejaknya tahan refresh.
+     *
+     * Pencatatan ada di dalam helper yang sama supaya tidak ada satu pun
+     * jalur kegagalan yang lupa dicatat; insert log sendiri dibungkus
+     * try-catch di model agar tidak pernah menggagalkan respons scan.
+     */
+    private function scanFailed(string $type, string $message, string $qrData, ?string $noResi = null, ?int $taskId = null, ?int $boxId = null)
+    {
+        PackingScanLog::recordFailed(
+            (int) auth()->id(),
+            $qrData,
+            $noResi,
+            $type,
+            $message,
+            $taskId,
+            $boxId,
+        );
+
+        return response()->json([
+            'success' => false,
+            'type' => $type,
+            'message' => $message,
+        ], 200);
+    }
+
+    /**
+     * Catat kerdus pada alur "packing kardus".
+     *
+     * Dipakai saat mushaf datang SUDAH dalam kardus/dos dari produksi: gudang
+     * tidak memindai tiap mushaf, cukup menyebut jenis + jumlah kerdus. Resi
+     * yang masuk kerdus dipilih sistem secara FIFO oleh
+     * `PackingAssignmentService::catatKerdus()`.
+     */
+    public function catatKerdus(Request $request)
+    {
+        $validated = $request->validate([
+            'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
+            'jumlah_kerdus' => ['nullable', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $user = auth()->user();
+
+        if (! Gate::allows('scanItems', $user)) {
+            return response()->json([
+                'success' => false,
+                'type' => 'permission_error',
+                'message' => 'Anda tidak punya izin packing atau tidak ada tugas packing aktif untuk hari ini.',
+            ], 200);
+        }
+
+        try {
+            $hasil = $this->assignmentService->catatKerdus(
+                $user,
+                (int) $validated['jenis_quran_id'],
+                (int) ($validated['jumlah_kerdus'] ?? 1),
+            );
+        } catch (\Exception $e) {
+            Log::warning('Gagal mencatat kerdus packing', [
+                'user_id' => $user->id,
+                'jenis_quran_id' => $validated['jenis_quran_id'] ?? null,
+                'jumlah_kerdus' => $validated['jumlah_kerdus'] ?? null,
+                'pesan' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'type' => 'kardus_error',
+                'message' => $e->getMessage(),
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $hasil,
         ]);
     }
 

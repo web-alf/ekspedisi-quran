@@ -6,7 +6,7 @@
   export let baseUrl = '/admin/pengiriman';
   
   const tabs = [
-    { id: 'list', label: 'Daftar Pengiriman', check: () => can.shipments.read() },
+    { id: 'list', label: 'Daftar Resi', check: () => can.shipments.read() },
     { id: 'generate-qr', label: 'Generate QR', check: () => can.qr.generate() },
     { id: 'scan-status', label: 'Scan QR', check: () => can.qr.scan() }
   ];

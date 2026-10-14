@@ -8,6 +8,8 @@
   
   export let warehouseUsers = []
   export let dailyTasks = []
+  export let kartuGudang = null
+  export let pilihGudang = false
   export let recentActivities = []
   export let summary = {
     total_active_tasks: 0,
@@ -206,6 +208,7 @@
     return icons[type] || 'information-circle'
   }
 
+  let gudangKerja = ''
   function openAssignModal(userId = null) {
     if (userId) {
       assignTarget.user_id = userId.toString()
@@ -220,7 +223,10 @@
     try {
       const response = await axios.post('/admin/supervisor/assign-target', {
         user_id: parseInt(assignTarget.user_id),
-        target: parseInt(assignTarget.target)
+        target: parseInt(assignTarget.target),
+        // PJ/admin memilih gudang penugasannya; SPV dibiarkan kosong (otomatis
+        // gudang SPV itu di server).
+        gudang_id: pilihGudang && gudangKerja ? gudangKerja : null
       })
 
       // Refresh data
@@ -228,6 +234,7 @@
 
       // Reset form and close modal
       assignTarget = { user_id: '', target: 80 }
+      gudangKerja = ''
       showAssignTargetModal = false
 
       // Show success message from server
@@ -437,13 +444,55 @@
         </div>
       </div>
       <div class="p-4 sm:p-6">
-        {#if dailyTasks.length > 0}
+      {#if kartuGudang}
+    <section class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-xs font-medium text-gray-500">Proses Pemesanan</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.pemesanan}</p>
+        <p class="text-xs text-gray-500">resi menunggu</p>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-xs font-medium text-gray-500">Quran Ready di Gudang — belum ada muwakif</p>
+        <ul class="mt-1 text-sm text-gray-800 space-y-0.5">
+          {#each kartuGudang.ready as baris}
+            <li>{baris.gudang}: <span class="font-semibold">{baris.dus}</span> dus · {baris.eks} eks</li>
+          {/each}
+        </ul>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-xs font-medium text-gray-500">Proses Packing</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.packing.total}</p>
+        <p class="text-xs text-gray-500">resi di tahap packing</p>
+        <ul class="mt-1 text-xs text-gray-600 space-y-0.5">
+          {#each kartuGudang.packing.per_gudang as baris}
+            <li>{baris.gudang}: {baris.eks} eks ({baris.kerdus} kerdus aktif)</li>
+          {/each}
+        </ul>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-xs font-medium text-gray-500">Selesai Packing — siap distribusi</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.selesai.total}</p>
+        <p class="text-xs text-gray-500">resi siap dimuat</p>
+        <ul class="mt-1 text-xs text-gray-600 space-y-0.5">
+          {#each kartuGudang.selesai.per_gudang as baris}
+            <li>{baris.gudang}: {baris.eks} eks ({baris.kerdus} kerdus tersegel)</li>
+          {/each}
+        </ul>
+      </div>
+    </section>
+  {/if}
+
+    {#if dailyTasks.length > 0}
           <div class="space-y-4">
             {#each dailyTasks as task}
               <div class="border border-gray-200 rounded-lg p-4 sm:p-5 hover:bg-gray-50 transition-colors">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 space-y-2 sm:space-y-0">
                   <div class="flex-1">
-                    <h3 class="font-semibold text-gray-900 text-base sm:text-lg">{task.user.name}</h3>
+                    <h3 class="font-semibold text-gray-900 text-base sm:text-lg">
+                      {task.user.name}{#if task.gudang}
+                        <span class="ml-2 align-middle inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">{task.gudang}</span>
+                      {/if}
+                    </h3>
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600 mt-1">
                       <span>Target: {task.target_quantity} mushaf</span>
                       {#if task.carry_over_quantity > 0}
@@ -799,10 +848,29 @@
               >
                 <option value="" class="text-gray-500">-- Pilih User --</option>
                 {#each warehouseUsers as user}
-                  <option value={user.id}>{user.name}</option>
+                  <option value={user.id}>{user.name}{#if user.gudang} — {user.gudang}{/if}</option>
                 {/each}
               </select>
             </div>
+
+            <!-- Gudang penugasan: hanya PJ/admin yang memilih; SPV otomatis
+                 gudangnya sendiri (server). -->
+            {#if pilihGudang}
+              <div class="mb-4">
+                <label for="assign-gudang" class="block text-base font-medium text-gray-700 mb-2">Gudang penugasan</label>
+                <select
+                  id="assign-gudang"
+                  bind:value={gudangKerja}
+                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base"
+                >
+                  <option value="" class="text-gray-500">-- (tanpa tagihan gudang) --</option>
+                  {#each gudangList as g}
+                    <option value={g.id}>{g.nama}</option>
+                  {/each}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Tanpa tagihan gudang, tugas hanya terlihat oleh PJ/super-admin.</p>
+              </div>
+            {/if}
 
             <!-- Target Input -->
             <div>

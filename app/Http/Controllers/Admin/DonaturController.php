@@ -941,6 +941,15 @@ class DonaturController extends Controller
 
             if (isset($filters['start_date']) && $filters['start_date']) {
                 $filename .= '-from-'.$filters['start_date'];
+            // Export 26.000+ donatur membuat file XLSX (zipstream) di memori;
+            // limit bawaan fpm 128M tidak cukup → 500 dengan
+            // "Allowed memory size exhausted" di zipstream-php. Naikkan hanya
+            // untuk request export ini.
+            $limitLama = ini_get('memory_limit');
+            if (preg_match('/(\d+)M/i', (string) $limitLama, $m) && (int) $m[1] < 512) {
+                ini_set('memory_limit', '512M');
+            }
+
             }
 
             if (isset($filters['end_date']) && $filters['end_date']) {

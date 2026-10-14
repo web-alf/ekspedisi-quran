@@ -2,9 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\PermissionEnum;
+use App\Enums\RoleEnum;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Spatie\Permission\PermissionRegistrar;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -40,7 +43,9 @@ class HandleInertiaRequests extends Middleware
         $authData = null;
 
         if ($user) {
-            $permissions = $user->getAllPermissions()->pluck('name')->toArray();
+            $permissions = $user->hasRole(RoleEnum::SUPER_ADMIN->value)
+                ? $this->semuaNamaIzin()
+                : $user->getAllPermissions()->pluck('name')->toArray();
             $authData = [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -80,5 +85,31 @@ class HandleInertiaRequests extends Middleware
             ],
             'settings' => $basicSettings,
         ];
+    }
+
+    /**
+     * Seluruh nama izin yang dikenal sistem.
+     *
+     * Hanya dipakai untuk super-admin. Tiga lapisan lain sudah meloloskannya tanpa
+     * membaca tabel permissions — Gate::before di AppServiceProvider dan cabang
+     * hasRole di PermissionMiddleware — tetapi daftar menu di frontend
+     * (AdminLayout.svelte) menyaring murni dengan `permissions.includes(...)`.
+     * Karena itu daftar yang dikirim ke browser tidak boleh bergantung pada
+     * kelengkapan isi tabel: produksi tidak menjalankan seeder, sehingga setiap izin
+     * baru yang belum diberikan lewat migrasi akan menghilangkan menunya dari
+     * super-admin, walau URL-nya tetap bisa dibuka (200).
+     *
+     * Gabungan basis data + PermissionEnum: yang di basis data menjangkau izin dari
+     * migrasi, yang di enum menjangkau izin yang sudah dipakai kode tetapi belum
+     * sempat masuk basis data.
+     *
+     * @return array<int, string>
+     */
+    private function semuaNamaIzin(): array
+    {
+        $diBasisData = app(PermissionRegistrar::class)->getPermissions()->pluck('name')->all();
+        $diKode = array_map(fn (PermissionEnum $izin): string => $izin->value, PermissionEnum::cases());
+
+        return array_values(array_unique([...$diBasisData, ...$diKode]));
     }
 }

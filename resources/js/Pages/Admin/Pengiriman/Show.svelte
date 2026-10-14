@@ -65,7 +65,7 @@
 </script>
 
 <svelte:head>
-    <title>Detail Pengiriman #{pengiriman.no_resi} - Ekspedisi Quran</title>
+    <title>Detail Resi {pengiriman.no_resi} - Ekspedisi Quran</title>
 </svelte:head>
 
 <AdminLayout>

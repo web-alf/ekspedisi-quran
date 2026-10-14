@@ -323,6 +323,17 @@ class PengirimanTrackingController extends Controller
             ];
         }
 
+        // Rombakan tahap gudang (2026-10-13): maju dan MUNDUR di dalam tahap
+        // gudang dibebaskan — aturan ketat "urutan harus +1" di bawah hanya
+        // berlaku untuk lompatan yang keluar dari ranah gudang. Hak memilih
+        // status tetap dijaga PengirimanStageVisibility::bolehPilihStatus().
+        if (PengirimanStageVisibility::bebasDalamTahapGudang($currentStatus, $newStatus)) {
+            return [
+                'valid' => true,
+                'message' => 'Perpindahan dalam tahap gudang dibebaskan (maju/mundur)',
+            ];
+        }
+
         // Cek urutan status, hanya boleh maju ke status selanjutnya
         if ($newStatus->urutan !== $currentStatus->urutan + 1) {
             return [
@@ -461,7 +472,9 @@ class PengirimanTrackingController extends Controller
     public function updateProcessStatus(Request $request, Pengiriman $pengiriman)
     {
         $request->validate([
-            'proses' => ['required', 'string', 'in:pemesanan,produksi,kedatangan,packing,dokumentasi,pengiriman,diterima'],
+            // 'antrian' memantapkan rombakan tahap gudang (2026-10-13);
+            // 'kedatangan' sudah tidak dipakai alur gudang.
+            'proses' => ['required', 'string', 'in:pemesanan,produksi,antrian,packing,dokumentasi,pengiriman,diterima'],
             'catatan' => ['nullable', 'string', 'max:1000'],
             'dokumentasi' => ['nullable', 'array'],
             'dokumentasi.*' => ['file', 'image', 'max:10240'], // Max 10MB per file

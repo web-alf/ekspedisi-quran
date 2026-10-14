@@ -8,6 +8,7 @@
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
   import FileQRScanner from '../../Components/FileQRScanner.svelte';
   import { createScanner } from '../../utils/scanner-core.js';
+  import { ringkasHasilKardus, labelKerdus } from '../../utils/kardusPacking.js';
 
   // Props
   // omitted unused props to reduce build warnings
@@ -18,6 +19,8 @@
   export let packedItems = [];
   // export let assignedItems = [];
   export let noTaskMessage = null;
+  // Daftar jenis untuk tab Kardus (packing kardus), dikirim PackingController::index()
+  export let jenisList = [];
 
   // Scanner state
   const scannerStore = createScanner('qr-reader', {
@@ -44,7 +47,21 @@
   let recentScans = [];
   
   // UI state
-  let activeTab = 'scan'; // 'scan' | 'manual' | 'history'
+  let activeTab = 'scan'; // 'scan' | 'manual' | 'kardus' | 'history'
+
+  // Tab Kardus (packing kardus): mushaf datang sudah dalam kardus/dos dari
+  // produksi, gudang hanya mencatat kerdusnya. Isi kerdus dipilih sistem dari
+  // kolam resi berstatus packing secara FIFO (lihat PackingAssignmentService).
+  let kardusJenisId = '';
+  let kardusJumlah = 1;
+  let kardusLoading = false;
+  let kardusHasil = null;
+  let kardusError = '';
+  $: jenisKardusTerpilih = jenisList.find((jenis) => String(jenis.id) === String(kardusJenisId)) || null;
+  // Scan yang gagal, tersimpan di server (packing_scan_logs) — tahan refresh,
+  // lengkap dengan siapa yang melakukan scan-nya. Tab History memuatnya saat dibuka.
+  let scanLogs = [];
+  let scanLogsSemuaStaf = false;
   let manualInput = '';
   let showBoxFullModal = false;
   let showTaskCompleteModal = false;
@@ -816,6 +833,82 @@
     }
   }
 
+  /**
+   * Catat kerdus pada alur packing kardus.
+   *
+   * Dipakai saat mushaf datang sudah dalam kardus/dos dari produksi: gudang
+   * menyebut jenis + jumlah kerdus, sistem mengisi isinya dari kolam resi
+   * berstatus packing (FIFO). Progres tugas naik sejumlah mushaf yang masuk.
+   */
+  async function catatKerdus() {
+    if (kardusLoading || !kardusJenisId) return;
+
+    kardusLoading = true;
+    kardusError = '';
+    kardusHasil = null;
+
+    try {
+      const response = await fetch('/admin/warehouse/packing/catat-kerdus', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+          jenis_quran_id: Number(kardusJenisId),
+          jumlah_kerdus: Number(kardusJumlah) || 1
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      kardusHasil = ringkasHasilKardus(data.data);
+
+      try {
+        if (isMobileDevice) {
+          MobileDetection.vibrate([200]);
+        }
+      } catch (error) {
+        // abaikan kegagalan haptic
+      }
+
+      router.reload({ only: ['task', 'currentBox', 'allBoxes', 'packedItems'] });
+    } catch (error) {
+      kardusError = error?.message || 'Gagal mencatat kerdus.';
+    } finally {
+      kardusLoading = false;
+    }
+  }
+
+  /**
+   * Muat riwayat scan gagal yang tersimpan di server (packing_scan_logs).
+   * Staf gudang melihat jejaknya sendiri; supervisor/super-admin melihat
+   * semua petugas beserta namanya (semua_staf = true dari server).
+   */
+  async function loadScanLogs() {
+    try {
+      const response = await fetch('/admin/warehouse/packing/scan-logs', {
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        }
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.success) {
+        scanLogs = data.data || [];
+        scanLogsSemuaStaf = !!data.semua_staf;
+      }
+    } catch (e) {
+      // Riwayat cadangan saja — jangan ganggu alur scanning kalau gagal dimuat.
+      console.warn('Gagal memuat riwayat scan:', e);
+    }
+  }
+
   function toggleFileScanner() {
     showFileScanner = !showFileScanner;
     if (showFileScanner && isScanning) {
@@ -915,9 +1008,10 @@
                   activeTab = 'scan';
                   showFileScanner = false;
                 }}
-                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'scan' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'scan' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
               >
-                📷 Scan
+                <HeroIcon name="camera" class="w-4 h-4" />
+                <span>Scan</span>
               </button>
               <button
                 on:click={async () => {
@@ -925,19 +1019,33 @@
                   activeTab = 'manual';
                   showFileScanner = false;
                 }}
-                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'manual' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'manual' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
               >
-                ⌨️ Manual
+                <HeroIcon name="keyboard" class="w-4 h-4" />
+                <span>Manual</span>
               </button>
               <button
                 on:click={async () => {
                   await cleanupScanner();
+                  activeTab = 'kardus';
+                  showFileScanner = false;
+                }}
+                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'kardus' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+              >
+                <HeroIcon name="cube" class="w-4 h-4" />
+                <span>Kardus</span>
+              </button>
+              <button
+                on:click={async () => {
+                  await cleanupScanner();
+                  await loadScanLogs();
                   activeTab = 'history';
                   showFileScanner = false;
                 }}
-                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'history' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                class="flex-1 py-3 px-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 {isMobileDevice ? 'min-h-[44px]' : 'py-2 px-4'} {activeTab === 'history' ? 'bg-[#eb3434] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
               >
-                📄 History
+                <HeroIcon name="document-text" class="w-4 h-4" />
+                <span>History</span>
               </button>
               
             </div>
@@ -966,15 +1074,17 @@
                   <div class="flex space-x-2 mb-4">
                     <button
                       on:click={() => showFileScanner = false}
-                      class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors {!showFileScanner ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}"
+                      class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 {!showFileScanner ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}"
                     >
-                      📷 Kamera
+                      <HeroIcon name="camera" class="w-4 h-4" />
+                      <span>Kamera</span>
                     </button>
                     <button
                       on:click={toggleFileScanner}
-                      class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors {showFileScanner ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}"
+                      class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 {showFileScanner ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}"
                     >
-                      📁 File
+                      <HeroIcon name="folder" class="w-4 h-4" />
+                      <span>File</span>
                     </button>
                   </div>
                 {/if}
@@ -997,8 +1107,13 @@
                             </svg>
                             Memproses...
                           </div>
+                        {:else if isMobileDevice}
+                          <span class="inline-flex items-center gap-2">
+                            <HeroIcon name="camera" class="w-5 h-5" />
+                            <span>Mulai Scan</span>
+                          </span>
                         {:else}
-                          {isMobileDevice ? '📷 Mulai Scan' : 'Mulai Scanner'}
+                          Mulai Scanner
                         {/if}
                       </button>
                     {/if}
@@ -1123,9 +1238,111 @@
               </div>
             {/if}
             
+            <!-- Kardus Tab — mushaf datang sudah dalam kardus dari produksi,
+                 jadi tiap mushaf tidak dipindai. Isi kerdus tetap terhubung ke
+                 resi/QR masing-masing (dipilih sistem, FIFO). -->
+            {#if activeTab === 'kardus'}
+              <div class="space-y-4">
+                <p class="text-gray-600">
+                  Mushaf sudah dalam kardus/dos dari produksi? Sebut jenis dan jumlah kerdusnya — sistem
+                  mengisi kerdus dengan resi paling lama menunggu, dan tiap mushaf tetap terhubung ke resi/QR-nya.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label class="block">
+                    <span class="block text-sm font-medium text-gray-700 mb-1">Jenis Quran</span>
+                    <select
+                      bind:value={kardusJenisId}
+                      disabled={kardusLoading}
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+                    >
+                      <option value="">Pilih jenis...</option>
+                      {#each jenisList as jenis}
+                        <option value={jenis.id}>
+                          {jenis.nama_jenis} ({jenis.kode_jenis} · {jenis.kapasitas} eks/kerdus)
+                        </option>
+                      {/each}
+                    </select>
+                  </label>
+
+                  <label class="block">
+                    <span class="block text-sm font-medium text-gray-700 mb-1">Jumlah kerdus</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      bind:value={kardusJumlah}
+                      disabled={kardusLoading}
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+                    />
+                  </label>
+                </div>
+
+                {#if jenisKardusTerpilih}
+                  <p class="text-xs text-gray-500">{labelKerdus(jenisKardusTerpilih, kardusJumlah)}</p>
+                {/if}
+
+                <button
+                  type="button"
+                  on:click={catatKerdus}
+                  disabled={!kardusJenisId || kardusLoading}
+                  class="w-full py-3 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {kardusLoading ? 'Mencatat...' : 'Catat Kerdus'}
+                </button>
+
+                {#if kardusError}
+                  <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    {kardusError}
+                  </div>
+                {/if}
+
+                {#if kardusHasil}
+                  <div class="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <h3 class="font-medium text-gray-900">{kardusHasil.judul}</h3>
+                    <ul class="text-sm text-gray-700 space-y-1">
+                      {#each kardusHasil.kerdus as box}
+                        <li>{box.kode} — {box.keterangan}</li>
+                      {/each}
+                    </ul>
+                    {#each kardusHasil.peringatan as pesan}
+                      <p class="text-xs text-amber-600">{pesan}</p>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             <!-- History Tab -->
             {#if activeTab === 'history'}
               <div class="space-y-2">
+                <h3 class="font-medium text-gray-900 mb-1">
+                  Scan Gagal (Tersimpan)
+                  {#if scanLogsSemuaStaf}
+                    <span class="text-xs font-normal text-gray-500">— semua petugas</span>
+                  {/if}
+                </h3>
+                <p class="text-xs text-gray-500 mb-3">Tercatat permanen beserta petugas yang melakukan scan</p>
+                {#if scanLogs.length > 0}
+                  <div class="space-y-2 max-h-64 overflow-y-auto mb-4">
+                    {#each scanLogs as log}
+                      <div class="flex items-center justify-between p-3 bg-red-50 border-red-200 border rounded-lg">
+                        <div>
+                          <p class="font-medium text-red-900">{log.no_resi || log.qr_data}</p>
+                          <p class="text-sm text-red-600">{log.message}</p>
+                          <p class="text-xs text-gray-500 mt-0.5">Oleh: {log.oleh || '-'}</p>
+                        </div>
+                        <span class="text-xs text-gray-600 whitespace-nowrap ml-2">
+                          {#if log.hari}<span class="block text-gray-400">{log.hari}</span>{/if}
+                          {log.waktu}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <p class="text-gray-500 text-center py-4 mb-4 text-sm">Belum ada scan gagal yang tercatat</p>
+                {/if}
+
                 <h3 class="font-medium text-gray-900 mb-3">Scan Terakhir</h3>
                 {#if recentScans.length > 0}
                   <div class="space-y-2 max-h-96 overflow-y-auto">
