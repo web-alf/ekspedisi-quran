@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Rantai Pertanggungjawaban — Generate QR &amp; Status Mushaf</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 1180px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 28px 32px 32px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { font-size: 11.5px; color: #64748b; margin-bottom: 18px; }
+  .head, .row { display: grid; grid-template-columns: 44px 288px 268px 268px 220px; gap: 0; align-items: stretch; }
+  .head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; padding: 0 14px 6px 0; }
+  .row {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    margin-bottom: 9px; padding: 10px 14px 10px 0; min-height: 62px;
+  }
+  .row.stop { border-color: #cbd5e1; border-left: 3px solid #b91c1c; background: #fefefe; }
+  .row.never { border-left: 3px solid #b91c1c; border-color: #cbd5e1; }
+  .num { font-size: 11px; color: #94a3b8; text-align: center; padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .step { padding-right: 16px; }
+  .step b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+  .step span { display: block; font-size: 10.5px; color: #64748b; margin-top: 3px; line-height: 1.4; }
+  .cell { font-size: 11px; line-height: 1.45; padding-right: 16px; }
+  .cell .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; display: block; margin-bottom: 2px; }
+  .fact { font-variant-numeric: tabular-nums; }
+  .fact strong { font-weight: 650; }
+  .zero { color: #b91c1c; }
+  .ok { color: #166534; }
+  .tag {
+    display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #7f1d1d; background: #f1f5f9; border: 1px solid #cbd5e1;
+    border-radius: 3px; padding: 1px 5px; margin-top: 4px;
+  }
+  .note { font-size: 10.5px; color: #64748b; line-height: 1.6; margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+  .note b { color: #0f172a; font-weight: 600; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 3px; padding: 0 4px; }
+</style>
+</head>
+<body>
+  <h1>Rantai Pertanggungjawaban: Generate QR &amp; Ubah Status Mushaf</h1>
+  <div class="sub">Data produksi dash.ekspedisiquran.com per 2026-10-13 &middot; kolom “IZIN” = yang boleh menurut kode, kolom “FAKTA” = yang benar-benar terekam</div>
+
+  <div class="head">
+    <div></div>
+    <div>Tahap</div>
+    <div>Izin (kode mengizinkan)</div>
+    <div>Fakta (di produksi)</div>
+    <div>Pelaku tercatat</div>
+  </div>
+
+  <div class="row">
+    <div class="num">1</div>
+    <div class="step"><b>Buat resi + buat QR</b><span>Tombol QR di /admin/pengiriman, endpoint <code>qr/generate</code> &amp; <code>qr/bulk-generate</code>, perintah <code>qr:generate-missing</code></span></div>
+    <div class="cell"><span class="k">siapa boleh</span>manager (4), warehouse (18), super-admin (2) lewat <code>qr.generate</code>; bulk hanya warehouse + super-admin</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span>26.116 / 26.116 resi <span class="ok">sudah ber-QR</span>, tetapi 26.106 berkas dibuat dalam 4 menit (2026-10-06 01:07–01:11) oleh skrip backfill</div>
+    <div class="cell"><span class="k">jejak</span>tanpa kolom pelaku. Log: super-admin 9×, manager 2×, Staff Gudang id 3 2× (hanya 7 QR baru dari tombol)</div>
+  </div>
+
+  <div class="row stop">
+    <div class="num">2</div>
+    <div class="step"><b>Pindahkan status awal resi</b><span>pemesanan → produksi → kedatangan → packing (prasyarat halaman packing)</span></div>
+    <div class="cell"><span class="k">siapa boleh</span>warehouse hanya 4 tahap awal; kurir hanya pengiriman/batal; manager tidak boleh memindahkan</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span><span class="zero"><strong>tidak ada</strong></span> — 26.116 / 26.116 resi masih <code>pemesanan</code></div>
+    <div class="cell"><span class="k">jejak</span>26 baris status_histories, semuanya Administrator System (uji internal + “Bulk update status”), lalu dikembalikan</div>
+    <div><span class="tag">terhenti di sini</span></div>
+  </div>
+
+  <div class="row">
+    <div class="num">3</div>
+    <div class="step"><b>Packing: pindai QR, isi kerdus</b><span>tugas harian per staf, kerdus per jenis Quran</span></div>
+    <div class="cell"><span class="k">siapa boleh</span>18 akun warehouse (<code>warehouse.packing.scan/seal</code>), supervisor menugaskan</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span><span class="zero"><strong>tidak ada</strong></span> — 0 baris <code>packing_items</code>, 0 <code>packing_boxes</code>; hanya 310 tugas harian yang dibuat otomatis</div>
+    <div class="cell"><span class="k">jejak</span>tidak ada pelaku yang terbentuk</div>
+  </div>
+
+  <div class="row">
+    <div class="num">4</div>
+    <div class="step"><b>Antar &amp; ubah status pengiriman</b><span>pengiriman → diterima (kurir), penutupan alamat oleh distribusi/manager</span></div>
+    <div class="cell"><span class="k">siapa boleh</span>courier (9), manager (4), distribusi (0 user), super-admin (2)</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span><span class="zero"><strong>tidak ada</strong></span> — 0 resi berstatus pengiriman/diterima</div>
+    <div class="cell"><span class="k">jejak</span><code>pengiriman.received_by</code> masih kosong seluruhnya</div>
+  </div>
+
+  <div class="row">
+    <div class="num">5</div>
+    <div class="step"><b>Tutup batch + sertifikat donatur</b><span>cron <code>wakaf:tutup-pengiriman</code> tiap 02:30</span></div>
+    <div class="cell"><span class="k">siapa boleh</span>sistem (terjadwal), bukan peran manusia</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span>berjalan, tetapi 0 batch ditutup &amp; 0 catatan sertifikat (log: “Diperiksa 0–1 batch”)</div>
+    <div class="cell"><span class="k">jejak</span>log terjadwal, tidak ada pelaku</div>
+  </div>
+
+  <div class="row never">
+    <div class="num">6</div>
+    <div class="step"><b>Ubah status mushaf (item)</b><span>kolom <code>wakaf_items.status</code>: pending → processed → shipped → delivered</span></div>
+    <div class="cell"><span class="k">siapa boleh</span><span class="zero">tidak ada pemegang</span> — tidak ada rute, tombol, atau endpoint yang menulis kolom ini</div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span><span class="zero"><strong>tidak ada</strong></span> — 26.101 / 26.101 masih <code>pending</code>, terakhir tersentuh 2026-10-01 18:19</div>
+    <div class="cell"><span class="k">jejak</span>tiga helper model (markAsProcessed/Shipped/Delivered) tidak dipanggil di mana pun</div>
+    <div><span class="tag">kolom mati</span></div>
+  </div>
+
+  <div class="row">
+    <div class="num">7</div>
+    <div class="step"><b>Ubah status permintaan mushaf</b><span>lembaga eksternal: pending → approved/rejected → processed</span></div>
+    <div class="cell"><span class="k">siapa boleh</span>customer-service (4), manager (4), super-admin (2) — <code>mushaf-requests.approve/reject/update</code></div>
+    <div class="cell fact"><span class="k">siapa mengerjakan</span><span class="zero"><strong>tidak ada</strong></span> — 50 / 50 masih <code>pending</code>; <code>reviewed_by</code> &amp; <code>approved_at</code> terisi 0 baris</div>
+    <div class="cell"><span class="k">jejak</span>tidak ada jejak persetujuan sama sekali</div>
+  </div>
+
+  <div class="note">
+    <b>Bacaan singkat.</b> Langkah 1 sudah “hijau” bukan karena dikerjakan alurnya, melainkan karena di-backfill satu kali oleh skrip pada 2026-10-06 —
+    jadi angka 100% QR itu <i>hasil script</i>, bukan bukti staf gudang bekerja. Rantai sebenarnya berhenti di langkah 2 (status resi tidak pernah dipindahkan),
+    dan langkah 6 tidak punya pemilik sama sekali: status mushaf tidak bisa berubah karena tidak ada satu pun jalur yang menulisnya.
+  </div>
+</body>
+</html>
