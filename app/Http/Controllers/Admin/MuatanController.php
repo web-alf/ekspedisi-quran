@@ -11,6 +11,7 @@ use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\User;
+use App\Services\PindaiKerdusService;
 use App\Support\PengirimanStageVisibility;
 use App\Support\PerPage;
 use Illuminate\Database\Eloquent\Builder;
@@ -55,7 +56,7 @@ class MuatanController extends Controller
      * Kurir hanya melihat muatan miliknya. Role lain (distribusi, supervisor,
      * manager, super-admin) melihat semua — mereka yang memantau.
      */
-    public function index(Request $request): Response
+    public function index(Request $request, PindaiKerdusService $pindaiKerdus): Response
     {
         $user = $request->user();
 
@@ -110,12 +111,19 @@ class MuatanController extends Controller
             'sebaran_status' => $sebaran[$m->id] ?? [],
         ]);
 
+        // Panel "Pindai Kerdus" menumpang halaman ini (keputusan pemilik sistem): di sinilah
+        // sisi distribusi bekerja, jadi ia tidak perlu berpindah menu. Kurir TIDAK melihatnya
+        // — propnya pun tidak dibangun untuk mereka, bukan sekadar disembunyikan di layar.
+        $dapatMemindaiKerdus = $user->can(PermissionEnum::DISTRIBUSI_PINDAI_KERDUS->value);
+
         return Inertia::render('Admin/Muatan/Index', PerPage::props($request) + [
             'muatan' => $muatan,
             'kurirList' => $this->kurirList($user),
             'filters' => $request->only(['search', 'kurir_id', 'tanggal']),
             'dapatMembuat' => $user->can(PermissionEnum::MUATAN_CREATE->value),
             'hanyaMiliknya' => $this->hanyaMiliknya($user),
+            'dapatMemindaiKerdus' => $dapatMemindaiKerdus,
+            'pindaiKerdus' => $dapatMemindaiKerdus ? $pindaiKerdus->props($request) : null,
         ]);
     }
 
@@ -561,7 +569,9 @@ class MuatanController extends Controller
             'kode' => ['required', 'string'],
         ]);
 
-        $kodeKerdus = $this->bersihkanKerdus($validated['kode']);
+        // Normalisasi ada di model: kode yang sama harus menjadi kerdus yang sama di
+        // SETIAP layar yang memindainya (muatan, kurir, sisi distribusi).
+        $kodeKerdus = PackingBox::kodeDariPindai($validated['kode']);
 
         $box = PackingBox::with(['packingItems.pengiriman.status'])
             ->where('kode_kerdus', $kodeKerdus)
@@ -1074,28 +1084,6 @@ class MuatanController extends Controller
 
         if (preg_match('/EQ-\d{4}-\d{5}/', $teks, $m)) {
             return $m[0];
-        }
-
-        return $teks;
-    }
-
-    /**
-     * Ambil kode kerdus dari isi kotak pindai.
-     *
-     * Kode kerdus bisa datang sebagai teks polos maupun JSON dari pemindai lama,
-     * jadi keduanya diterima. Bentuknya KB-YYYYMMDD-USER-JENIS-NN.
-     */
-    private function bersihkanKerdus(string $mentah): string
-    {
-        $teks = trim(strip_tags($mentah));
-
-        $terurai = json_decode($teks, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($terurai)) {
-            $teks = (string) ($terurai['kode_kerdus'] ?? $terurai['box_code'] ?? $teks);
-        }
-
-        if (preg_match('/KB-[A-Z0-9\-]+/i', $teks, $m)) {
-            return strtoupper($m[0]);
         }
 
         return $teks;

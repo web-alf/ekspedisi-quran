@@ -19,12 +19,18 @@
   import FlashMessage from '../../../Components/FlashMessage.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import Pagination from '../../../Components/Pagination.svelte';
+  // Panel Pindai Kerdus menumpang halaman ini (keputusan pemilik sistem): sisi distribusi
+  // bekerja di satu halaman. Panelnya hanya dirender bila server mengirim propnya — kurir
+  // tidak menerimanya sama sekali.
+  import PindaiKerdusPanel from '../../../Components/PindaiKerdusPanel.svelte';
 
   export let muatan = { data: [], current_page: 1, last_page: 1, per_page: 15, total: 0 };
   export let kurirList = [];
   export let filters = {};
   export let dapatMembuat = false;
   export let hanyaMiliknya = false;
+  export let dapatMemindaiKerdus = false;
+  export let pindaiKerdus = null;
   // Nama prop HARUS `perPage` — itu yang di-bind komponen PerPageSelector.
   export let perPage = 15;
   export let perPageOptions = [10, 15, 25, 50, 100];
@@ -103,6 +109,13 @@
           </div>
         </div>
       </div>
+
+      <!-- Panel pindai kerdus: hanya untuk sisi distribusi (propnya tidak dikirim ke kurir) -->
+      {#if pindaiKerdus}
+        <div class="mb-6 sm:mb-8">
+          <PindaiKerdusPanel pindai={pindaiKerdus} {perPage} perPageOptions={perPageOptions} />
+        </div>
+      {/if}
 
       <!-- Filters -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">

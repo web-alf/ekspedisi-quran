@@ -121,6 +121,13 @@ enum PermissionEnum: string
     case MUATAN_SCAN = 'muatan.scan';
     case MUATAN_COMPLETE = 'muatan.complete';
 
+    // Jejak pindai kerdus oleh sisi DISTRIBUSI (manager / distribusi).
+    //
+    // Berbeda dari muatan.scan — itu memuat barang ke perjalanan kurir. Izin ini
+    // hanya mencatat "kerdus ini berada di tangan saya pada jam sekian, isinya
+    // sekian eks" sebagai jejak tracking, tanpa mengubah status pengiriman.
+    case DISTRIBUSI_PINDAI_KERDUS = 'distribusi.pindai-kerdus';
+
     // Wakaf batch
     case WAKAF_BATCH_CREATE = 'wakaf-batch.create';
     case WAKAF_BATCH_READ = 'wakaf-batch.read';

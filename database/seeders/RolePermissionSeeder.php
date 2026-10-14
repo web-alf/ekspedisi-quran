@@ -439,7 +439,7 @@ class RolePermissionSeeder extends Seeder
 
             // Muatan & distribusi.
             //
-            // Manager diberi HANYA dua izin, dan sengaja hanya dua:
+            // Dari kelompok muatan.*, manager diberi HANYA dua izin, dan sengaja hanya dua:
             //   muatan.read      — melihat seluruh muatan untuk memantau
             //   muatan.complete  — menyelesaikan distribusi (verifikasi manual)
             //
@@ -453,6 +453,14 @@ class RolePermissionSeeder extends Seeder
             // di atas juga sengaja hanya membaca.
             PermissionEnum::MUATAN_READ->value,
             PermissionEnum::MUATAN_COMPLETE->value,
+
+            // Pindai kerdus: mencatat perpindahan kerdus (siapa memindai kerdus apa,
+            // kapan, berapa eks mushafnya) sebagai jejak penelusuran. Ini pekerjaan
+            // yang memang dipegang manager distribusi — bukan operasi gudang — jadi
+            // berbeda alasan dengan muatan.create/scan yang di atas sengaja tidak
+            // diberikan. Izinnya dibuat di migrasi
+            // 2026_10_14_190000_buat_pindai_kerdus_distribusi.
+            PermissionEnum::DISTRIBUSI_PINDAI_KERDUS->value,
 
             // Supervisor & monitoring — SENGAJA TIDAK DIBERIKAN kepada manager.
             //

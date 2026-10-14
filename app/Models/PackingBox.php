@@ -436,6 +436,31 @@ class PackingBox extends Model
     }
 
     /**
+     * Ambil kode kerdus dari isi kotak pindai / ketikan petugas.
+     *
+     * Kode kerdus bisa datang sebagai teks polos, JSON pemindai lama, atau teks
+     * berlebih (spasi, tanda kutip, tag). Bentuknya KB-YYYYMMDD-USER-JENIS-NN.
+     *
+     * Ditaruh di model, bukan disalin ke tiap controller: normalisasi yang berbeda
+     * antar halaman berarti kode yang sama jadi kerdus yang berbeda di tiap layar.
+     */
+    public static function kodeDariPindai(string $mentah): string
+    {
+        $teks = trim(strip_tags($mentah));
+
+        $terurai = json_decode($teks, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($terurai)) {
+            $teks = (string) ($terurai['kode_kerdus'] ?? $terurai['box_code'] ?? $teks);
+        }
+
+        if (preg_match('/KB-[A-Z0-9\-]+/i', $teks, $m)) {
+            return strtoupper($m[0]);
+        }
+
+        return $teks;
+    }
+
+    /**
      * Validate if scanned QR data belongs to this box
      */
     public function validateQRData($qrData)

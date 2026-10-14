@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\MuatanController;
 use App\Http\Controllers\Admin\PengirimanController;
 use App\Http\Controllers\Admin\PengirimanTrackingController;
 use App\Http\Controllers\Admin\PermissionController;
+use App\Http\Controllers\Admin\PindaiKerdusController;
 use App\Http\Controllers\Admin\QRCodeController;
 use App\Http\Controllers\Admin\QueryOptimizationController;
 use App\Http\Controllers\Admin\RoleController;
@@ -698,6 +699,23 @@ Route::middleware(['auth'])->group(function () {
                 ->middleware('permission:muatan.complete')
                 ->name('selesaikan');
         });
+
+        // 🏷️ Pindai Kerdus (sisi distribusi)
+        //
+        // Manager Distribusi & role distribusi mencatat perpindahan kerdus: satu pindai QR
+        // (atau ketikan manual) = satu baris jejak — kerdus apa, siapa yang memindai, jam
+        // berapa, berapa eks mushafnya. Status pengiriman TIDAK berubah di sini.
+        //
+        // PANELNYA menumpang halaman kerja muatan (`/admin/muatan`), jadi yang ada di sini
+        // hanya endpoint pencatatnya — keputusan pemilik sistem: sisi distribusi bekerja di
+        // satu halaman, bukan berpindah-pindah menu.
+        //
+        // Izinnya sendiri (`distribusi.pindai-kerdus`), BUKAN muatan.scan: yang boleh memuat
+        // barang ke perjalanan kurir berbeda dari yang bertanggung jawab atas kerdus
+        // keluar-masuk gudang.
+        Route::post('pindai-kerdus', [PindaiKerdusController::class, 'store'])
+            ->middleware('permission:distribusi.pindai-kerdus')
+            ->name('pindai-kerdus.store');
 
         Route::patch('mushaf-requests/{mushafRequest}/status', [App\Http\Controllers\Admin\MushafRequestController::class, 'updateStatus'])
             ->middleware('permission:mushaf-requests.update|mushaf-requests.approve|mushaf-requests.reject')

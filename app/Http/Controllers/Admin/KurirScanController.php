@@ -158,7 +158,9 @@ class KurirScanController extends Controller
             'muatan_id' => ['nullable', 'integer', 'exists:muatan,id'],
         ]);
 
-        $kodeKerdus = $this->bersihkanKerdus($validated['kode']);
+        // Normalisasi ada di model: kode yang sama harus menjadi kerdus yang sama di
+        // SETIAP layar yang memindainya (muatan, kurir, sisi distribusi).
+        $kodeKerdus = PackingBox::kodeDariPindai($validated['kode']);
 
         $box = PackingBox::with(['packingItems.pengiriman.status', 'jenisQuran:id,nama_jenis'])
             ->where('kode_kerdus', $kodeKerdus)
@@ -339,25 +341,6 @@ class KurirScanController extends Controller
 
         if (preg_match('/EQ-\d{4}-\d{5}/', $teks, $m)) {
             return $m[0];
-        }
-
-        return $teks;
-    }
-
-    /**
-     * QR kerdus: isinya bisa JSON {"kode_kerdus": "..."} atau kode mentah.
-     */
-    private function bersihkanKerdus(string $mentah): string
-    {
-        $teks = trim(strip_tags($mentah));
-
-        $terurai = json_decode($teks, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($terurai)) {
-            $teks = (string) ($terurai['kode_kerdus'] ?? $terurai['box_code'] ?? $teks);
-        }
-
-        if (preg_match('/KB-[A-Z0-9\-]+/i', $teks, $m)) {
-            return strtoupper($m[0]);
         }
 
         return $teks;

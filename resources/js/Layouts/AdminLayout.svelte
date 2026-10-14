@@ -170,6 +170,10 @@
       {
         // Satu menu untuk kurir DAN role distribusi — bukan dua menu yang isinya
         // sama. Kurir melihat muatannya sendiri; role distribusi melihat semua.
+        //
+        // Panel "Pindai Kerdus" (izin distribusi.pindai-kerdus) juga tinggal DI DALAM
+        // halaman ini, bukan menu terpisah — keputusan pemilik sistem: sisi distribusi
+        // bekerja di satu halaman.
         label: 'Muatan & Distribusi',
         route: '/admin/muatan',
         requiredPermissions: ['muatan.read']

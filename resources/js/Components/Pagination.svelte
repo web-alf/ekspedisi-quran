@@ -5,6 +5,10 @@
   
   export let data = {};
   export let additionalParams = {};
+  // Panel yang menumpang halaman lain (mis. Pindai Kerdus di halaman Muatan) menyembunyikan
+  // pemilih ukuran halaman: halaman itu sudah punya satu, dan `per_page` berlaku untuk
+  // kedua tabel. Tanpa ini, dua pemilih dengan id yang sama muncul berdampingan.
+  export let tanpaPemilihPerHalaman = false;
   // Ukuran halaman yang sedang dipakai (dikirim controller sebagai prop `perPage`),
   // supaya pemilihnya menampilkan nilai yang benar dan ikut terbawa saat pindah
   // halaman. Halaman yang tidak mengirimnya tetap jalan dengan bawaan 20.
@@ -54,7 +58,9 @@
       </div>
       <!-- Pemilih selalu tampil walau hasilnya cuma satu halaman: pengguna tetap
            berhak memperbesar/memperkecil jumlah baris yang ingin dilihat. -->
-      <PerPageSelector bind:perPage options={perPageOptions} id="per_page_bersama" onchange={gantiPerHalaman} />
+      {#if !tanpaPemilihPerHalaman}
+        <PerPageSelector bind:perPage options={perPageOptions} id="per_page_bersama" onchange={gantiPerHalaman} />
+      {/if}
     </div>
     {#if pagination.last_page > 1}
 
