@@ -99,6 +99,14 @@
           requiredPermissions: ['stok.read']
         },
         {
+          // LOKASI MUSHAF (2026-10-15): memindahkan mushaf ber-resi antar gudang.
+          // Izinnya sendiri (`mushaf.transfer`) supaya menu ini tidak muncul untuk peran yang
+          // hanya boleh melihat stok.
+          label: 'Perpindahan Mushaf',
+          route: '/admin/transfer-mushaf',
+          requiredPermissions: ['mushaf.transfer']
+        },
+        {
           label: 'Daftar Kerdus',
           route: '/admin/box-tracking',
           requiredPermissions: ['warehouse.boxes.view']
@@ -143,6 +151,13 @@
         label: 'Stok Mushaf',
         route: '/admin/warehouse/stok',
         requiredPermissions: ['stok.read']
+      },
+      {
+        // LOKASI MUSHAF (2026-10-15): memindahkan mushaf BER-RESI antar gudang —
+        // pasangan dari Stok Mushaf di atas, yang satuannya eks tanpa muwakif.
+        label: 'Perpindahan Mushaf',
+        route: '/admin/transfer-mushaf',
+        requiredPermissions: ['mushaf.transfer']
       },
       { 
         label: 'Sertifikat', 

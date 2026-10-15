@@ -5,8 +5,10 @@ namespace App\Models;
 use App\Services\Cache\StatusPengirimanCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class PackingBox extends Model
@@ -17,6 +19,10 @@ class PackingBox extends Model
         'daily_packing_task_id',
         'kode_kerdus',
         'jenis_quran_id',
+        // LOKASI MUSHAF (2026-10-15). Tanpa baris ini, `PackingBox::create(['gudang_id' =>
+        // ...])` MEMBUANG lokasinya tanpa galat — kerdusnya jadi tanpa gudang walau tugasnya
+        // jelas milik gudang tertentu.
+        'gudang_id',
         'assigned_user_id',
         'assignment_type',
         'is_shared_box',
@@ -67,6 +73,17 @@ class PackingBox extends Model
     public function pindaiKerdusTerakhir(): HasOne
     {
         return $this->hasOne(PindaiKerdusLog::class)->latestOfMany('id');
+    }
+
+    /**
+     * Gudang tempat kerdus ini berada.
+     *
+     * Relasi, bukan kolom biasa: `packing_boxes.gudang_id` diisi sekali saat kerdus dibuat
+     * (lihat `DailyPackingTask::gudangKerdus()`), lalu tidak lagi bergantung pada tugasnya.
+     */
+    public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(Gudang::class);
     }
 
     /**
@@ -263,6 +280,28 @@ class PackingBox extends Model
 
             // Atomic update of count with explicit locking
             $this->increment('jumlah_terisi', $quantity);
+
+            // LOKASI MUSHAF (2026-10-15): kerdus adalah bukti fisik lokasi, jadi isi resinya
+            // ikut menyesuaikan. Dua arah:
+            //  1. kerdus belum ber-gudang tapi resinya sudah → kerdus mewarisi (supaya kerdus
+            //     yang dibuat sebelum kolom ini ada tetap bisa terbaca lokasinya);
+            //  2. kerdus sudah ber-gudang → resi mengikuti kerdusnya.
+            // Perubahan lokasi yang BUKAN lewat dokumen perpindahan tetap tercatat di log —
+            // kalau tidak, mushaf bisa "berpindah" tanpa jejak hanya karena dimasukkan kerdus.
+            if (! $this->gudang_id && $pengiriman->gudang_id) {
+                $this->update(['gudang_id' => $pengiriman->gudang_id]);
+            } elseif ($this->gudang_id && (int) $pengiriman->gudang_id !== (int) $this->gudang_id) {
+                if ($pengiriman->gudang_id) {
+                    Log::info('Lokasi mushaf berpindah mengikuti kerdus (bukan lewat dokumen perpindahan)', [
+                        'no_resi' => $pengiriman->no_resi,
+                        'gudang_sebelumnya' => $pengiriman->gudang_id,
+                        'gudang_kerdus' => $this->gudang_id,
+                        'kode_kerdus' => $this->kode_kerdus,
+                    ]);
+                }
+
+                $pengiriman->update(['gudang_id' => $this->gudang_id]);
+            }
 
             // Re-check capacity after increment to handle edge cases
             $this->refresh();

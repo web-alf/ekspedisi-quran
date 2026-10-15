@@ -6,6 +6,7 @@ use App\Enums\PermissionEnum;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ScanStatusRequest;
 use App\Models\Donatur;
+use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\MushafRequest;
 use App\Models\Pengiriman;
@@ -63,6 +64,9 @@ class PengirimanController extends Controller
             'donatur:id,nama_donatur,kode_donatur,no_hp',
             'wakafItem:id,pengiriman_id,wakif_name,doa_request,relationship_to_donatur',
             'jenisQuran:id,nama_jenis,kode_jenis',
+            // LOKASI MUSHAF (2026-10-15): gudang tempat mushaf ini berada, ditampilkan
+            // sebagai kolom & filter di Data Resi.
+            'gudang:id,nama,kode',
             'status:id,nama,slug,warna',
             'creator:id,name',
             'sertifikat:id,pengiriman_id,nomor_sertifikat,generated_at',
@@ -95,6 +99,15 @@ class PengirimanController extends Controller
         // Filter by jenis Qur'an
         if ($request->jenis_quran) {
             $query->where('jenis_quran_id', $request->jenis_quran);
+        }
+
+        // Filter by GUDANG (LOKASI MUSHAF). Nilai khusus `belum` = resi yang lokasinya
+        // belum ditentukan — daftar ini yang perlu dibereskan lebih dulu, jadi harus bisa
+        // dicari, bukan hanya ditampilkan sebagai tanda hubung.
+        if ($request->gudang) {
+            $request->gudang === 'belum'
+                ? $query->whereNull('gudang_id')
+                : $query->where('gudang_id', $request->gudang);
         }
 
         // Filter by alamat status
@@ -240,9 +253,12 @@ class PengirimanController extends Controller
 
         return Inertia::render('Admin/Pengiriman/Index', [
             'pengiriman' => $pengiriman,
-            'filters' => $request->only(['search', 'status', 'jenis_quran', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
+            'filters' => $request->only(['search', 'status', 'jenis_quran', 'gudang', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
             'perPage' => $perPage,
             'perPageOptions' => self::UKURAN_HALAMAN,
+            // LOKASI MUSHAF: pilihan filter gudang di Data Resi. Selalu dikirim (walau
+            // kosong) supaya filter di halaman tidak crash karena prop hilang.
+            'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
             // Daftar status untuk pemindahan juga dipusatkan: sebelumnya jalur ini
             // memuat semua status aktif sendiri, sehingga berbeda isi dari halaman
             // ubah status dan halaman Muatan.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskTarget;
+use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
@@ -68,7 +69,7 @@ class PackingController extends Controller
                     ->with('jenisQuran:id,nama_jenis,kode_jenis')
                     ->orderBy('id');
             }])
-            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status')
+            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'gudang_id')
             ->first();
 
         if (! $todayTask) {
@@ -209,6 +210,14 @@ class PackingController extends Controller
                 ];
             }),
             'availableCount' => $availableCount,
+            // LOKASI MUSHAF (2026-10-15): tugas harian dari cron lahir TANPA gudang, sehingga
+            // kerdus yang dibuat dari tugas itu tidak punya lokasi. Di sini pilihannya
+            // disodorkan sekali: begitu staf memilih, gudangnya disimpan ke TUGAS, dan semua
+            // kerdus berikutnya pada tugas itu mewarisinya otomatis.
+            'gudangTugas' => $todayTask->gudang_id
+                ? Gudang::whereKey($todayTask->gudang_id)->value('nama')
+                : null,
+            'gudangList' => Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']),
             'packedItems' => $packedItems->map(function ($item) {
                 return [
                     'id' => $item->id,
@@ -221,6 +230,64 @@ class PackingController extends Controller
                     ],
                 ];
             }),
+        ]);
+    }
+
+    /**
+     * Tetapkan gudang TUGAS HARI INI (LOKASI MUSHAF, 2026-10-15).
+     *
+     * Tugas harian dari cron `packing:daily-assignment` lahir tanpa gudang, dan di produksi
+     * seluruh 354 tugas belum bertagih — akibatnya kerdus yang dibuat dari tugas itu tidak
+     * punya lokasi. Halaman packing menyodorkan pilihan ini SEKALI; begitu dipilih, gudangnya
+     * disimpan ke tugas sehingga semua kerdus berikutnya mewarisinya otomatis.
+     *
+     * Dua penjaga, keduanya penting supaya pilihan ini tidak menjadi celah memindahkan lokasi
+     * mushaf tanpa dokumen perpindahan:
+     *   1. Hanya boleh diisi bila tugasnya BELUM bertagih (bukan menimpa yang sudah ada).
+     *   2. Akun yang sudah terpasang di satu gudang tidak boleh memilih gudang lain.
+     */
+    public function tetapkanGudang(Request $request)
+    {
+        $validated = $request->validate([
+            'gudang_id' => ['required', 'integer', 'exists:gudang,id'],
+        ]);
+
+        $user = auth()->user();
+
+        $tugas = DailyPackingTask::where('user_id', $user->id)
+            ->whereDate('tanggal_tugas', today())
+            ->first();
+
+        if (! $tugas) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada tugas packing untuk hari ini.'], 422);
+        }
+
+        if ($tugas->gudang_id) {
+            $nama = Gudang::whereKey($tugas->gudang_id)->value('nama');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gudang tugas ini sudah ditetapkan'.($nama ? " ({$nama})" : '').'. Hubungi SPV bila memang perlu diubah.',
+            ], 422);
+        }
+
+        $gudang = Gudang::findOrFail($validated['gudang_id']);
+
+        if ($user->gudang_id && (int) $user->gudang_id !== (int) $gudang->id) {
+            $namaSendiri = Gudang::whereKey($user->gudang_id)->value('nama');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun Anda terpasang di '.($namaSendiri ?? 'gudang lain').', jadi tidak bisa memilih gudang yang lain.',
+            ], 403);
+        }
+
+        $tugas->update(['gudang_id' => $gudang->id]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Gudang tugas ditetapkan: {$gudang->nama}. Kerdus yang dibuat mulai sekarang tercatat di gudang ini.",
+            'data' => ['gudang_id' => $gudang->id, 'nama' => $gudang->nama],
         ]);
     }
 

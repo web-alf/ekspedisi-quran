@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class Pengiriman extends Model
@@ -27,6 +30,9 @@ class Pengiriman extends Model
         'donation_id',
         'wakaf_item_id',
         'jenis_quran_id',
+        // Lokasi fisik mushaf ini (LOKASI MUSHAF, 2026-10-15). Tanpa baris fillable ini,
+        // `$pengiriman->update(['gudang_id' => ...])` MEMBUANG nilainya diam-diam.
+        'gudang_id',
         'jumlah_quran',
         'tanggal_wakaf',
         'status_id',
@@ -237,6 +243,56 @@ class Pengiriman extends Model
     public const SLUG_SIAP_DIMUAT = ['selesai-packing', 'pengiriman'];
 
     /**
+     * Gudang tempat mushaf ini berada (LOKASI MUSHAF, 2026-10-15).
+     *
+     * Diisi otomatis: dari kerdus saat mushaf masuk kerdus, atau dari gudang pelaku saat
+     * resinya bergerak di tahap gudang. Sesudah itu hanya dokumen perpindahan
+     * (`transfer_mushaf`) yang mengubahnya.
+     */
+    public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(Gudang::class);
+    }
+
+    /** Baris dokumen perpindahan yang memuat mushaf ini. */
+    public function transferMushafItems(): HasMany
+    {
+        return $this->hasMany(TransferMushafItem::class);
+    }
+
+    /**
+     * Dokumen perpindahan yang masih berjalan (belum diterima/dibatalkan) untuk mushaf ini.
+     *
+     * Dipakai sebagai penjaga: mushaf yang sedang dalam perjalanan antar gudang tidak boleh
+     * dimasukkan ke dokumen kedua — kalau boleh, dua gudang bisa menerimanya dan lokasinya
+     * menjadi tidak bisa ditentukan.
+     */
+    public function transferMushafTerbuka(): ?TransferMushaf
+    {
+        return TransferMushaf::query()
+            ->where('status', TransferMushaf::STATUS_DIPROSES)
+            ->whereHas('items', fn ($q) => $q->where('pengiriman_id', $this->id))
+            ->first();
+    }
+
+    /**
+     * Apakah status ini termasuk tahap gudang (tempat lokasi mushaf ditentukan)?
+     *
+     * Sumbernya `config/pengiriman.php` — daftar yang sama yang dipakai UI dan penjaga
+     * perpindahan status, jadi menambah/mengurangi tahap gudang tidak perlu dua tempat.
+     */
+    public function statusSlugAdaDiTahapGudang(int $statusId): bool
+    {
+        $slug = DB::table('status_pengiriman')->where('id', $statusId)->value('slug');
+
+        if (! $slug) {
+            return false;
+        }
+
+        return in_array($slug, config('pengiriman.warehouse_stage_slugs', []), true);
+    }
+
+    /**
      * Alasan resi ini BELUM boleh dimuat ke kurir, atau null bila boleh.
      *
      * Satu aturan untuk SEMUA jalur muat (pindai resi, pindai kerdus, pilih dari daftar,
@@ -394,6 +450,19 @@ class Pengiriman extends Model
 
             // Update status pada instance terkunci
             $atribut = ['status_id' => $newStatusId];
+
+            // LOKASI MUSHAF (2026-10-15): resi yang bergerak di tahap gudang milik gudang
+            // pelakunya. Hanya diisi bila BELUM ADA nilainya: sekali lokasi ditentukan, yang
+            // boleh mengubahnya hanya dokumen perpindahan antar gudang — bukan sembarang
+            // perubahan status oleh petugas lain. Tanpa penjagaan ini, lokasi mushaf bisa
+            // berpindah hanya karena ada orang membuka daftar dari gudang lain.
+            if ($locked->gudang_id === null) {
+                $gudangPelaku = auth()->user()?->gudang_id;
+
+                if ($gudangPelaku && $this->statusSlugAdaDiTahapGudang($newStatusId)) {
+                    $atribut['gudang_id'] = $gudangPelaku;
+                }
+            }
 
             // Catat waktu terima, sekali saja. Tanpa ini kolom received_at tetap
             // null selamanya dan tampilan yang bergantung padanya selalu

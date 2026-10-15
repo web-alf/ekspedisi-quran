@@ -12,6 +12,11 @@ class DailyPackingTask extends Model
 
     protected $fillable = [
         'user_id',
+        // LOKASI MUSHAF (2026-10-15). Tanpa baris ini, `$tugas->update(['gudang_id' => ...])`
+        // MEMBUANG nilainya tanpa galat sama sekali — terbukti di uji panel packing: responsnya
+        // sukses, tugasnya tetap tanpa gudang. Jebakan yang sama sudah dua kali kena di kolom
+        // lain (pengiriman.mushaf_request_id, packing_boxes.gudang_id).
+        'gudang_id',
         'tanggal_tugas',
         'total_target',
         'total_selesai',
@@ -359,6 +364,36 @@ class DailyPackingTask extends Model
     }
 
     /**
+     * Gudang tempat kerdus tugas ini dibuat (LOKASI MUSHAF, 2026-10-15).
+     *
+     * Urutannya: gudang TUGAS (diisi SPV/PJ saat menugaskan) → gudang PEKERJA yang ditugasi
+     * → gudang PENUGASA yang sedang aktif. Dua yang terakhir adalah cadangan yang penting
+     * karena di produksi seluruh 354 tugas belum bertagih gudang: tanpa cadangan itu, kerdus
+     * tidak akan pernah punya lokasi walau akunnya jelas milik gudang tertentu.
+     *
+     * Mengembalikan null bila ketiganya kosong — itu berarti "belum diketahui", bukan
+     * ditebak. UI menampilkan keadaan itu apa adanya supaya bisa dibetulkan.
+     */
+    public function gudangKerdus(): ?int
+    {
+        if ($this->gudang_id) {
+            return (int) $this->gudang_id;
+        }
+
+        $pekerja = $this->relationLoaded('user')
+            ? $this->user?->gudang_id
+            : User::whereKey($this->user_id)->value('gudang_id');
+
+        if ($pekerja) {
+            return (int) $pekerja;
+        }
+
+        $penugasa = auth()->user()?->gudang_id;
+
+        return $penugasa ? (int) $penugasa : null;
+    }
+
+    /**
      * Create new box dynamically for specific jenis - Race condition safe
      */
     public function createDynamicBoxForJenisSafe($jenisQuranId)
@@ -395,6 +430,9 @@ class DailyPackingTask extends Model
                     'jenis_quran_id' => $jenisQuranId,
                     'kapasitas' => $jenis->getDefaultCapacity(),
                     'status' => 'filling',
+                    // LOKASI MUSHAF: kerdus baru langsung membawa gudangnya, dihitung sekali
+                    // di sini supaya tidak bergantung lagi pada tugas yang bisa diubah.
+                    'gudang_id' => $this->gudangKerdus(),
                 ]);
             }
 

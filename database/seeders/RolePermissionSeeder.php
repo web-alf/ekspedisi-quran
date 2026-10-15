@@ -295,6 +295,10 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::STOK_READ->value,
             PermissionEnum::STOK_UPDATE->value,
             PermissionEnum::STOK_TRANSFER->value,
+            // LOKASI MUSHAF (2026-10-15): memindahkan mushaf BER-RESI (bukan stok tanpa
+            // muwakif) antar gudang. Hanya dua peran ini + super-admin; di produksi izinnya
+            // dipasang oleh migrasi 2026_10_15_143200_beri_izin_transfer_mushaf.
+            PermissionEnum::MUSHAF_TRANSFER->value,
             PermissionEnum::SHIPMENTS_TRACK->value,
             PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
             PermissionEnum::SHIPMENTS_EXPORT->value,

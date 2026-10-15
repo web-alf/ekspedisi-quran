@@ -19,6 +19,8 @@
   export let filters = {};
   export let statusList = [];
   export let jenisQuranList = [];
+  // LOKASI MUSHAF: gudang tempat mushaf berada (Semarang/Boyolali/belum diketahui).
+  export let gudangList = [];
   export const donaturList = [];
   export let stats = {};
   export let perPage = 20;
@@ -44,6 +46,7 @@
   $: if (!filters.search) filters.search = '';
   $: if (!filters.status) filters.status = '';
   $: if (!filters.jenis_quran) filters.jenis_quran = '';
+  $: if (!filters.gudang) filters.gudang = '';
   $: if (!filters.tanggal_mulai) filters.tanggal_mulai = '';
   $: if (!filters.tanggal_akhir) filters.tanggal_akhir = '';
   $: if (!filters.alamat_status) filters.alamat_status = '';
@@ -553,6 +556,9 @@
     if (filters.jenis_quran) {
       params.set('jenis_quran', filters.jenis_quran);
     }
+    if (filters.gudang) {
+      params.set('gudang', filters.gudang);
+    }
     if (filters.alamat_status) {
       params.set('alamat_status', filters.alamat_status);
     }
@@ -586,6 +592,7 @@
     if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
     if (filters.status) params.set('status', filters.status);
     if (filters.jenis_quran) params.set('jenis_quran', filters.jenis_quran);
+    if (filters.gudang) params.set('gudang', filters.gudang);
     if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
     if (startDate) params.set('tanggal_mulai', startDate);
     if (endDate) params.set('tanggal_akhir', endDate);
@@ -602,6 +609,7 @@
     numberTo = '';
     filters.status = '';
     filters.jenis_quran = '';
+    filters.gudang = '';
     filters.alamat_status = '';
     startDate = '';
     endDate = '';
@@ -758,6 +766,7 @@
     if (filters.search) params.set('search', filters.search);
     if (filters.status) params.set('status', filters.status);
     if (filters.jenis_quran) params.set('jenis_quran', filters.jenis_quran);
+    if (filters.gudang) params.set('gudang', filters.gudang);
     if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
     if (startDate) params.set('tanggal_mulai', startDate);
     if (endDate) params.set('tanggal_akhir', endDate);
@@ -954,6 +963,25 @@
             {/each}
           </select>
         </div>
+
+        <!-- Gudang Filter (LOKASI MUSHAF) -->
+        <div>
+          <label for="gudang_filter" class="block text-sm font-medium text-gray-700 mb-1">Gudang</label>
+          <select
+            id="gudang_filter"
+            bind:value={filters.gudang}
+            on:change={() => handleFilter()}
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Semua Gudang</option>
+            {#each gudangList as gudang}
+              <option value={gudang.id}>{gudang.nama}</option>
+            {/each}
+            <!-- Daftar ini yang perlu dibereskan lebih dulu: resi yang lokasinya belum
+                 ditentukan (kolom baru, data lama belum punya gudang). -->
+            <option value="belum">Belum diketahui</option>
+          </select>
+        </div>
         
         <!-- Alamat Status Filter -->
         <div>
@@ -1039,6 +1067,18 @@
                 <button 
                   on:click={() => { filters.jenis_quran = ''; handleFilter(); }}
                   class="ml-2 text-purple-600 hover:text-purple-800"
+                >
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
+                </button>
+              </div>
+            {/if}
+
+            {#if filters.gudang}
+              <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-700 border border-gray-200">
+                <span>Gudang: {filters.gudang === 'belum' ? 'Belum diketahui' : (gudangList.find(g => g.id == filters.gudang)?.nama || '-')}</span>
+                <button
+                  on:click={() => { filters.gudang = ''; handleFilter(); }}
+                  class="ml-2 text-gray-500 hover:text-gray-700"
                 >
                   <HeroIcon name="x-mark" class="w-3 h-3" />
                 </button>
@@ -1293,6 +1333,7 @@
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakif</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis Al-Qur'an</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gudang</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Wakaf</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alamat Penerima</th>
             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
@@ -1351,6 +1392,18 @@
                   <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getStatusBadgeClass(item.status)}">
                     {item.status?.nama || 'Unknown'}
                   </span>
+                </td>
+                <!-- LOKASI MUSHAF: gudang tempat mushaf berada. Tanda hubung berarti
+                     lokasinya belum ditentukan — bukan galat, data lama memang belum
+                     punya kolom ini; filter "Belum diketahui" mendaftarnya. -->
+                <td class="px-6 py-4 whitespace-nowrap">
+                  {#if item.gudang?.nama}
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                      {item.gudang.nama}
+                    </span>
+                  {:else}
+                    <span class="text-xs text-gray-400">Belum diketahui</span>
+                  {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm text-gray-900">{formatDate(item.tanggal_wakaf)}</div>

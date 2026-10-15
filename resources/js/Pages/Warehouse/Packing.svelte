@@ -19,8 +19,44 @@
   export let packedItems = [];
   // export let assignedItems = [];
   export let noTaskMessage = null;
+  // LOKASI MUSHAF (2026-10-15): gudang tugas hari ini. Tugas dari cron lahir tanpa gudang,
+  // dan tanpa gudang kerdus yang dibuat tidak punya lokasi — jadi pilihannya disodorkan sekali.
+  export let gudangTugas = null;
+  export let gudangList = [];
   // Daftar jenis untuk tab Kardus (packing kardus), dikirim PackingController::index()
   export let jenisList = [];
+
+  // LOKASI MUSHAF: pilihan gudang untuk tugas yang belum bertagih gudang.
+  let gudangDipilih = '';
+  let gudangSibuk = false;
+  let gudangGalat = '';
+
+  function simpanGudang() {
+    if (!gudangDipilih) return;
+
+    gudangSibuk = true;
+    gudangGalat = '';
+
+    fetch('/admin/warehouse/packing/gudang', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+      },
+      body: JSON.stringify({ gudang_id: Number(gudangDipilih) }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok && data.success) {
+          // Muat ulang props supaya `gudangTugas` terisi dan panelnya hilang sendiri.
+          router.reload({ only: ['gudangTugas'] });
+        } else {
+          gudangGalat = data.message || 'Gagal menyimpan gudang.';
+        }
+      })
+      .catch(() => { gudangGalat = 'Gagal menghubungi server.'; })
+      .finally(() => { gudangSibuk = false; });
+  }
 
   // Scanner state
   const scannerStore = createScanner('qr-reader', {
@@ -939,6 +975,43 @@
 
 <AdminLayout>
   <div class="max-w-7xl mx-auto">
+    <!-- LOKASI MUSHAF (2026-10-15). Muncul HANYA bila tugas hari ini belum bertagih gudang:
+         tanpa gudang, kerdus dan isinya tidak punya lokasi sama sekali. Sekali dipilih,
+         gudangnya tersimpan di tugas dan semua kerdus berikutnya mewarisinya. -->
+    {#if task && !gudangTugas && gudangList.length > 0}
+      <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div class="flex-1">
+            <h3 class="font-semibold text-gray-900">Gudang tugas ini belum ditentukan</h3>
+            <p class="text-sm text-gray-500 mt-1">
+              Pilih gudang tempat Anda mengerjakan tugas hari ini. Kerdus yang dibuat akan
+              tercatat di gudang ini — hanya bisa dipilih sekali per tugas.
+            </p>
+          </div>
+          <label class="block text-sm w-full sm:w-64">
+            <span class="block text-gray-700 mb-1">Gudang</span>
+            <select bind:value={gudangDipilih} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="">Pilih gudang...</option>
+              {#each gudangList as gudang}
+                <option value={gudang.id}>{gudang.nama}</option>
+              {/each}
+            </select>
+          </label>
+          <button
+            type="button"
+            on:click={simpanGudang}
+            disabled={!gudangDipilih || gudangSibuk}
+            class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-800 disabled:opacity-50"
+          >
+            {gudangSibuk ? 'Menyimpan...' : 'Simpan gudang'}
+          </button>
+        </div>
+        {#if gudangGalat}
+          <p class="text-sm text-red-700 mt-2">{gudangGalat}</p>
+        {/if}
+      </div>
+    {/if}
+
     {#if noTaskMessage}
       <!-- No Task State -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">

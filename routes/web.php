@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\QueryOptimizationController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\TestimonialController;
 use App\Http\Controllers\Admin\ThermalPrintController;
+use App\Http\Controllers\Admin\TransferMushafController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VideoController;
 use App\Http\Controllers\Admin\WakafItemsController;
@@ -461,6 +462,12 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/packing/scan', [PackingController::class, 'scanItem'])
                 ->middleware('permission:warehouse.packing.scan')
                 ->name('packing.scan');
+            // LOKASI MUSHAF (2026-10-15): menetapkan gudang tugas hari ini SEKALI, untuk tugas
+            // yang lahir tanpa gudang (cron penugasan harian). Izinnya sama dengan membuka
+            // halaman packing — yang menetapkan ya orang yang mengerjakan tugasnya.
+            Route::post('/packing/gudang', [PackingController::class, 'tetapkanGudang'])
+                ->middleware('permission:warehouse.packing.view')
+                ->name('packing.gudang');
             Route::post('/packing/scan-confirm', [PackingController::class, 'processWithJenisConfirmation'])
                 ->middleware('permission:warehouse.packing.scan')
                 ->name('packing.scan-confirm');
@@ -636,6 +643,36 @@ Route::middleware(['auth'])->group(function () {
         Route::get('pengiriman/{no_resi}/status-info', [PengirimanController::class, 'getPengirimanStatusInfo'])
             ->middleware('permission:shipments.track')
             ->name('pengiriman.status-info-alt');
+
+        // 🔀 Perpindahan MUSHAAF BER-RESI antar gudang (LOKASI MUSHAF, 2026-10-15).
+        //
+        // SENGAJA DI LUAR grup `warehouse` di atas. Grup itu bergerbang
+        // `permission:warehouse.dashboard`, sedangkan pemegang izin di sini adalah
+        // Manager Repacking & SPV Gudang — di produksi keduanya TIDAK memegang
+        // warehouse.dashboard (hanya role `warehouse` yang memegangnya). Menaruhnya di
+        // dalam grup itu membuat halaman ini 403 untuk orang yang justru berhak.
+        //
+        // Bedanya dari /admin/warehouse/stok: yang ini satuannya RESI (mushaf wakaf yang
+        // sudah punya wujud & tujuan kirim), bukan stok tanpa muwakif dalam satuan eks.
+        Route::prefix('transfer-mushaf')->name('transfer-mushaf.')->group(function () {
+            Route::get('/', [TransferMushafController::class, 'index'])
+                ->middleware('permission:mushaf.transfer|stok.read')
+                ->name('index');
+            Route::get('/cari', [TransferMushafController::class, 'cari'])
+                ->middleware('permission:mushaf.transfer')
+                ->name('cari');
+            Route::post('/', [TransferMushafController::class, 'store'])
+                ->middleware('permission:mushaf.transfer')
+                ->name('store');
+            Route::post('/{transfer}/terima', [TransferMushafController::class, 'terima'])
+                ->middleware('permission:mushaf.transfer')
+                ->whereNumber('transfer')
+                ->name('terima');
+            Route::post('/{transfer}/batalkan', [TransferMushafController::class, 'batalkan'])
+                ->middleware('permission:mushaf.transfer')
+                ->whereNumber('transfer')
+                ->name('batalkan');
+        });
 
         // 📖 Mushaf Request Management
         // parameter 'mushafRequest' disamakan dengan nama route param di bawah &
