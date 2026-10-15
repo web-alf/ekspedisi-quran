@@ -503,9 +503,12 @@ class RolePermissionSeeder extends Seeder
             // rutenya `permission:qr.verify|warehouse.qr.verify`, dan manager
             // memakainya untuk memeriksa QR resi. Rute verifikasi QR gudang
             // sudah tertutup oleh pencabutan warehouse.qr.verify.
-            // QR
-            PermissionEnum::QR_GENERATE->value,
-            PermissionEnum::QR_SCAN->value,
+            // QR — hanya qr.verify. qr.generate & qr.scan SENGAJA TIDAK DIBERIKAN:
+            // membuat QR adalah pekerjaan gudang, dan manager memindai kerdus/resi
+            // lewat halaman Muatan, bukan tab "Scan QR" di Data Resi. Kedua izin itu
+            // yang memunculkan tab Generate QR & Scan QR. Gambar QR resi tetap bisa
+            // dilihat lewat shipments.read (lihat rute qr/display & qr/download).
+            // Dicabut di produksi oleh migrasi 2026_10_15_123516_cabut_izin_qr_dari_manager_distribusi.
             PermissionEnum::QR_VERIFY->value,
             // warehouse.qr.verify SENGAJA TIDAK DIBERIKAN — lihat catatan
             // "Warehouse" di atas. Akses verifikasi QR tetap terbuka lewat

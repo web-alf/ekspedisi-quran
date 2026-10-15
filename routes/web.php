@@ -388,11 +388,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('qr/generate/{pengiriman}', [QRCodeController::class, 'generate'])
             ->middleware('permission:qr.generate|warehouse.qr.generate')
             ->name('qr.generate');
+        // Melihat/mengunduh gambar QR cukup izin baca resi: Manager Distribusi melihat
+        // QR resi di Daftar Resi tanpa memegang izin membuat QR.
         Route::get('qr/display/{pengiriman}', [QRCodeController::class, 'display'])
-            ->middleware('permission:qr.generate|warehouse.qr.generate')
+            ->middleware('permission:qr.generate|warehouse.qr.generate|shipments.read')
             ->name('qr.display');
         Route::get('qr/download/{pengiriman}', [QRCodeController::class, 'download'])
-            ->middleware('permission:qr.generate|warehouse.qr.generate')
+            ->middleware('permission:qr.generate|warehouse.qr.generate|shipments.read')
             ->name('qr.download');
         Route::post('qr/bulk-generate', [QRCodeController::class, 'bulkGenerate'])
             ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')

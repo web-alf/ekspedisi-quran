@@ -738,7 +738,14 @@ class PengirimanController extends Controller
      */
     public function generateQRPage(Request $request)
     {
-        auth()->user()->can(PermissionEnum::QR_GENERATE->value);
+        // Izin yang sama dengan tab "Generate QR" (TabNavigation.svelte). Hasil
+        // can() sebelumnya dibuang, sehingga siapa pun pemegang shipments.read
+        // bisa membuka halaman ini lewat URL.
+        abort_unless(
+            auth()->user()->hasAnyPermission([PermissionEnum::QR_GENERATE->value, PermissionEnum::WAREHOUSE_QR_GENERATE->value]),
+            403,
+            'Anda tidak memiliki izin membuat QR.'
+        );
 
         // Show pengiriman with all active non-final statuses (from pemesanan to pengiriman)
         $activeStatusIds = array_values(StatusPengirimanCache::getIdsBySlug([
@@ -996,7 +1003,12 @@ class PengirimanController extends Controller
      */
     public function scanStatus()
     {
-        auth()->user()->can(PermissionEnum::QR_SCAN->value);
+        // Izin yang sama dengan tab "Scan QR" (TabNavigation.svelte).
+        abort_unless(
+            auth()->user()->hasAnyPermission([PermissionEnum::QR_SCAN->value, PermissionEnum::WAREHOUSE_QR_SCAN->value]),
+            403,
+            'Anda tidak memiliki izin memindai QR.'
+        );
 
         return Inertia::render('Admin/Pengiriman/ScanStatus', [
             'statusList' => StatusPengiriman::active()
