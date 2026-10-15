@@ -2,9 +2,11 @@
   /**
    * Panel Pindai Kerdus — bagian dari halaman kerja Muatan & Distribusi.
    *
-   * Satu pindai kerdus = satu baris jejak: kerdus apa, SIAPA yang memindai, JAM berapa,
-   * dan berapa eks mushafnya (A5/A6/Iqra). Status pengiriman TIDAK berubah di sini —
-   * panel ini pencatat, bukan penggerak alur.
+   * Satu pindai kerdus = satu VERIFIKASI ISI: petugas menghitung isi fisik kerdus dan
+   * mengetik jumlahnya, server membandingkan dengan data (cocok / selisih). Angka data
+   * sengaja tidak ditampilkan sebelum petugas mengetik hitungannya (hitungan buta).
+   * Kerdus hanya bisa dimuat ke kurir bila verifikasi terakhirnya cocok. Status
+   * pengiriman TIDAK berubah di sini.
    *
    * Dua jalur masuk, dua-duanya sah dan tetap tercatat:
    *   - kamera (QR)    -> metode 'qr'
@@ -45,6 +47,12 @@
   // yang tercatat.
   let ringkasHariIni = pindai.hariIni || { pindai: 0, kerdus: 0, mushaf: 0, per_jenis: [] };
   let ringkasTotal = pindai.total || { pindai: 0, kerdus: 0, mushaf: 0, per_jenis: [] };
+
+  // Hitung fisik kerdus terdaftar (server menandai `perlu_hitung`).
+  let perluHitung = null; // { kode, jenis, metode }
+  let jumlahFisik = '';
+  let catatanHitung = '';
+  let menyimpanHitung = false;
 
   // Isian kerdus yang belum terdaftar.
   let perluIsian = null; // { kode }
@@ -106,8 +114,11 @@
       ringkasHariIni = data.hari_ini || ringkasHariIni;
       ringkasTotal = data.total || ringkasTotal;
       perluIsian = null;
+      perluHitung = null;
 
-      if (data.ulang) {
+      if (data.hasil === 'selisih') {
+        toast.error(data.message);
+      } else if (data.ulang) {
         toast.warning(data.message);
       } else {
         toast.success(data.message);
@@ -121,8 +132,13 @@
       const jawaban = err.response?.data || {};
       const pesan = jawaban.message || 'Gagal mencatat pindai.';
 
-      // Kerdus tak terdaftar: server meminta jenis & jumlah eks diisi petugas.
-      if (jawaban.perlu_isian) {
+      // Kerdus terdaftar: server meminta hitungan fisik petugas.
+      if (jawaban.perlu_hitung) {
+        perluHitung = { kode: jawaban.kode || bersih, jenis: jawaban.jenis, metode };
+        jumlahFisik = '';
+        catatanHitung = '';
+        toast.info(pesan);
+      } else if (jawaban.perlu_isian) {
         perluIsian = { kode: jawaban.kode || bersih };
         isianJenis = jenisList.length > 0 ? jenisList[0].id : '';
         isianJumlah = '';
@@ -173,6 +189,25 @@
       isianJumlah = '';
       isianCatatan = '';
     }
+  }
+
+  async function simpanHitung() {
+    if (!perluHitung || jumlahFisik === '' || jumlahFisik === null || menyimpanHitung) return;
+
+    menyimpanHitung = true;
+
+    await catat(perluHitung.kode, perluHitung.metode, {
+      jumlah_fisik: Number(jumlahFisik),
+      catatan: catatanHitung || null,
+    });
+
+    menyimpanHitung = false;
+  }
+
+  function batalHitung() {
+    perluHitung = null;
+    jumlahFisik = '';
+    catatanHitung = '';
   }
 
   function batalIsian() {
@@ -229,8 +264,9 @@
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
     <h2 class="text-lg font-bold text-gray-900 mb-1">Pindai Kerdus</h2>
     <p class="text-sm text-gray-600">
-      Catat perpindahan kerdus: kerdus apa, siapa yang memindai, jam berapa, dan berapa eks
-      mushafnya. Status pengiriman tidak berubah karena pindai di sini.
+      Verifikasi isi kerdus sebelum dimuat: pindai kerdus, hitung isi fisiknya, lalu ketik
+      jumlahnya. Hanya kerdus berstatus <span class="font-medium">Cocok</span> yang bisa dimuat
+      ke kurir. Status pengiriman tidak berubah karena pindai di sini.
     </p>
   </div>
 
@@ -287,6 +323,69 @@
           </p>
         </div>
       </div>
+
+      <!-- Hitung fisik kerdus terdaftar -->
+      {#if perluHitung}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+          <div class="flex items-start gap-2.5 mb-4">
+            <HeroIcon name="archive-box" class="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+            <div>
+              <h3 class="text-sm font-semibold text-gray-900">
+                Hitung isi kerdus <span class="font-mono">{perluHitung.kode}</span>
+              </h3>
+              <p class="text-xs text-gray-500 mt-1">
+                {perluHitung.jenis ? `Jenis ${perluHitung.jenis}. ` : ''}Hitung mushaf di dalam kerdus,
+                lalu ketik jumlahnya. Sistem akan mencocokkan dengan data.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label for="hitung-jumlah" class="block text-sm font-medium text-gray-700 mb-2">Jumlah fisik (eks)</label>
+              <input
+                id="hitung-jumlah"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                bind:value={jumlahFisik}
+                on:keydown={(e) => e.key === 'Enter' && simpanHitung()}
+                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
+              />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="hitung-catatan" class="block text-sm font-medium text-gray-700 mb-2">
+                Catatan (opsional)
+              </label>
+              <input
+                id="hitung-catatan"
+                type="text"
+                bind:value={catatanHitung}
+                placeholder="Mis. kerdus penyok, 1 mushaf basah"
+                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-4">
+            <button
+              on:click={simpanHitung}
+              disabled={menyimpanHitung || jumlahFisik === '' || jumlahFisik === null}
+              class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {menyimpanHitung ? 'Mencocokkan...' : 'Cocokkan'}
+            </button>
+            <button
+              on:click={batalHitung}
+              disabled={menyimpanHitung}
+              class="px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <!-- Kerdus belum terdaftar -->
       {#if perluIsian}
@@ -368,11 +467,11 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div class="flex items-center gap-2 mb-3">
             <HeroIcon
-              name={hasilTerakhir.success ? 'check-circle' : 'x-circle'}
-              class="w-5 h-5 {hasilTerakhir.success ? 'text-green-600' : 'text-red-600'}"
+              name={hasilTerakhir.success && hasilTerakhir.hasil !== 'selisih' ? 'check-circle' : 'x-circle'}
+              class="w-5 h-5 {hasilTerakhir.success && hasilTerakhir.hasil !== 'selisih' ? 'text-green-600' : 'text-red-600'}"
             />
-            <span class="text-sm font-semibold {hasilTerakhir.success ? 'text-gray-900' : 'text-red-700'}">
-              {hasilTerakhir.success ? 'Tercatat' : 'Gagal'}
+            <span class="text-sm font-semibold {hasilTerakhir.success && hasilTerakhir.hasil !== 'selisih' ? 'text-gray-900' : 'text-red-700'}">
+              {#if !hasilTerakhir.success}Gagal{:else if hasilTerakhir.hasil === 'cocok'}Cocok — boleh dimuat{:else if hasilTerakhir.hasil === 'selisih'}Selisih — diblokir dari muatan{:else}Tercatat{/if}
             </span>
             <span class="text-xs text-gray-400 ml-auto">{hasilTerakhir.waktu}</span>
           </div>
@@ -390,9 +489,17 @@
                 <dd class="text-gray-900 text-right">{hasilTerakhir.data.jenis || 'Tanpa jenis'}</dd>
               </div>
               <div class="flex justify-between gap-3">
-                <dt class="text-gray-500">Jumlah</dt>
+                <dt class="text-gray-500">{hasilTerakhir.data.jumlah_fisik !== undefined && hasilTerakhir.data.jumlah_fisik !== null ? 'Jumlah di data' : 'Jumlah'}</dt>
                 <dd class="font-semibold text-gray-900 text-right">{hasilTerakhir.data.jumlah_mushaf} eks</dd>
               </div>
+              {#if hasilTerakhir.data.jumlah_fisik !== undefined && hasilTerakhir.data.jumlah_fisik !== null}
+                <div class="flex justify-between gap-3">
+                  <dt class="text-gray-500">Jumlah fisik</dt>
+                  <dd class="font-semibold text-right {hasilTerakhir.data.hasil === 'selisih' ? 'text-red-700' : 'text-gray-900'}">
+                    {hasilTerakhir.data.jumlah_fisik} eks
+                  </dd>
+                </div>
+              {/if}
               {#if hasilTerakhir.data.jumlah_resi !== null && hasilTerakhir.data.jumlah_resi !== undefined}
                 <div class="flex justify-between gap-3">
                   <dt class="text-gray-500">Isi kerdus</dt>
@@ -469,6 +576,12 @@
           Kerdus yang dipindai lebih dari sekali dihitung <span class="font-medium">sekali</span>.
           Sejak awal: {ringkasTotal.kerdus} kerdus · {ringkasTotal.mushaf} eks · {ringkasTotal.pindai} kali pindai.
         </div>
+
+        {#if ringkasTotal.selisih > 0}
+          <div class="mt-3 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+            {ringkasTotal.selisih} kerdus masih <span class="font-semibold">selisih</span> dan diblokir dari muatan.
+          </div>
+        {/if}
       </div>
 
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -482,8 +595,8 @@
             {#each riwayatSesi as r, i (i)}
               <li class="px-4 py-3 flex items-start gap-2.5">
                 <HeroIcon
-                  name={r.success ? 'check-circle' : 'x-circle'}
-                  class="w-4 h-4 shrink-0 mt-0.5 {r.success ? 'text-green-600' : 'text-red-600'}"
+                  name={r.success && r.hasil !== 'selisih' ? 'check-circle' : 'x-circle'}
+                  class="w-4 h-4 shrink-0 mt-0.5 {r.success && r.hasil !== 'selisih' ? 'text-green-600' : 'text-red-600'}"
                 />
                 <div class="min-w-0 flex-1">
                   <p class="text-xs text-gray-700 truncate">{r.message}</p>
@@ -588,7 +701,9 @@
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jam</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Kode Kerdus</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jenis</th>
-              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Jumlah</th>
+              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
+              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Fisik</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Hasil</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Metode</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dipindai oleh</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Catatan</th>
@@ -625,6 +740,18 @@
                 </td>
                 <td class="px-4 py-3 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
                   {baris.jumlah_mushaf} eks
+                </td>
+                <td class="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap {baris.hasil === 'selisih' ? 'text-red-700' : 'text-gray-900'}">
+                  {baris.jumlah_fisik !== null && baris.jumlah_fisik !== undefined ? `${baris.jumlah_fisik} eks` : '—'}
+                </td>
+                <td class="px-4 py-3 text-sm whitespace-nowrap">
+                  {#if baris.hasil === 'cocok'}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">Cocok</span>
+                  {:else if baris.hasil === 'selisih'}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">Selisih</span>
+                  {:else}
+                    <span class="text-gray-400">—</span>
+                  {/if}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                   <span class="inline-flex items-center gap-1.5">

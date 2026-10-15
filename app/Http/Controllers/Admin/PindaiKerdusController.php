@@ -40,6 +40,8 @@ class PindaiKerdusController extends Controller
             // Dua kolom di bawah hanya dipakai bila kerdusnya TIDAK terdaftar.
             'jenis_quran_id' => ['nullable', 'integer', 'exists:jenis_quran,id'],
             'jumlah_mushaf' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            // Hasil hitung fisik petugas atas kerdus TERDAFTAR; dibandingkan dengan isi data.
+            'jumlah_fisik' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'catatan' => ['nullable', 'string', 'max:500'],
         ]);
 

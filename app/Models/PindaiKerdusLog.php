@@ -14,9 +14,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Dua sifat yang membentuk seluruh kelas ini:
  *
- *  1. **Hanya catatan.** Tidak ada status pengiriman yang berubah karena pindai di
- *     sini. Kalau kelak pindai ikut menggerakkan status, itu keputusan baru — bukan
- *     perluasan diam-diam dari kelas ini.
+ *  1. **Verifikasi isi, bukan penggerak status.** Petugas mengetik jumlah fisik yang ia
+ *     hitung; sistem membandingkannya dengan isi kerdus di data (`hasil` cocok/selisih).
+ *     Kerdus hanya boleh dimuat ke kurir bila verifikasi TERAKHIRNYA cocok — lihat
+ *     `PackingBox::alasanBelumBolehDimuat()`. Status pengiriman tetap tidak berubah.
  *  2. **Pindai ulang tetap dicatat, tetapi dihitung sekali.** Orang bisa memindai
  *     kerdus yang sama dua kali (label tersentuh dua kali, pindai tidak sengaja,
  *     atau memang diperiksa ulang saat serah terima). Jejaknya semua disimpan,
@@ -39,12 +40,20 @@ class PindaiKerdusLog extends Model
     /** Kerdus belum terdaftar; jenis & jumlah diisi petugas. */
     public const ASAL_MANDIRI = 'mandiri';
 
+    /** Jumlah fisik sama dengan isi kerdus di data. */
+    public const HASIL_COCOK = 'cocok';
+
+    /** Jumlah fisik berbeda — kerdus diblokir dari muatan. */
+    public const HASIL_SELISIH = 'selisih';
+
     protected $fillable = [
         'user_id',
         'packing_box_id',
         'kode_kerdus',
         'jenis_quran_id',
         'jumlah_mushaf',
+        'jumlah_fisik',
+        'hasil',
         'metode',
         'asal',
         'ulang',
@@ -54,6 +63,7 @@ class PindaiKerdusLog extends Model
     protected $casts = [
         'ulang' => 'boolean',
         'jumlah_mushaf' => 'integer',
+        'jumlah_fisik' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -96,7 +106,9 @@ class PindaiKerdusLog extends Model
      * gudang setelah pindai pertama, dan angka terakhir yang paling dekat dengan
      * kenyataan saat kerdus diserahkan.
      *
-     * @return array{pindai: int, kerdus: int, mushaf: int, per_jenis: array<int, array{kode: string|null, nama: string, kerdus: int, mushaf: int}>}
+     * `selisih` = kerdus yang verifikasi terakhirnya selisih (masih terblokir dari muatan).
+     *
+     * @return array{pindai: int, kerdus: int, mushaf: int, selisih: int, per_jenis: array<int, array{kode: string|null, nama: string, kerdus: int, mushaf: int}>}
      */
     public static function ringkasan(?string $tanggal = null): array
     {
@@ -142,6 +154,7 @@ class PindaiKerdusLog extends Model
             'pindai' => static::query()->tanggal($tanggal)->count(),
             'kerdus' => (int) $perJenisRapi->sum('kerdus'),
             'mushaf' => (int) $perJenisRapi->sum('mushaf'),
+            'selisih' => static::query()->whereIn('id', $idTerakhir)->where('hasil', self::HASIL_SELISIH)->count(),
             'per_jenis' => $perJenisRapi->all(),
         ];
     }

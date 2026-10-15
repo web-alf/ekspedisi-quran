@@ -8,6 +8,7 @@ use App\Models\MuatanItem;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
 use App\Models\Pengiriman;
+use App\Models\PindaiKerdusLog;
 use App\Models\StatusPengiriman;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -146,8 +147,12 @@ function resiSiapDiantar(string $slug = 'selesai-packing'): Pengiriman
  *
  * `packing_boxes.daily_packing_task_id` tidak punya nilai bawaan, jadi tugas
  * harian harus dibuat lebih dulu; tanpa itu penyisipannya ditolak MySQL.
+ *
+ * Bawaannya kerdus SUDAH lolos verifikasi isi oleh distribusi (cocok) — keadaan
+ * kerdus yang memang siap dimuat. Uji syarat verifikasinya ada di
+ * VerifikasiIsiKerdusTest.
  */
-function kerdusBerisi(array $resinya, string $kodeKerdus): PackingBox
+function kerdusBerisi(array $resinya, string $kodeKerdus, bool $terverifikasi = true): PackingBox
 {
     $box = PackingBox::factory()->create([
         'kode_kerdus' => $kodeKerdus,
@@ -158,6 +163,18 @@ function kerdusBerisi(array $resinya, string $kodeKerdus): PackingBox
         PackingItem::factory()->create([
             'packing_box_id' => $box->id,
             'pengiriman_id' => $resi->id,
+        ]);
+    }
+
+    if ($terverifikasi && $resinya !== []) {
+        $jumlah = $box->jumlahEksIsi();
+
+        PindaiKerdusLog::create([
+            'packing_box_id' => $box->id,
+            'kode_kerdus' => $box->kode_kerdus,
+            'jumlah_mushaf' => $jumlah,
+            'jumlah_fisik' => $jumlah,
+            'hasil' => PindaiKerdusLog::HASIL_COCOK,
         ]);
     }
 

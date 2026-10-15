@@ -181,7 +181,9 @@ class MuatanController extends Controller
             }
         }
 
-        $muatan = DB::transaction(function () use ($validated, $request) {
+        $dilewati = [];
+
+        $muatan = DB::transaction(function () use ($validated, $request, &$dilewati) {
             $muatan = Muatan::create([
                 'kurir_id' => $validated['kurir_id'],
                 'created_by' => $request->user()->id,
@@ -191,8 +193,18 @@ class MuatanController extends Controller
                 'jumlah_lembaga' => $validated['jumlah_lembaga'] ?? null,
             ]);
 
-            foreach ($validated['pengiriman_ids'] ?? [] as $urutan => $pengirimanId) {
-                $this->lampirkanResi($muatan, (int) $pengirimanId, $request->user()->id, $urutan + 1);
+            $urutan = 0;
+
+            foreach ($validated['pengiriman_ids'] ?? [] as $pengirimanId) {
+                $alasan = $this->alasanTidakBolehDilampirkan((int) $pengirimanId);
+
+                if ($alasan !== null) {
+                    $dilewati[] = $alasan;
+
+                    continue;
+                }
+
+                $this->lampirkanResi($muatan, (int) $pengirimanId, $request->user()->id, ++$urutan);
             }
 
             $muatan->syncTotals();
@@ -200,9 +212,14 @@ class MuatanController extends Controller
             return $muatan;
         });
 
+        $pesan = "Muatan {$muatan->kode_muatan} berhasil dibuat.";
+        if ($dilewati !== []) {
+            $pesan .= ' '.count($dilewati).' resi dilewati: '.implode(' ', array_slice($dilewati, 0, 3)).(count($dilewati) > 3 ? ' ...' : '');
+        }
+
         return redirect()
             ->route('admin.muatan.show', $muatan->id)
-            ->with('success', "Muatan {$muatan->kode_muatan} berhasil dibuat.");
+            ->with('success', $pesan);
     }
 
     public function show(Request $request, Muatan $muatan): Response
@@ -383,10 +400,12 @@ class MuatanController extends Controller
             ], 409);
         }
 
-        if (! $this->siapDimuat($pengiriman)) {
+        $alasan = $pengiriman->alasanBelumBolehDimuat();
+
+        if ($alasan !== null) {
             return response()->json([
                 'success' => false,
-                'message' => "Resi {$noResi} belum siap diantar (status: ".($pengiriman->status->nama ?? '-').').',
+                'message' => $alasan,
             ], 422);
         }
 
@@ -596,6 +615,17 @@ class MuatanController extends Controller
             ], 422);
         }
 
+        // Kerdus utuh hanya boleh dimuat bila isinya sudah diverifikasi distribusi (cocok).
+        $alasanKerdus = $box->alasanBelumBolehDimuat();
+
+        if ($alasanKerdus !== null) {
+            return response()->json([
+                'success' => false,
+                'perlu_verifikasi' => true,
+                'message' => $alasanKerdus,
+            ], 422);
+        }
+
         $dimuat = 0;
         $sudahDiMuatanIni = 0;
         $diMuatanLain = [];
@@ -671,8 +701,10 @@ class MuatanController extends Controller
 
         DB::transaction(function () use ($muatan, $validated, $request, &$dilewati): void {
             foreach ($validated['pengiriman_ids'] as $pengirimanId) {
-                if (MuatanItem::where('pengiriman_id', $pengirimanId)->exists()) {
-                    $dilewati[] = $pengirimanId;
+                $alasan = $this->alasanTidakBolehDilampirkan((int) $pengirimanId);
+
+                if ($alasan !== null) {
+                    $dilewati[] = $alasan;
 
                     continue;
                 }
@@ -685,7 +717,7 @@ class MuatanController extends Controller
 
         $pesan = 'Resi ditambahkan ke muatan.';
         if ($dilewati !== []) {
-            $pesan .= ' '.count($dilewati).' resi dilewati karena sudah ada di muatan lain.';
+            $pesan .= ' '.count($dilewati).' resi dilewati: '.implode(' ', array_slice($dilewati, 0, 3)).(count($dilewati) > 3 ? ' ...' : '');
         }
 
         return back()->with('success', $pesan);
@@ -700,9 +732,25 @@ class MuatanController extends Controller
      */
     private function siapDimuat(Pengiriman $pengiriman): bool
     {
-        $slug = $pengiriman->status?->slug ?? '';
+        return in_array($pengiriman->status?->slug, Pengiriman::SLUG_SIAP_DIMUAT, true);
+    }
 
-        return in_array($slug, ['selesai-packing', 'pengiriman'], true);
+    /**
+     * Alasan resi (dipilih dari daftar, bukan dipindai) tidak boleh masuk muatan, atau null.
+     */
+    private function alasanTidakBolehDilampirkan(int $pengirimanId): ?string
+    {
+        $pengiriman = Pengiriman::with(['status', 'packingItem.packingBox.pindaiKerdusTerakhir'])->find($pengirimanId);
+
+        if (! $pengiriman) {
+            return "Resi #{$pengirimanId} tidak ditemukan.";
+        }
+
+        if (MuatanItem::where('pengiriman_id', $pengirimanId)->exists()) {
+            return "Resi {$pengiriman->no_resi} sudah ada di muatan.";
+        }
+
+        return $pengiriman->alasanBelumBolehDimuat();
     }
 
     private function lampirkanResi(Muatan $muatan, int $pengirimanId, int $userId, ?int $urutan = null): void
@@ -1047,15 +1095,30 @@ class MuatanController extends Controller
     {
         $idTerpakai = MuatanItem::pluck('pengiriman_id')->all();
 
-        $slugSiap = ['selesai-packing', 'pengiriman'];
+        // Alasan blokir dihitung SEKALI per kerdus: ratusan resi biasanya berbagi
+        // segelintir kerdus.
+        $blokirKerdus = [];
 
         return Pengiriman::query()
             ->whereNotIn('id', $idTerpakai)
-            ->whereHas('status', fn ($q) => $q->whereIn('slug', $slugSiap))
-            ->with(['status:id,nama,slug,warna', 'jenisQuran:id,nama_jenis'])
+            ->whereHas('status', fn ($q) => $q->whereIn('slug', Pengiriman::SLUG_SIAP_DIMUAT))
+            ->with(['status:id,nama,slug,warna', 'jenisQuran:id,nama_jenis', 'packingItem.packingBox.pindaiKerdusTerakhir'])
             ->orderByDesc('id')
             ->limit(300)
             ->get(['id', 'no_resi', 'nama_penerima', 'nama_lembaga', 'alamat_tujuan', 'jumlah_quran', 'status_id', 'jenis_quran_id'])
+            // Resi di kerdus yang belum lolos verifikasi isi tidak ditawarkan.
+            ->filter(function (Pengiriman $p) use (&$blokirKerdus): bool {
+                $box = $p->packingItem?->packingBox;
+
+                if (! $box) {
+                    return true;
+                }
+
+                $blokirKerdus[$box->id] ??= $box->alasanBelumBolehDimuat() ?? false;
+
+                return $blokirKerdus[$box->id] === false;
+            })
+            ->values()
             ->map(fn (Pengiriman $p) => [
                 'id' => $p->id,
                 'no_resi' => $p->no_resi,

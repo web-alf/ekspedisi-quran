@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\Cache\StatusPengirimanCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -58,6 +59,57 @@ class PackingBox extends Model
     public function packingItems()
     {
         return $this->hasMany(PackingItem::class);
+    }
+
+    /**
+     * Pindai kerdus sisi distribusi yang TERAKHIR atas kerdus ini.
+     */
+    public function pindaiKerdusTerakhir(): HasOne
+    {
+        return $this->hasOne(PindaiKerdusLog::class)->latestOfMany('id');
+    }
+
+    /**
+     * Berapa eks mushaf di dalam kerdus menurut data.
+     *
+     * `packing_items.quantity` adalah jumlah eks per baris resi — sumber yang paling dekat
+     * dengan isi fisik. `packing_boxes.jumlah_terisi` dipakai sebagai cadangan; keduanya
+     * semestinya sama, tetapi kerdus yang diisi lewat jalur lain bisa saja hanya memperbarui
+     * salah satunya.
+     */
+    public function jumlahEksIsi(): int
+    {
+        $dariItem = $this->relationLoaded('packingItems')
+            ? (int) $this->packingItems->sum('quantity')
+            : (int) $this->packingItems()->sum('quantity');
+
+        return $dariItem > 0 ? $dariItem : (int) $this->jumlah_terisi;
+    }
+
+    /**
+     * Alasan kerdus ini BELUM boleh dimuat ke kurir, atau null bila boleh.
+     *
+     * Syaratnya: verifikasi isi TERAKHIR oleh sisi distribusi berhasil 'cocok', DAN isi
+     * kerdus di data belum berubah sejak verifikasi itu. Yang terakhir yang dihitung —
+     * kerdus yang dulu cocok lalu dipindai ulang dan selisih harus ikut terblokir.
+     */
+    public function alasanBelumBolehDimuat(): ?string
+    {
+        $verifikasi = $this->pindaiKerdusTerakhir;
+
+        if (! $verifikasi || $verifikasi->hasil === null) {
+            return "Kerdus {$this->kode_kerdus} belum diverifikasi isinya oleh distribusi.";
+        }
+
+        if ($verifikasi->hasil === PindaiKerdusLog::HASIL_SELISIH) {
+            return "Kerdus {$this->kode_kerdus} berstatus SELISIH (fisik {$verifikasi->jumlah_fisik} eks, data {$verifikasi->jumlah_mushaf} eks). Bereskan isinya lalu pindai ulang.";
+        }
+
+        if ($verifikasi->jumlah_mushaf !== $this->jumlahEksIsi()) {
+            return "Isi kerdus {$this->kode_kerdus} berubah sejak diverifikasi. Pindai ulang untuk verifikasi.";
+        }
+
+        return null;
     }
 
     public function jenisQuran()

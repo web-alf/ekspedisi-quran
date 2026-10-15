@@ -68,8 +68,14 @@ describe('Janji tampilan panel', () => {
         expect(panel).toContain('id="isian-jumlah"');
     });
 
-    it('riwayat menampilkan jam, jumlah eks, metode, dan siapa yang memindai', () => {
-        for (const kolom of ['Jam', 'Kode Kerdus', 'Jenis', 'Jumlah', 'Metode', 'Dipindai oleh']) {
+    it('meminta hitungan fisik kerdus terdaftar sebelum mencocokkan', () => {
+        expect(panel).toContain('{#if perluHitung}');
+        expect(panel).toContain('id="hitung-jumlah"');
+        expect(panel).toContain('jumlah_fisik: Number(jumlahFisik)');
+    });
+
+    it('riwayat menampilkan jam, jumlah data vs fisik, hasil, metode, dan siapa yang memindai', () => {
+        for (const kolom of ['Jam', 'Kode Kerdus', 'Jenis', 'Data', 'Fisik', 'Hasil', 'Metode', 'Dipindai oleh']) {
             expect(panel).toContain(`>${kolom}</th>`);
         }
         expect(panel).toContain('{baris.oleh}');

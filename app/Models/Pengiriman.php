@@ -233,6 +233,26 @@ class Pengiriman extends Model
         return $this->hasOne(PackingItem::class);
     }
 
+    /** Status yang boleh dimuat ke kurir: sudah selesai packing atau sedang diantar. */
+    public const SLUG_SIAP_DIMUAT = ['selesai-packing', 'pengiriman'];
+
+    /**
+     * Alasan resi ini BELUM boleh dimuat ke kurir, atau null bila boleh.
+     *
+     * Satu aturan untuk SEMUA jalur muat (pindai resi, pindai kerdus, pilih dari daftar,
+     * halaman kurir): statusnya harus siap diantar, dan bila resi ini ada di kerdus,
+     * kerdusnya harus sudah lolos verifikasi isi oleh distribusi. Tanpa syarat kedua,
+     * kerdus yang belum dicek cukup dimuat lewat pindai resi satuan.
+     */
+    public function alasanBelumBolehDimuat(): ?string
+    {
+        if (! in_array($this->status?->slug, self::SLUG_SIAP_DIMUAT, true)) {
+            return "Resi {$this->no_resi} belum siap diantar (status: ".($this->status->nama ?? '-').').';
+        }
+
+        return $this->packingItem?->packingBox?->alasanBelumBolehDimuat();
+    }
+
     /**
      * Scope: Has resi number
      */

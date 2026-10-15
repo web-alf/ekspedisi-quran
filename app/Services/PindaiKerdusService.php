@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\Log;
  * sudah berpindah tangan, siapa yang memindainya, jam berapa, dan berapa eks mushaf di
  * dalamnya (A5/A6/Iqra)".
  *
- * Sifatnya MENCATAT, bukan menggerakkan alur:
- *   - Status pengiriman TIDAK berubah karena pindai. Kalau kelak harus ikut berubah, itu
- *     keputusan pemilik sistem — bukan efek samping diam-diam.
+ * Sifatnya VERIFIKASI ISI:
+ *   - Petugas menghitung isi fisik kerdus dan mengetik jumlahnya (hitungan buta — angka
+ *     data tidak ditunjukkan dulu). Sama = 'cocok', beda = 'selisih'.
+ *   - Kerdus hanya boleh dimuat ke kurir bila verifikasi terakhirnya cocok; kerdus selisih
+ *     dibereskan gudang lalu dipindai ulang (tidak ada jalur override).
+ *   - Status pengiriman TIDAK berubah karena pindai.
  *   - Kerdus boleh dipindai berkali-kali (diperiksa ulang saat serah terima). Semua
  *     jejaknya disimpan; ringkasannya menghitung tiap kerdus SEKALI.
  *
@@ -77,6 +80,8 @@ final class PindaiKerdusService
             'jenis' => $baris->jenisQuran?->nama_jenis ?? 'Tanpa jenis',
             'jenis_kode' => $baris->jenisQuran?->kode_jenis,
             'jumlah_mushaf' => $baris->jumlah_mushaf,
+            'jumlah_fisik' => $baris->jumlah_fisik,
+            'hasil' => $baris->hasil,
             'metode' => $baris->metode,
             'asal' => $baris->asal,
             'ulang' => $baris->ulang,
@@ -141,7 +146,26 @@ final class PindaiKerdusService
             return $this->catatKerdusLuarSistem($user, $kode, $metode, $validated);
         }
 
-        $jumlah = $this->jumlahEks($box);
+        // Hitungan BUTA: jumlah di data tidak dikirim ke layar sebelum petugas mengetik
+        // hitungannya sendiri. Kalau angkanya terlihat duluan, "verifikasi" berubah jadi
+        // menyalin angka — dan kerdus yang kurang isinya lolos.
+        if (! isset($validated['jumlah_fisik'])) {
+            return [
+                'status' => 422,
+                'data' => [
+                    'success' => false,
+                    'perlu_hitung' => true,
+                    'kode' => $kode,
+                    'jenis' => $box->jenisQuran->nama_jenis ?? null,
+                    'message' => "Hitung isi fisik kerdus {$kode}, lalu ketik jumlah mushafnya.",
+                ],
+            ];
+        }
+
+        $jumlah = $box->jumlahEksIsi();
+        $jumlahFisik = (int) $validated['jumlah_fisik'];
+        $hasil = $jumlahFisik === $jumlah ? PindaiKerdusLog::HASIL_COCOK : PindaiKerdusLog::HASIL_SELISIH;
+
         $sebelumnya = PindaiKerdusLog::query()
             ->with('user:id,name')
             ->where('kode_kerdus', $kode)
@@ -157,6 +181,8 @@ final class PindaiKerdusService
             // Kerdus kosong belum berjenis; bila petugas menyebutkannya, itu dipakai.
             'jenis_quran_id' => $box->jenis_quran_id ?? ($validated['jenis_quran_id'] ?? null),
             'jumlah_mushaf' => $jumlah,
+            'jumlah_fisik' => $jumlahFisik,
+            'hasil' => $hasil,
             'metode' => $metode,
             'asal' => PindaiKerdusLog::ASAL_KERDUS,
             'ulang' => $ulang,
@@ -168,17 +194,22 @@ final class PindaiKerdusService
             'kode_kerdus' => $kode,
             'metode' => $metode,
             'jumlah_mushaf' => $jumlah,
+            'jumlah_fisik' => $jumlahFisik,
+            'hasil' => $hasil,
             'ulang' => $ulang,
         ]);
 
         $namaJenis = $box->jenisQuran->nama_jenis ?? '';
-        $pesan = trim("Kerdus {$kode} tercatat: {$jumlah} eks {$namaJenis}").'.';
+        $pesan = $hasil === PindaiKerdusLog::HASIL_COCOK
+            ? trim("Kerdus {$kode} COCOK: {$jumlah} eks {$namaJenis}").'. Kerdus boleh dimuat.'
+            : "Kerdus {$kode} SELISIH: dihitung {$jumlahFisik} eks, data {$jumlah} eks. "
+                .'Kerdus diblokir dari muatan — kembalikan ke gudang untuk dibereskan, lalu pindai ulang.';
 
         if ($ulang) {
             $oleh = $sebelumnya->user?->name ?? 'akun yang sudah dihapus';
             $pesan .= " Kerdus ini sudah pernah dipindai oleh {$oleh} pukul "
                 .$sebelumnya->created_at->format('d/m/Y H:i')
-                .' — pindai ulang tetap tersimpan, tetapi kerdusnya dihitung sekali di ringkasan.';
+                .' — pindai ulang tetap tersimpan; hasil yang berlaku adalah pindai terakhir ini.';
         }
 
         return [
@@ -187,11 +218,14 @@ final class PindaiKerdusService
                 'success' => true,
                 'ulang' => $ulang,
                 'kode' => $kode,
+                'hasil' => $hasil,
                 'message' => $pesan,
                 'data' => [
                     'kode_kerdus' => $kode,
                     'jenis' => $box->jenisQuran->nama_jenis ?? null,
                     'jumlah_mushaf' => $jumlah,
+                    'jumlah_fisik' => $jumlahFisik,
+                    'hasil' => $hasil,
                     'jumlah_resi' => $box->packingItems->count(),
                     'status' => $box->status,
                     'tersegel' => $box->is_sealed,
@@ -282,20 +316,5 @@ final class PindaiKerdusService
                 'total' => PindaiKerdusLog::ringkasan(null),
             ],
         ];
-    }
-
-    /**
-     * Berapa eks mushaf di dalam kerdus saat dipindai.
-     *
-     * `packing_items.quantity` adalah jumlah eks per baris resi — sumber yang paling dekat
-     * dengan isi fisik. `packing_boxes.jumlah_terisi` dipakai sebagai cadangan; keduanya
-     * semestinya sama, tetapi kerdus yang diisi lewat jalur lain bisa saja hanya memperbarui
-     * salah satunya.
-     */
-    private function jumlahEks(PackingBox $box): int
-    {
-        $dariItem = (int) $box->packingItems->sum('quantity');
-
-        return $dariItem > 0 ? $dariItem : (int) $box->jumlah_terisi;
     }
 }

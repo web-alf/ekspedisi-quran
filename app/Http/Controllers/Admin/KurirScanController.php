@@ -124,6 +124,20 @@ class KurirScanController extends Controller
             ], 409);
         }
 
+        // Aturan muat yang sama dengan halaman muatan: status siap diantar dan kerdusnya
+        // (bila ada) sudah lolos verifikasi isi oleh distribusi.
+        $alasan = $pengiriman->alasanBelumBolehDimuat();
+
+        if ($alasan !== null) {
+            return response()->json([
+                'success' => false,
+                'jenis' => 'pcs',
+                'tercatat' => false,
+                'message' => $alasan,
+                'data' => $this->ringkasPengiriman($pengiriman),
+            ], 422);
+        }
+
         MuatanItem::create([
             'muatan_id' => $muatan->id,
             'pengiriman_id' => $pengiriman->id,
@@ -205,14 +219,33 @@ class KurirScanController extends Controller
             ]);
         }
 
+        $alasanKerdus = $box->alasanBelumBolehDimuat();
+
+        if ($alasanKerdus !== null) {
+            return response()->json([
+                'success' => false,
+                'jenis' => 'box',
+                'tercatat' => false,
+                'perlu_verifikasi' => true,
+                'message' => $alasanKerdus,
+            ], 422);
+        }
+
         $dimuat = 0;
         $dilewati = [];
+        $belumSiap = [];
 
         foreach ($resiDalamBox as $pengiriman) {
             $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
 
             if ($sudahAda) {
                 $dilewati[] = $pengiriman->no_resi;
+
+                continue;
+            }
+
+            if (! in_array($pengiriman->status?->slug, Pengiriman::SLUG_SIAP_DIMUAT, true)) {
+                $belumSiap[] = $pengiriman->no_resi;
 
                 continue;
             }
@@ -237,13 +270,17 @@ class KurirScanController extends Controller
             'message' => $dimuat > 0
                 ? "Kerdus {$kodeKerdus}: {$dimuat} resi dimuat ke muatan {$muatan->kode_muatan}."
                     .($dilewati !== [] ? ' '.count($dilewati).' resi sudah ada di muatan lain.' : '')
-                : "Semua resi kerdus {$kodeKerdus} sudah ada di muatan lain.",
+                    .($belumSiap !== [] ? ' '.count($belumSiap).' resi belum siap diantar.' : '')
+                : "Tidak ada resi kerdus {$kodeKerdus} yang bisa dimuat"
+                    .($dilewati !== [] ? ': '.count($dilewati).' sudah ada di muatan lain' : '')
+                    .($belumSiap !== [] ? ($dilewati !== [] ? ',' : ':').' '.count($belumSiap).' belum siap diantar' : '').'.',
             'data' => [
                 'kode_kerdus' => $box->kode_kerdus,
                 'jenis' => $box->jenisQuran?->nama_jenis,
                 'jumlah_resi' => $resiDalamBox->count(),
                 'dimuat' => $dimuat,
                 'dilewati' => $dilewati,
+                'belum_siap' => $belumSiap,
                 'kapasitas' => $box->kapasitas,
                 'jumlah_terisi' => $box->jumlah_terisi,
             ],

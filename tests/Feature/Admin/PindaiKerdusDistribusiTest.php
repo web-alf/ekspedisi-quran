@@ -32,6 +32,8 @@ uses(RefreshDatabase::class);
  *      permintaan HTTP sudah cukup untuk menuliskan "500 eks A5" atas kerdus A6 berisi
  *      40 eks — dan laporan tracking-nya jadi karangan.
  *   5. Pindai TIDAK mengubah status pengiriman apa pun.
+ *   6. Pindai kerdus terdaftar = verifikasi isi: petugas wajib mengetik hitungan fisiknya
+ *      (lihat VerifikasiIsiKerdusTest untuk cocok/selisih & syarat muat).
  *
  * Izinnya diuji di atas MIGRASI SUNGGUHAN (bukan seeder): jalur deploy produksi hanya
  * menjalankan migrasi, jadi perubahan yang hanya ada di seeder tidak akan sampai ke
@@ -175,6 +177,7 @@ it('mencatat siapa yang memindai, jam, jenis, dan jumlah eksnya', function () {
         ->postJson(route('admin.pindai-kerdus.store'), [
             'kode' => $box->kode_kerdus,
             'metode' => 'qr',
+            'jumlah_fisik' => 20,
         ])
         ->assertSuccessful()
         ->assertJsonPath('success', true)
@@ -216,6 +219,7 @@ it('mencatat pindai lewat ketikan sebagai metode manual, dengan jumlah dari isi 
         ->postJson(route('admin.pindai-kerdus.store'), [
             'kode' => $box->kode_kerdus,
             'metode' => 'manual',
+            'jumlah_fisik' => 40,
             // Angka dari layar sengaja salah: yang benar adalah isi kerdus (40 eks A6).
             'jumlah_mushaf' => 999,
             'jenis_quran_id' => null,
@@ -237,12 +241,14 @@ it('membaca kode kerdus dari QR berbentuk JSON maupun teks berlebih', function (
     $this->actingAs($manager)
         ->postJson(route('admin.pindai-kerdus.store'), [
             'kode' => json_encode(['type' => 'box', 'kode_kerdus' => $box->kode_kerdus]),
+            'jumlah_fisik' => 20,
         ])
         ->assertSuccessful();
 
     $this->actingAs($manager)
         ->postJson(route('admin.pindai-kerdus.store'), [
             'kode' => "  \"{$box->kode_kerdus}\" \n",
+            'jumlah_fisik' => 20,
         ])
         ->assertSuccessful();
 
@@ -296,12 +302,12 @@ it('menandai pindai ulang dan menghitung kerdusnya sekali di ringkasan', functio
     $box = kerdus('A5', 20);
 
     $this->actingAs($manager)
-        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'jumlah_fisik' => 20])
         ->assertSuccessful()
         ->assertJsonPath('ulang', false);
 
     $kedua = $this->actingAs($manager)
-        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'jumlah_fisik' => 20])
         ->assertSuccessful()
         ->assertJsonPath('ulang', true);
 
@@ -316,9 +322,9 @@ it('menandai pindai ulang dan menghitung kerdusnya sekali di ringkasan', functio
 it('meringkas jumlah mushaf per jenis: A5, A6, dan Iqra', function () {
     $manager = petugasPindai(RoleEnum::MANAGER->value);
 
-    $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('A5', 20)->kode_kerdus])->assertSuccessful();
-    $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('A6', 40)->kode_kerdus])->assertSuccessful();
-    $terakhir = $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('IQRA', 160)->kode_kerdus])->assertSuccessful();
+    $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('A5', 20)->kode_kerdus, 'jumlah_fisik' => 20])->assertSuccessful();
+    $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('A6', 40)->kode_kerdus, 'jumlah_fisik' => 40])->assertSuccessful();
+    $terakhir = $this->actingAs($manager)->postJson(route('admin.pindai-kerdus.store'), ['kode' => kerdus('IQRA', 160)->kode_kerdus, 'jumlah_fisik' => 160])->assertSuccessful();
 
     $ringkas = $terakhir->json('hari_ini');
     $perJenis = collect($ringkas['per_jenis'])->keyBy('kode');
@@ -335,7 +341,7 @@ it('memisahkan ringkasan hari ini dari seluruh riwayat', function () {
     $box = kerdus('A5', 20);
 
     $this->actingAs($manager)
-        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'jumlah_fisik' => 20])
         ->assertSuccessful();
 
     // Pindai dipindahkan ke kemarin: yang diuji pemisahan hari ini vs seluruh riwayat.
@@ -368,7 +374,7 @@ it('tidak mengubah status pengiriman isi kerdus', function () {
     $statusAwal = $pengiriman->status_id;
 
     $this->actingAs($manager)
-        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'jumlah_fisik' => 20])
         ->assertSuccessful();
 
     expect($pengiriman->fresh()->status_id)->toBe($statusAwal)
