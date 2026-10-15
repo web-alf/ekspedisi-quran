@@ -111,7 +111,11 @@ describe('Paket A — edit jumlah disetujui', function () {
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        expect(Pengiriman::where('donatur_id', $donatur->id)->value('jumlah_quran'))->toBe(15);
+        // Satu mushaf = satu resi (15/10/2026): 15 eks menjadi 15 kiriman berisi 1 eks.
+        $resi = Pengiriman::where('donatur_id', $donatur->id)->get();
+
+        expect($resi)->toHaveCount(15)
+            ->and($resi->pluck('jumlah_quran')->unique()->all())->toBe([1]);
     });
 
     test('permintaan tanpa jumlah disetujui tetap bisa diproses (regresi penjaga lama)', function () {
@@ -136,7 +140,11 @@ describe('Paket A — edit jumlah disetujui', function () {
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        expect(Pengiriman::where('donatur_id', $donatur->id)->value('jumlah_quran'))->toBe(20);
+        // Satu mushaf = satu resi (15/10/2026): 20 eks menjadi 20 kiriman berisi 1 eks.
+        $resi = Pengiriman::where('donatur_id', $donatur->id)->get();
+
+        expect($resi)->toHaveCount(20)
+            ->and($resi->pluck('jumlah_quran')->unique()->all())->toBe([1]);
     });
 });
 

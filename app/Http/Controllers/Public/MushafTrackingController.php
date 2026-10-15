@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\MushafRequest;
+use App\Models\Pengiriman;
 use App\Models\Setting;
 use App\Models\StatusPengiriman;
 use Illuminate\Http\Request;
@@ -103,6 +104,7 @@ class MushafTrackingController extends Controller
         // punya tahap packing/pengiriman sendiri, sehingga tanpa ini halaman publik
         // tidak pernah menampilkan kemajuan setelah "Sudah Diproses".
         $shippingStages = $this->buildShippingStages($mushafRequest);
+        $shippingProgress = $this->buildShippingProgress($mushafRequest);
 
         // Get settings for consistent layout
         $settings = Setting::where('is_public', true)
@@ -115,6 +117,7 @@ class MushafTrackingController extends Controller
             'no_request' => $noRequest,
             'statusHistory' => $statusHistory,
             'shippingStages' => $shippingStages,
+            'shippingProgress' => $shippingProgress,
             'quantityComparison' => $quantityComparison,
             'settings' => $settings,
         ]);
@@ -132,7 +135,20 @@ class MushafTrackingController extends Controller
      */
     private function buildShippingStages(MushafRequest $mushafRequest): array
     {
-        $pengiriman = $mushafRequest->pengiriman;
+        // Sejak satu permintaan dipecah per mushaf (satu mushaf = satu resi), satu permintaan
+        // punya BANYAK kiriman. Yang menentukan tahap adalah kiriman yang PALING BELAKANG:
+        // permintaan 80 eks yang baru satu kirimannya sampai belum boleh tampil "Diterima
+        // Penerima". Kiriman yang dibatalkan tidak ikut menentukan.
+        $kiriman = $mushafRequest->pengirimans()->with('status')->get()
+            ->filter(fn (Pengiriman $p) => $p->status && $p->status->slug !== 'batal');
+
+        if ($kiriman->isEmpty()) {
+            // Data lama: kiriman ditunjuk lewat `pengiriman_id` permintaan, bukan lewat
+            // `mushaf_request_id` di kirimannya.
+            $kiriman = collect(array_filter([$mushafRequest->pengiriman]));
+        }
+
+        $pengiriman = $kiriman->sortBy(fn (Pengiriman $p) => $p->status->urutan ?? 0)->first();
 
         if (! $pengiriman) {
             return [];
@@ -160,6 +176,30 @@ class MushafTrackingController extends Controller
                 ? optional($pengiriman->updated_at)->translatedFormat('d F Y')
                 : null,
         ])->values()->all();
+    }
+
+    /**
+     * Berapa kiriman yang sudah sampai dari seluruh kiriman permintaan ini.
+     *
+     * Satu permintaan bisa dikirim sebagai puluhan kiriman (satu mushaf = satu resi), jadi
+     * "sudah sampai" perlu angka pendamping: tanpa itu, tahap kiriman yang paling belakang
+     * tampak seperti tidak ada yang berjalan.
+     *
+     * @return array{total: int, diterima: int}|null null bila kirimannya cuma satu
+     */
+    private function buildShippingProgress(MushafRequest $mushafRequest): ?array
+    {
+        $total = $mushafRequest->pengirimans()->count();
+
+        if ($total <= 1) {
+            return null;
+        }
+
+        $diterima = $mushafRequest->pengirimans()
+            ->whereHas('status', fn ($q) => $q->where('slug', 'diterima'))
+            ->count();
+
+        return ['total' => $total, 'diterima' => $diterima];
     }
 
     /**

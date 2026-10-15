@@ -6,6 +6,9 @@
   export const statusHistory = [];
   export let quantityComparison = null;
   export let shippingStages = [];
+  // Berapa kiriman yang sudah sampai dari seluruh kiriman permintaan ini. Satu permintaan
+  // bisa dikirim sebagai puluhan kiriman, jadi tahap paling belakang saja tidak cukup.
+  export let shippingProgress = null;
   export const auth = {};
   export const errors = {};
   export const flash = {};
@@ -307,6 +310,12 @@
                             </div>
                           {/each}
                         </div>
+                        {#if shippingProgress}
+                          <p class="text-xs text-gray-500 mt-4">
+                            {shippingProgress.diterima} dari {shippingProgress.total} kiriman sudah sampai di tujuan.
+                            Permintaan ini dikirim sebagai banyak kiriman (satu mushaf satu resi).
+                          </p>
+                        {/if}
                       </div>
 
                       <div class="border-t border-gray-200 pt-6"></div>

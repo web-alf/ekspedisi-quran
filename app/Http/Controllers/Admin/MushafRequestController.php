@@ -12,8 +12,11 @@ use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Services\Cache\DashboardCacheService;
+use App\Services\QrCodeService;
 use App\Support\PerPage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -22,7 +25,8 @@ class MushafRequestController extends Controller
     protected $dashboardCache;
 
     public function __construct(
-        DashboardCacheService $dashboardCache
+        DashboardCacheService $dashboardCache,
+        private QrCodeService $qr,
     ) {
         $this->dashboardCache = $dashboardCache;
         $this->authorizeResource(MushafRequest::class, 'mushafRequest');
@@ -147,9 +151,32 @@ class MushafRequestController extends Controller
             ->orderBy('nama_donatur')
             ->get();
 
+        // Ringkasan SELURUH kiriman permintaan ini.
+        //
+        // Sejak satu mushaf = satu resi (15/10/2026), permintaan 80 eks dikirim sebagai 80
+        // kiriman. Menampilkan hanya "kiriman pertama" membuat orang mengira jumlahnya salah —
+        // inilah yang dulu membingungkan: satu resi berisi 80.
+        $pengirimanRingkas = [
+            'jumlah' => $mushafRequest->pengirimans()->count(),
+            'mushaf' => (int) $mushafRequest->pengirimans()->sum('jumlah_quran'),
+            'per_status' => $mushafRequest->pengirimans()
+                ->join('status_pengiriman as sp', 'pengiriman.status_id', '=', 'sp.id')
+                ->selectRaw('sp.slug as slug, sp.nama as nama, COUNT(*) as jumlah')
+                ->groupBy('sp.slug', 'sp.nama')
+                ->orderByDesc('jumlah')
+                ->get()
+                ->map(fn ($baris) => [
+                    'slug' => $baris->slug,
+                    'nama' => $baris->nama,
+                    'jumlah' => (int) $baris->jumlah,
+                ])
+                ->all(),
+        ];
+
         return Inertia::render('Admin/MushafRequest/Show', [
             'mushafRequest' => $mushafRequest,
             'donaturList' => $donaturList,
+            'pengirimanRingkas' => $pengirimanRingkas,
         ]);
     }
 
@@ -305,39 +332,37 @@ class MushafRequestController extends Controller
             // ✅ FIX: Pakai satu sumber angka (approved_breakdown) agar jumlah yang
             // masuk ke pengiriman sama dengan yang tampil di halaman detail/daftar.
             $approved = $mushafRequest->approved_breakdown;
-            $approvedMushaf = $approved['mushaf'];
-            $approvedIqra = $approved['iqra'];
             $totalApproved = $approved['total'];
 
-            $approvedA6 = $approved['a6'];
-            $approvedA5 = $approved['a5'];
+            // SATU MUSHAF = SATU RESI = SATU QR (keputusan pemilik sistem, 15/10/2026).
+            //
+            // Dulu satu permintaan melahirkan SATU resi berisi SELURUH jumlah yang disetujui
+            // (80, 200, sampai 500 eks), dan resi kosong milik donatur ditimpa jumlahnya
+            // menjadi angka itu. Akibatnya satu QR mewakili ratusan mushaf: label per mushaf
+            // mustahil dibuat, alur gudang "pindai tiap mushaf" tidak bisa dipakai, dan
+            // identitas tiap mushaf hilang.
+            //
+            // Sekarang permintaan dipecah per EKS dan per JENIS: 20 A5 + 60 A6 menjadi 20 resi
+            // A5 dan 60 resi A6, masing-masing 1 eks, masing-masing ber-QR sendiri.
+            $kebutuhan = array_filter([
+                'A5' => (int) $approved['a5'],
+                'A6' => (int) $approved['a6'],
+                'IQRA' => (int) $approved['iqra'],
+            ], fn (int $jumlah) => $jumlah > 0);
 
-            // Tentukan jenis_quran_id dari pecahan yang DISETUJUI.
-            // Dulu nilainya di-hardcode 1 (A5) / 2 (A6). Nomor itu hanya kebetulan
-            // benar di satu database: id bergantung pada isi tabel `jenis_quran`,
-            // dan di database yang di-seed ulang ID-nya bisa berbeda — akibatnya
-            // proses ke pengiriman gagal dengan foreign key constraint violation.
-            $jenisQuranId = JenisQuran::where('kode_jenis', 'A5')->value('id')
-                ?? JenisQuran::orderBy('id')->value('id');
+            // Kode jenis di master produksi: `A5`, `A6`, `IQRO`. Padanan `IQRA` ikut diterima
+            // karena nama itu dipakai di beberapa dokumen lama — kalau tidak, permintaan Iqro
+            // gagal diproses hanya karena beda satu huruf pada kode.
+            $kodeJenisMaster = [
+                'A5' => ['A5'],
+                'A6' => ['A6'],
+                'IQRA' => ['IQRO', 'IQRA'],
+            ];
 
-            if ($approvedA6 > 0 && $approvedA6 >= $approvedA5) {
-                $jenisQuranId = JenisQuran::where('kode_jenis', 'A6')->value('id') ?? $jenisQuranId;
-            }
+            if ($kebutuhan === []) {
+                \DB::rollBack();
 
-            // FIXED: Find existing pengiriman without address and assign mushaf request to it
-            // instead of creating a new pengiriman.
-            // Race-safe: lock baris yang dipilih (lockForUpdate) sehingga dua proses
-            // paralel tidak bisa memilih pengiriman kosong yang sama lalu saling menimpa.
-            $pengiriman = Pengiriman::where('donatur_id', $request->donatur_id)
-                ->whereNull('alamat_tujuan') // Find pengiriman without address assigned
-                ->whereNull('nama_penerima') // And without recipient assigned
-                ->lockForUpdate()
-                ->first();
-
-            // Double-check setelah lock diperoleh: request lain mungkin sudah mengklaim
-            // pengiriman ini dan mengisi alamat di sela-sela pemilihan baris tadi.
-            if ($pengiriman && ! empty($pengiriman->fresh()->alamat_tujuan)) {
-                $pengiriman = null;
+                return back()->withErrors(['error' => 'Tidak ada jumlah per jenis yang bisa dikirim.']);
             }
 
             // ✅ FIX: Build catatan with quantity adjustment info
@@ -347,49 +372,109 @@ class MushafRequestController extends Controller
                 $catatan .= " (Jumlah disesuaikan dari {$originalTotal} menjadi {$totalApproved})";
             }
 
-            if (! $pengiriman) {
-                // If no existing empty pengiriman, create a new one
-                $pengiriman = Pengiriman::create([
-                    'donatur_id' => $request->donatur_id,
-                    // Arah balik juga harus ditulis. Dua jalur lain (set alamat
-                    // massal dan pemindai kerdus gudang) menulis `mushaf_request_id`
-                    // pada kiriman; kalau jalur ini tidak, kiriman hasil halaman
-                    // permintaan tidak bisa ditelusuri balik ke asal permintaannya.
-                    'mushaf_request_id' => $mushafRequest->id,
-                    'jenis_quran_id' => $jenisQuranId,
-                    'jumlah_quran' => $totalApproved, // ✅ FIX: Use approved quantity
-                    'tanggal_wakaf' => $request->tanggal_wakaf,
-                    'status_id' => StatusPengiriman::getDefaultStatusId(),
-                    'alamat_tujuan' => $mushafRequest->alamat_lengkap,
-                    'nama_penerima' => $mushafRequest->nama_pengurus_1,
-                    'nama_lembaga' => $mushafRequest->nama_lembaga,
-                    'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
-                    'catatan' => $catatan,
-                    'created_by' => auth()->id(),
-                ]);
-            } else {
-                // Update existing pengiriman with mushaf request details
-                $pengiriman->update([
-                    'alamat_tujuan' => $mushafRequest->alamat_lengkap,
-                    'nama_penerima' => $mushafRequest->nama_pengurus_1,
-                    'nama_lembaga' => $mushafRequest->nama_lembaga,
-                    'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
-                    'catatan' => $catatan,
-                    'jumlah_quran' => $totalApproved, // ✅ FIX: Use approved quantity
-                    'mushaf_request_id' => $mushafRequest->id,
-                ]);
+            $isiKiriman = [
+                // Arah balik harus ditulis. Dua jalur lain (set alamat massal dan pemindai
+                // kerdus gudang) menulis `mushaf_request_id` pada kiriman; kalau jalur ini
+                // tidak, kiriman hasil halaman permintaan tidak bisa ditelusuri balik.
+                'mushaf_request_id' => $mushafRequest->id,
+                'tanggal_wakaf' => $request->tanggal_wakaf,
+                'alamat_tujuan' => $mushafRequest->alamat_lengkap,
+                'nama_penerima' => $mushafRequest->nama_pengurus_1,
+                'nama_lembaga' => $mushafRequest->nama_lembaga,
+                'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
+                'catatan' => $catatan,
+            ];
+
+            $resi = collect();
+            $dipakai = 0;
+
+            foreach ($kebutuhan as $kodeJenis => $jumlah) {
+                // Jenis dibaca dari KODE, bukan id yang di-hardcode: nomor id bergantung isi
+                // tabel jenis_quran, dan di database yang di-seed ulang ID-nya bisa berbeda.
+                $jenisQuranId = null;
+
+                foreach ($kodeJenisMaster[$kodeJenis] ?? [$kodeJenis] as $kode) {
+                    $jenisQuranId = JenisQuran::where('kode_jenis', $kode)->value('id');
+
+                    if ($jenisQuranId) {
+                        break;
+                    }
+                }
+
+                if (! $jenisQuranId) {
+                    throw new \Exception("Jenis Quran {$kodeJenis} tidak ada di master jenis_quran.");
+                }
+
+                // Pakai DULU resi mushaf milik donatur yang belum punya alamat & penerima:
+                // itu mushaf wakafnya yang memang sedang menunggu tujuan. Jumlah eksnya
+                // TIDAK ditimpa — satu resi tetap satu eks, supaya identitas wakafnya utuh.
+                // Dikunci (lockForUpdate) agar dua proses paralel tidak memakai resi yang sama.
+                $kosong = Pengiriman::query()
+                    ->where('donatur_id', $request->donatur_id)
+                    ->where('jenis_quran_id', $jenisQuranId)
+                    ->where('jumlah_quran', 1)
+                    ->whereNull('alamat_tujuan')
+                    ->whereNull('nama_penerima')
+                    ->orderBy('id')
+                    ->limit($jumlah)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($kosong as $p) {
+                    // Cek ulang setelah kunci diperoleh: proses lain mungkin sudah mengisi
+                    // alamatnya di sela-sela pemilihan baris tadi.
+                    if ($p->fresh()->alamat_tujuan) {
+                        continue;
+                    }
+
+                    $p->update($isiKiriman);
+                    $resi->push($p);
+                    $dipakai++;
+                }
+
+                // Sisanya dibuat baru — tetap satu mushaf satu resi.
+                $kurang = $jumlah - $kosong->count();
+
+                for ($i = 0; $i < $kurang; $i++) {
+                    $resi->push(Pengiriman::create($isiKiriman + [
+                        'donatur_id' => $request->donatur_id,
+                        'jenis_quran_id' => $jenisQuranId,
+                        'jumlah_quran' => 1,
+                        'status_id' => StatusPengiriman::getDefaultStatusId(),
+                        'created_by' => auth()->id(),
+                    ]));
+                }
             }
 
+            if ($resi->isEmpty()) {
+                throw new \Exception('Tidak ada kiriman yang terbentuk dari permintaan ini.');
+            }
+
+            /** @var Pengiriman $utama Kiriman pertama — penunjuk lama `mushaf_requests.pengiriman_id`. */
+            $utama = $resi->first();
+
             // Mark request as processed
-            $mushafRequest->markAsProcessed($pengiriman->id, auth()->id());
+            $mushafRequest->markAsProcessed($utama->id, auth()->id());
 
             \DB::commit();
+
+            // QR dibuat SETELAH commit: berkas tidak bisa dibatalkan oleh rollback, jadi
+            // pembuatannya tidak boleh berada di dalam transaksi. Kalau gagal, resinya tetap
+            // ada dan QR-nya bisa dilengkapi lewat `php artisan qr:generate-missing`.
+            $qrBaru = $this->siapkanQr($resi);
 
             // ✅ FIX: Invalidate dashboard cache after processing to shipment
             $this->dashboardCache->invalidate(['dashboard', 'stats', 'activities']);
 
-            return redirect()->route('admin.pengiriman.show', $pengiriman)
-                ->with('success', "Permintaan berhasil diproses menjadi pengiriman {$pengiriman->no_resi}");
+            return redirect()->route('admin.mushaf-requests.show', $mushafRequest)
+                ->with('success', sprintf(
+                    'Permintaan %s diproses menjadi %d kiriman (%d mushaf — satu mushaf satu QR). QR dibuat: %d.%s',
+                    $mushafRequest->no_request,
+                    $resi->count(),
+                    $totalApproved,
+                    $qrBaru,
+                    $dipakai > 0 ? " {$dipakai} kiriman memakai mushaf donatur yang sudah ada." : ''
+                ));
 
         } catch (\Exception $e) {
             \DB::rollback();
@@ -398,6 +483,48 @@ class MushafRequestController extends Controller
                 'error' => 'Gagal memproses ke pengiriman: '.$e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Buat berkas QR untuk setiap kiriman yang belum punya.
+     *
+     * Satu resi = satu QR (isinya nomor resi), jadi satu permintaan 80 eks menghasilkan 80
+     * berkas QR — masing-masing bisa dicetak menjadi label mushaf sendiri.
+     *
+     * Tidak pernah melempar: pembuatan berkas adalah langkah PELENGKAP. Kiriman yang gagal
+     * dibuatkan QR-nya tetap sah, dan bisa dilengkapi kemudian lewat
+     * `php artisan qr:generate-missing`.
+     *
+     * @param  Collection<int, Pengiriman>  $resi
+     * @return int jumlah berkas QR yang BARU dibuat
+     */
+    private function siapkanQr(Collection $resi): int
+    {
+        $baru = 0;
+
+        foreach ($resi as $kiriman) {
+            try {
+                if ($this->qr->sudahAda($kiriman)) {
+                    continue;
+                }
+
+                $path = $this->qr->buatUntuk($kiriman);
+
+                $kiriman->update([
+                    'qr_code_path' => $path,
+                    'qr_code_data' => $this->qr->dataUntuk($kiriman),
+                ]);
+
+                $baru++;
+            } catch (\Throwable $e) {
+                Log::warning('Gagal membuat QR kiriman hasil permintaan mushaf', [
+                    'no_resi' => $kiriman->no_resi,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $baru;
     }
 
     /**

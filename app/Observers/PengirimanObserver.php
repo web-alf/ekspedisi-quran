@@ -72,11 +72,28 @@ class PengirimanObserver
         }
 
         $mushafRequest = MushafRequest::query()
-            ->where('pengiriman_id', $pengiriman->id)
+            ->where(fn ($q) => $q
+                ->where('pengiriman_id', $pengiriman->id)
+                ->orWhereHas('pengirimans', fn ($sub) => $sub->whereKey($pengiriman->id)))
             ->where('status', 'processed')
             ->first();
 
         if (! $mushafRequest) {
+            return;
+        }
+
+        // Sejak permintaan dipecah per mushaf, satu permintaan punya BANYAK kiriman. Selesai
+        // berarti SELURUH kirimannya sudah sampai — bukan hanya yang kebetulan lewat lebih
+        // dulu. Permintaan 80 eks yang baru 1 resi sampai tidak boleh berlabel "Selesai".
+        if (! $mushafRequest->semuaPengirimanDiterima()) {
+            $sisa = $mushafRequest->pengirimans()->count() - 1;
+
+            Log::info('Sebagian kiriman permintaan mushaf sudah diterima', [
+                'mushaf_request' => $mushafRequest->no_request,
+                'pengiriman' => $pengiriman->no_resi,
+                'kiriman_belum_sampai' => $sisa,
+            ]);
+
             return;
         }
 

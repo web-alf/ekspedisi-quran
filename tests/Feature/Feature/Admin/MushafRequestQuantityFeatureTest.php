@@ -2,6 +2,7 @@
 
 use App\Models\Donatur;
 use App\Models\MushafRequest;
+use App\Models\Pengiriman;
 use App\Models\User;
 use Database\Seeders\JenisQuranSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -81,11 +82,14 @@ test('process to shipment succeeds when approved quantities are set', function (
     $response->assertRedirect();
     $response->assertSessionHasNoErrors();
 
-    // Verify pengiriman was created with approved quantity
-    $this->assertDatabaseHas('pengiriman', [
-        'donatur_id' => $donatur->id,
-        'jumlah_quran' => 80, // Should use approved quantity
-    ]);
+    // Satu mushaf = satu resi (15/10/2026): jumlah disetujui 80 dipakai sebagai JUMLAH
+    // KIRIMAN, bukan isi satu kiriman. Dulu satu resi berisi 80 eks — itu yang membuat
+    // permintaan hanya punya satu QR untuk 80 mushaf.
+    $resi = Pengiriman::where('donatur_id', $donatur->id)->get();
+
+    expect($resi)->toHaveCount(80)
+        ->and($resi->pluck('jumlah_quran')->unique()->all())->toBe([1])
+        ->and((int) $resi->sum('jumlah_quran'))->toBe(80);
 });
 
 test('process to shipment fails for non-approved status', function () {

@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Services\Cache\StatusPengirimanCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -201,6 +203,49 @@ class MushafRequest extends Model
     public function pengiriman()
     {
         return $this->belongsTo(Pengiriman::class);
+    }
+
+    /**
+     * SELURUH kiriman permintaan ini (satu mushaf = satu resi = satu QR).
+     *
+     * `pengiriman()` di atas hanya menunjuk kiriman PERTAMA — penunjuk lama yang masih
+     * dipakai halaman lain. Sejak permintaan dipecah per mushaf, satu permintaan bisa
+     * punya puluhan resi, jadi setiap keputusan yang menyangkut KESELURUHAN (permintaan
+     * selesai, tahap pengiriman di halaman publik, ringkasan di halaman detail) harus
+     * lewat relasi ini — bukan lewat satu kiriman pertama.
+     */
+    public function pengirimans(): HasMany
+    {
+        return $this->hasMany(Pengiriman::class, 'mushaf_request_id');
+    }
+
+    /**
+     * Apakah SELURUH kiriman permintaan ini sudah sampai (diterima / dibatalkan)?
+     *
+     * Permintaan yang dipecah jadi 80 resi baru boleh berstatus selesai setelah ke-80-nya
+     * diterima — bukan setelah resi pertama sampai. Resi yang dibatalkan tidak menghalangi
+     * selamanya; ia hanya tidak dihitung.
+     */
+    public function semuaPengirimanDiterima(): bool
+    {
+        $statusDiterima = StatusPengirimanCache::getIdBySlug('diterima');
+        $statusBatal = StatusPengirimanCache::getIdBySlug('batal');
+        $statusSah = array_filter([$statusDiterima, $statusBatal]);
+
+        $resi = $this->pengirimans()->get();
+
+        if ($resi->isEmpty()) {
+            // Data lama: kiriman ditunjuk lewat `pengiriman_id` saja, tanpa
+            // `mushaf_request_id` di kirimannya (kolom itu baru ditulis sejak perbaikan
+            // 2026-10-11). Tanpa cadangan ini, permintaan lama tidak akan pernah selesai.
+            $resi = collect(array_filter([$this->pengiriman]));
+        }
+
+        if ($resi->isEmpty()) {
+            return false;
+        }
+
+        return $resi->every(fn (Pengiriman $kiriman) => in_array((int) $kiriman->status_id, $statusSah, true));
     }
 
     /**

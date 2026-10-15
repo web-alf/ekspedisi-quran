@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Admin\MushafRequestController;
 use App\Models\Donatur;
+use App\Models\JenisQuran;
 use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\User;
+use App\Services\QrCodeService;
 use Database\Seeders\JenisQuranSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -44,6 +46,10 @@ beforeEach(function () {
     $role->givePermissionTo(['mushaf-requests.process', 'mushaf-requests.update', 'mushaf-requests.approve']);
 
     $this->seed(JenisQuranSeeder::class);
+
+    // Berkas QR ditulis ke disk; difake supaya suite tidak menumpuk ribuan berkas.
+    Storage::fake('local');
+    Storage::fake('public');
 });
 
 function permintaanSiapProses(int $jumlahDisetujui = 80): MushafRequest
@@ -60,8 +66,8 @@ function permintaanSiapProses(int $jumlahDisetujui = 80): MushafRequest
     ]);
 }
 
-it('menautkan kiriman balik ke permintaan saat diproses', function () {
-    $mushafRequest = permintaanSiapProses();
+it('memecah permintaan menjadi satu kiriman per mushaf, masing-masing ber-QR', function () {
+    $mushafRequest = permintaanSiapProses(80);
     $donatur = Donatur::factory()->create();
 
     $this->actingAs($this->admin)
@@ -72,15 +78,26 @@ it('menautkan kiriman balik ke permintaan saat diproses', function () {
         ->assertRedirect();
 
     $mushafRequest->refresh();
-    $pengiriman = Pengiriman::find($mushafRequest->pengiriman_id);
+    $resi = Pengiriman::where('mushaf_request_id', $mushafRequest->id)->orderBy('id')->get();
 
-    expect($pengiriman)->not->toBeNull()
-        // Arah balik: dari kiriman harus bisa ditemukan permintaan asalnya.
-        // Tanpa ini, halaman kiriman dan alur gudang tidak tahu kiriman ini
-        // melayani permintaan lembaga yang mana.
-        ->and($pengiriman->mushaf_request_id)->toBe($mushafRequest->id)
-        ->and($pengiriman->nama_lembaga)->toBe($mushafRequest->nama_lembaga)
-        ->and($pengiriman->jumlah_quran)->toBe(80);
+    // Berkas QR-nya benar-benar ada di disk, satu per kiriman — bukan sekadar kolom terisi.
+    // Inilah yang membuktikan "10 mushaf = 10 QR".
+    expect(Storage::disk('local')->files(QrCodeService::DIREKTORI))->toHaveCount(80)
+        ->and($resi->every(fn (Pengiriman $p) => Storage::disk('local')
+            ->exists(QrCodeService::DIREKTORI.'/QR-'.$p->no_resi.'.svg')))->toBeTrue();
+
+    expect($resi)->toHaveCount(80)
+        // Arah balik: dari tiap kiriman harus bisa ditemukan permintaan asalnya.
+        ->and($resi->pluck('mushaf_request_id')->unique()->all())->toBe([$mushafRequest->id])
+        ->and($resi->pluck('nama_lembaga')->unique()->all())->toBe([$mushafRequest->nama_lembaga])
+        ->and($resi->pluck('alamat_tujuan')->unique()->all())->toBe([$mushafRequest->alamat_lengkap])
+        // Satu mushaf = satu resi: 80 eks menjadi 80 kiriman, masing-masing 1 eks.
+        ->and($resi->pluck('jumlah_quran')->unique()->all())->toBe([1])
+        // Satu resi satu QR — tanpa itu tidak ada label per mushaf yang bisa dicetak.
+        ->and($resi->whereNull('qr_code_path')->count())->toBe(0)
+        ->and($resi->pluck('qr_code_path')->unique()->count())->toBe(80)
+        // Penunjuk lama `pengiriman_id` tetap menunjuk kiriman pertama.
+        ->and($mushafRequest->pengiriman_id)->toBe($resi->first()->id);
 });
 
 it('menolak status "processed" diubah langsung dari peta status', function () {
@@ -197,17 +214,23 @@ it('tidak membuat kiriman kedua saat permintaan diproses bersamaan', function ()
     );
 
     expect($respons->getSession()->get('errors')->first('error'))->toContain('baru saja diproses')
-        ->and(Pengiriman::count())->toBe(1)
+        ->and(Pengiriman::count())->toBe(80)
         ->and($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanPertama);
 });
 
 it('memakai kiriman kosong milik donatur alih-alih membuat kiriman baru', function () {
     // Cabang ini dulu selalu gagal: `fresh(['alamat_tujuan', ...])` menganggap
     // nama kolom sebagai nama relasi dan melempar RelationNotFoundException.
-    $mushafRequest = permintaanSiapProses();
+    //
+    // Sejak satu mushaf = satu resi, kiriman kosong donatur dipakai SATU PER SATU MUSHAAF
+    // dan jumlah eksnya TIDAK ditimpa — dulu satu kiriman 1 eks diubah menjadi seluruh
+    // jumlah permintaan (itulah asal resi berisi 80 eks).
+    $mushafRequest = permintaanSiapProses(2);
     $donatur = Donatur::factory()->create();
     $kirimanKosong = Pengiriman::factory()->create([
         'donatur_id' => $donatur->id,
+        'jenis_quran_id' => JenisQuran::where('kode_jenis', 'A5')->value('id'),
+        'jumlah_quran' => 1,
         'alamat_tujuan' => null,
         'nama_penerima' => null,
     ]);
@@ -220,10 +243,13 @@ it('memakai kiriman kosong milik donatur alih-alih membuat kiriman baru', functi
         ->assertSessionHasNoErrors()
         ->assertRedirect();
 
-    expect($mushafRequest->fresh()->pengiriman_id)->toBe($kirimanKosong->id)
-        ->and(Pengiriman::count())->toBe(1)
+    $mushafRequest->refresh();
+
+    expect($mushafRequest->pengiriman_id)->toBe($kirimanKosong->id)
+        ->and(Pengiriman::count())->toBe(2)
         ->and($kirimanKosong->fresh()->mushaf_request_id)->toBe($mushafRequest->id)
-        ->and($kirimanKosong->fresh()->alamat_tujuan)->toBe($mushafRequest->alamat_lengkap);
+        ->and($kirimanKosong->fresh()->alamat_tujuan)->toBe($mushafRequest->alamat_lengkap)
+        ->and($kirimanKosong->fresh()->jumlah_quran)->toBe(1);
 });
 
 function beriIzinSetAlamatMassal(User $admin): void

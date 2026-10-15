@@ -16,6 +16,9 @@
   // halaman ini belum pernah menerimanya, sehingga modalnya tidak pernah bisa
   // dibangun.
   export let donaturList = [];
+  // Ringkasan seluruh kiriman permintaan ini (satu mushaf = satu resi sejak 15/10/2026),
+  // dipakai untuk menjelaskan kenapa satu resi tidak lagi mewakili seluruh jumlah.
+  export let pengirimanRingkas = null;
   export const wakifList = [];
   export const auth = {};
   export const errors = {};
@@ -799,7 +802,14 @@
     <!-- Pengiriman Info (if processed) -->
     {#if mushafRequest.pengiriman}
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Informasi Pengiriman</h3>
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Informasi Pengiriman</h3>
+          {#if pengirimanRingkas && pengirimanRingkas.jumlah > 1}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+              {pengirimanRingkas.jumlah} kiriman · {pengirimanRingkas.mushaf} mushaf
+            </span>
+          {/if}
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <dt class="text-sm font-medium text-gray-500">No. Resi</dt>
@@ -814,6 +824,33 @@
             <dd class="mt-1 text-sm text-gray-900">{mushafRequest.pengiriman.jenisQuran?.nama_jenis || '-'}</dd>
           </div>
         </div>
+
+        <!-- Satu permintaan kini dikirim sebagai banyak kiriman: satu mushaf, satu resi,
+             satu QR. Tanpa ringkasan ini, satu resi yang tampil di atas membuat jumlahnya
+             tampak salah (dulu: satu resi berisi seluruh permintaan). -->
+        {#if pengirimanRingkas && pengirimanRingkas.jumlah > 1}
+          <div class="mt-4 pt-4 border-t border-gray-100">
+            <p class="text-sm text-gray-600 mb-3">
+              Permintaan ini dikirim sebagai <span class="font-semibold">{pengirimanRingkas.jumlah} kiriman</span>
+              ({pengirimanRingkas.mushaf} mushaf — satu mushaf satu resi/QR). Resi di atas adalah kiriman pertama.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              {#each pengirimanRingkas.per_status as s}
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 text-gray-700 border border-gray-200">
+                  {s.nama}
+                  <span class="font-semibold">{s.jumlah}</span>
+                </span>
+              {/each}
+            </div>
+            <a
+              href={`/admin/pengiriman?search=${encodeURIComponent(mushafRequest.no_request)}`}
+              class="inline-flex items-center gap-1 mt-3 text-sm font-medium text-[#eb3434] hover:text-red-700"
+            >
+              Lihat semua kiriman permintaan ini
+              <HeroIcon name="chevron-right" class="w-4 h-4" />
+            </a>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

@@ -99,8 +99,11 @@ function jalankanAlurPermintaanMushaf($test, ?Donatur $donatur = null): array
     $catat('02 CS menelaah', 'status='.$permintaan->fresh()->status);
 
     // ---------- TAHAP 3: CS menetapkan jumlah yang disetujui ----------
+    // Sengaja kecil: sejak satu mushaf = satu resi (15/10/2026), jumlah ini sama dengan
+    // BANYAKNYA kiriman, dan tiap kiriman harus ditempuh satu per satu sampai diterima.
+    // Angka besar hanya memperlambat uji tanpa menguji hal yang berbeda.
     $test->patch("/admin/mushaf-requests/{$permintaan->id}/quantities", [
-        'jumlah_mushaf_a5_approved' => 100,
+        'jumlah_mushaf_a5_approved' => 4,
         'jumlah_mushaf_a6_approved' => 0,
         'jumlah_iqra_approved' => 0,
     ])->assertRedirect();
@@ -138,20 +141,34 @@ function jalankanAlurPermintaanMushaf($test, ?Donatur $donatur = null): array
     $pengiriman->refresh();
     $catat('06 QR dibuat', $pengiriman->qr_code_path ? 'qr_code_path terisi' : 'qr_code_path KOSONG');
 
-    // ---------- TAHAP 7: resi menempuh 7 tahapan, satu langkah tiap kali ----------
+    // ---------- TAHAP 7: tiap kiriman menempuh 7 tahapan, satu langkah tiap kali ----------
+    //
+    // Satu mushaf = satu resi (15/10/2026): satu permintaan punya BANYAK kiriman, dan
+    // permintaan baru menutup setelah SELURUH kirimannya diterima. Karena itu SEMUA kiriman
+    // ditempuh sampai selesai di sini — persis seperti operator yang memindai satu per satu.
     $tahapan = ['produksi', 'kedatangan', 'packing', 'selesai-packing', 'pengiriman', 'diterima'];
-    foreach ($tahapan as $slug) {
-        $status = StatusPengiriman::where('slug', $slug)->first();
-        if (! $status) {
-            $catat('07 status '.$slug, 'SKIP: status tidak ada di master');
+    $idTahapan = StatusPengiriman::whereIn('slug', $tahapan)->pluck('id', 'slug');
+    $semuaResi = Pengiriman::where('mushaf_request_id', $permintaan->id)->orderBy('id')->get();
 
-            continue;
+    foreach ($semuaResi as $urutan => $resiIni) {
+        foreach ($tahapan as $slug) {
+            if (! isset($idTahapan[$slug])) {
+                $catat('07 status '.$slug, 'SKIP: status tidak ada di master');
+
+                continue;
+            }
+
+            $test->post("/admin/pengiriman/{$resiIni->id}/update-status", ['status_id' => $idTahapan[$slug]]);
+            $resiIni->refresh();
+
+            if ($urutan === 0) {
+                $catat('07 status → '.$slug, 'status sekarang='.($resiIni->status?->slug ?? '?'));
+            }
         }
-
-        $test->post("/admin/pengiriman/{$pengiriman->id}/update-status", ['status_id' => $status->id]);
-        $pengiriman->refresh();
-        $catat('07 status → '.$slug, 'status sekarang='.($pengiriman->status?->slug ?? '?'));
     }
+
+    $catat('07b seluruh kiriman', $semuaResi->count().' kiriman berisi 1 eks → diterima (permintaan ini berisi '
+        .$permintaan->approved_breakdown['total'].' eks)');
 
     // ---------- TAHAP 8: permintaan seharusnya menutup sendiri ----------
     $permintaan->refresh();
