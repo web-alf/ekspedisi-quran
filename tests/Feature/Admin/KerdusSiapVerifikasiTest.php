@@ -106,6 +106,8 @@ it('mengirim baris berbentuk sama dengan Tracking Kerdus gudang, tanpa status ve
         'user_name', 'seal_code', 'sealed_at', 'created_at', 'gudang',
     ])
         ->not->toHaveKeys(['verifikasi', 'diverifikasi_oleh', 'diverifikasi_pada'])
+        ->and($baris['dipindai_pada'])->toBeNull()
+        ->and($baris['dipindai_oleh'])->toBeNull()
         ->and($baris['terisi'])->toBe(17)
         ->and($baris['item_count'])->toBe(17)
         ->and($baris['status_info']['label'])->toBe('Tersegel')
@@ -121,7 +123,50 @@ it('tetap menampilkan kerdus yang sudah dipindai selama belum dimuat', function 
         ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
         ->assertSuccessful();
 
-    expect(kodeDiDaftar(propsKerdusSiap()))->toContain('KB-20261016-020-A5-01');
+    $baris = collect(propsKerdusSiap()['daftar']['data'])->firstWhere('kode_kerdus', 'KB-20261016-020-A5-01');
+
+    // Kolom jam, metode, dan petugas diadopsi dari tabel riwayat lama.
+    expect($baris)->not->toBeNull()
+        ->and($baris['dipindai_pada'])->toBe(now()->format('d/m/Y H:i'))
+        ->and($baris['dipindai_metode'])->toBe('qr')
+        ->and($baris['dipindai_oleh'])->toBe($this->petugas->name);
+});
+
+it('menampilkan mushaf di dalam kerdus beserta riwayat pindainya', function () {
+    $box = kerdusDaftar('KB-20261016-070-A5-01', PackingBox::STATUS_SEALED, 3, $this->smg->id);
+    $resi = $box->packingItems()->with('pengiriman')->get()->pluck('pengiriman.no_resi')->all();
+
+    $this->actingAs($this->petugas)
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'metode' => 'manual'])
+        ->assertSuccessful();
+
+    $detail = $this->actingAs($this->petugas)
+        ->getJson(route('admin.pindai-kerdus.show', $box))
+        ->assertSuccessful()
+        ->assertJsonPath('kerdus.kode_kerdus', 'KB-20261016-070-A5-01')
+        ->assertJsonPath('kerdus.jumlah_mushaf', 3)
+        ->assertJsonPath('kerdus.gudang', 'Gudang Semarang')
+        ->assertJsonCount(3, 'mushaf')
+        ->assertJsonCount(1, 'riwayat_pindai')
+        ->assertJsonPath('riwayat_pindai.0.metode', 'manual')
+        ->assertJsonPath('riwayat_pindai.0.oleh', $this->petugas->name)
+        ->json();
+
+    expect(collect($detail['mushaf'])->pluck('no_resi')->all())->toEqualCanonicalizing($resi)
+        ->and($detail['mushaf'][0])->toHaveKeys(['no_resi', 'jenis', 'wakif', 'donatur', 'status', 'dikemas_oleh', 'tracking_url'])
+        ->and($detail['mushaf'][0]['status'])->toBe(StatusPengiriman::where('slug', 'selesai-packing')->value('nama'));
+});
+
+it('menolak detail kerdus untuk peran tanpa izin pindai kerdus', function () {
+    $box = kerdusDaftar('KB-20261016-080-A5-01');
+
+    $kurir = User::factory()->create(['is_active' => true]);
+    $kurir->assignRole(RoleEnum::COURIER->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->actingAs($kurir->fresh())
+        ->getJson(route('admin.pindai-kerdus.show', $box))
+        ->assertForbidden();
 });
 
 it('menyembunyikan kerdus yang seluruh isinya sudah dimuat ke kurir', function () {

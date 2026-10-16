@@ -15,8 +15,10 @@
    * Server yang memutuskan (menandai `perlu_isian`), jadi jalur ini tetap jalan walau
    * tampilan ini diubah.
    *
-   * Kunci permintaan diberi awalan `pindai_` (pindai_tanggal, pindai_page, dst.) supaya
-   * filter tabel kerdus dan filter tabel muatan di halaman yang sama tidak saling menimpa.
+   * Riwayat pindai tidak lagi punya tabel sendiri (dulu menduplikasi kode & jenis kerdus
+   * yang sama): pindai terakhir tampil sebagai kolom di daftar kerdus, dan riwayat
+   * lengkapnya ada di detail kerdus. Kunci permintaan daftar kerdus berawalan `siap_`
+   * supaya tidak menimpa filter tabel muatan di halaman yang sama.
    */
   import { router } from '@inertiajs/svelte';
   import HeroIcon from './UI/HeroIcon.svelte';
@@ -26,12 +28,8 @@
   import axios from 'axios';
 
   export let pindai = {};
-  export let perPage = 20;
-  export let perPageOptions = [10, 20, 50, 100, 200];
 
-  $: log = pindai.log || { data: [], current_page: 1, last_page: 1, per_page: 20, total: 0 };
   $: jenisList = pindai.jenisList || [];
-  $: petugasList = pindai.petugasList || [];
   $: tanggalHariIni = pindai.tanggalHariIni || '';
 
   // --- Pemindai ---
@@ -54,12 +52,6 @@
   let isianCatatan = '';
   let menyimpanIsian = false;
 
-  // --- Filter riwayat ---
-  let tanggal = pindai.filters?.tanggal ?? '';
-  let jenisFilter = pindai.filters?.jenis_quran_id ?? '';
-  let petugasFilter = pindai.filters?.user_id ?? '';
-  let cari = pindai.filters?.search ?? '';
-  let jedaCari;
 
   const labelStatus = {
     empty: 'Kosong',
@@ -184,48 +176,6 @@
     isianCatatan = '';
   }
 
-  /**
-   * Menerapkan filter riwayat TANPA menghapus filter/tabel lain di halaman yang sama:
-   * parameter yang sudah ada di URL dibawa serta, yang berubah hanya kunci `pindai_*`.
-   */
-  function terapkanFilter() {
-    const params = Object.fromEntries(new URL(window.location.href).searchParams);
-
-    params.pindai_tanggal = tanggal;
-    params.pindai_page = 1;
-
-    for (const [kunci, nilai] of Object.entries({
-      pindai_jenis_quran_id: jenisFilter,
-      pindai_user_id: petugasFilter,
-      pindai_cari: cari,
-    })) {
-      if (nilai) {
-        params[kunci] = nilai;
-      } else {
-        delete params[kunci];
-      }
-    }
-
-    router.get(window.location.pathname, params, { preserveState: true, preserveScroll: true });
-  }
-
-  function cariDitunda() {
-    clearTimeout(jedaCari);
-    jedaCari = setTimeout(terapkanFilter, 350);
-  }
-
-  function resetFilter() {
-    tanggal = tanggalHariIni;
-    jenisFilter = '';
-    petugasFilter = '';
-    cari = '';
-    terapkanFilter();
-  }
-
-  function waktuTampil(baris) {
-    return baris.tanggal === tanggalHariIni ? baris.waktu : baris.waktu_lengkap;
-  }
-
   // --- Kerdus siap dipindai ---
   // Kerdus penuh/tersegel yang belum dimuat ke kurir. Barisnya sama dengan Tracking
   // Kerdus gudang, supaya kedua sisi membaca kerdus yang sama dengan cara yang sama.
@@ -236,6 +186,37 @@
   let siapCari = pindai.siap?.filters?.cari || '';
   let jedaSiap;
   let kartuPemindai;
+
+  // --- Detail isi kerdus (klik kode kerdus) ---
+  let detail = null; // jawaban server: { kerdus, mushaf, riwayat_pindai }
+  let detailKode = '';
+  let memuatDetail = false;
+  let galatDetail = '';
+
+  async function bukaDetail(box) {
+    detailKode = box.kode_kerdus;
+    detail = null;
+    galatDetail = '';
+    memuatDetail = true;
+
+    try {
+      const { data } = await axios.get(`/admin/pindai-kerdus/kerdus/${box.id}`);
+      // Abaikan jawaban lama bila petugas sudah membuka kerdus lain.
+      if (detailKode === box.kode_kerdus) detail = data;
+    } catch (err) {
+      galatDetail = err.response?.data?.message || 'Gagal memuat isi kerdus.';
+    } finally {
+      memuatDetail = false;
+    }
+  }
+
+  function tutupDetail() {
+    detailKode = '';
+    detail = null;
+    galatDetail = '';
+  }
+
+  const labelMetode = { qr: 'Pindai QR', manual: 'Ketik manual' };
 
   function warnaProgress(persen) {
     if (persen === 0) return 'bg-gray-200';
@@ -622,13 +603,23 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seal Code</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipindai</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metode</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipindai oleh</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             {#each daftarSiap as box (box.id)}
               <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm font-medium text-gray-900">{box.kode_kerdus}</div>
+                  <button
+                    type="button"
+                    on:click={() => bukaDetail(box)}
+                    class="text-sm font-medium text-[#eb3434] hover:text-red-700 hover:underline text-left"
+                    title="Lihat mushaf di dalam kerdus ini"
+                  >
+                    {box.kode_kerdus}
+                  </button>
                   <div class="text-sm text-gray-500">{box.satuan?.label || `${box.item_count} pcs`} mushaf</div>
                   {#if box.gudang}<div class="text-xs text-gray-400">{box.gudang}</div>{/if}
                 </td>
@@ -674,6 +665,24 @@
                   {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{box.created_at}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {#if box.dipindai_pada}
+                    {box.dipindai_pada}
+                  {:else}
+                    <span class="text-gray-400">Belum dipindai</span>
+                  {/if}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {#if box.dipindai_metode}
+                    <span class="inline-flex items-center gap-1.5">
+                      <HeroIcon name={box.dipindai_metode === 'manual' ? 'pencil-square' : 'qr-code'} class="w-4 h-4 text-gray-400" />
+                      {labelMetode[box.dipindai_metode] || box.dipindai_metode}
+                    </span>
+                  {:else}
+                    <span class="text-gray-400">—</span>
+                  {/if}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{box.dipindai_oleh || '—'}</td>
               </tr>
             {/each}
           </tbody>
@@ -692,155 +701,110 @@
       </div>
     {/if}
   </div>
+</section>
 
-  <!-- Riwayat tersimpan -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      <div>
-        <label for="filter-pindai-tanggal" class="block text-sm font-medium text-gray-700 mb-2">Tanggal</label>
-        <input
-          id="filter-pindai-tanggal"
-          type="date"
-          bind:value={tanggal}
-          on:change={terapkanFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
-        />
-        <p class="mt-1 text-xs text-gray-500">Kosongkan untuk melihat semua tanggal.</p>
-      </div>
-
-      <div>
-        <label for="filter-pindai-jenis" class="block text-sm font-medium text-gray-700 mb-2">Jenis</label>
-        <select
-          id="filter-pindai-jenis"
-          bind:value={jenisFilter}
-          on:change={terapkanFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
-        >
-          <option value="">Semua jenis</option>
-          {#each jenisList as j}
-            <option value={j.id}>{j.nama}</option>
-          {/each}
-        </select>
-      </div>
-
-      <div>
-        <label for="filter-pindai-petugas" class="block text-sm font-medium text-gray-700 mb-2">Dipindai oleh</label>
-        <select
-          id="filter-pindai-petugas"
-          bind:value={petugasFilter}
-          on:change={terapkanFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
-        >
-          <option value="">Semua petugas</option>
-          {#each petugasList as p}
-            <option value={p.id}>{p.nama}</option>
-          {/each}
-        </select>
-      </div>
-
-      <div>
-        <label for="filter-pindai-cari" class="block text-sm font-medium text-gray-700 mb-2">Cari kode kerdus</label>
-        <div class="flex gap-2">
-          <div class="relative flex-1">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-              <HeroIcon name="magnifying-glass" class="h-4 w-4" />
-            </div>
-            <input
-              id="filter-pindai-cari"
-              type="text"
-              bind:value={cari}
-              on:input={cariDitunda}
-              placeholder="KB-20261006..."
-              class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm font-mono"
-            />
-          </div>
-          <button
-            on:click={resetFilter}
-            class="px-3 py-2 rounded-lg text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors whitespace-nowrap"
-          >
-            Reset
-          </button>
+<!-- Detail isi kerdus: mushaf (resi) di dalamnya + riwayat pindai kerdus ini. -->
+{#if detailKode}
+  <!-- z-[10000]: harus di atas sidebar (z-[9998]) dan header lengket (z-[9990]) AdminLayout. -->
+  <div class="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" role="presentation" on:click|self={tutupDetail}>
+    <div class="bg-white w-full sm:max-w-4xl max-h-[90vh] rounded-t-xl sm:rounded-xl shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="judul-detail-kerdus">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <h3 id="judul-detail-kerdus" class="text-lg font-semibold text-gray-900 font-mono">{detailKode}</h3>
+          {#if detail}
+            <p class="text-sm text-gray-500 mt-0.5">
+              {detail.kerdus.jenis_quran} · {detail.kerdus.jumlah_mushaf} mushaf
+              {#if detail.kerdus.gudang}· {detail.kerdus.gudang}{/if}
+              · dikemas {detail.kerdus.user_name}
+              {#if detail.kerdus.sealed_at}· disegel {detail.kerdus.sealed_at}{/if}
+            </p>
+          {/if}
         </div>
+        {#if detail}
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {detail.kerdus.status_info.bg} {detail.kerdus.status_info.text}">
+            {detail.kerdus.status_info.label}
+          </span>
+        {/if}
+        <button type="button" on:click={tutupDetail} class="text-gray-400 hover:text-gray-600" aria-label="Tutup">
+          <HeroIcon name="x-mark" class="w-5 h-5" />
+        </button>
+      </div>
+
+      <div class="overflow-y-auto">
+        {#if memuatDetail}
+          <div class="p-6 space-y-3" aria-busy="true">
+            {#each Array(5) as _}
+              <div class="h-4 bg-gray-100 rounded animate-pulse"></div>
+            {/each}
+          </div>
+        {:else if galatDetail}
+          <p class="p-6 text-sm text-red-700">{galatDetail}</p>
+        {:else if detail}
+          {#if detail.mushaf.length === 0}
+            <p class="p-6 text-sm text-gray-500">Kerdus ini belum berisi mushaf.</p>
+          {:else}
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No Resi</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakif</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donatur</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dikemas</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  {#each detail.mushaf as m, i (m.no_resi || i)}
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{m.urutan ?? i + 1}</td>
+                      <td class="px-4 py-3 text-sm font-mono whitespace-nowrap">
+                        {#if m.tracking_url}
+                          <a href={m.tracking_url} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">{m.no_resi}</a>
+                        {:else}
+                          {m.no_resi || '—'}
+                        {/if}
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                        {m.jenis || '—'}{#if m.jumlah > 1}<span class="text-gray-500"> × {m.jumlah}</span>{/if}
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-900">{m.wakif || '—'}</td>
+                      <td class="px-4 py-3 text-sm text-gray-700">{m.donatur || '—'}</td>
+                      <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{m.status || '—'}</td>
+                      <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        {m.dikemas_oleh || '—'}
+                        {#if m.dikemas_pada}<div class="text-xs text-gray-500">{m.dikemas_pada}</div>{/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+
+          <div class="px-6 py-4 border-t border-gray-200">
+            <h4 class="text-sm font-semibold text-gray-900 mb-2">Riwayat pindai kerdus ini</h4>
+            {#if detail.riwayat_pindai.length === 0}
+              <p class="text-sm text-gray-500">Belum pernah dipindai distribusi.</p>
+            {:else}
+              <ul class="divide-y divide-gray-100 text-sm">
+                {#each detail.riwayat_pindai as r}
+                  <li class="py-2 flex flex-wrap gap-x-4 gap-y-1">
+                    <span class="text-gray-900 whitespace-nowrap">{r.waktu}</span>
+                    <span class="text-gray-700">{labelMetode[r.metode] || r.metode}</span>
+                    <span class="text-gray-700">{r.oleh}</span>
+                    <span class="text-gray-500">{r.jumlah_mushaf} eks</span>
+                    {#if r.catatan}<span class="text-gray-500">· {r.catatan}</span>{/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
       </div>
     </div>
   </div>
+{/if}
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-    {#if log.data.length === 0}
-      <div class="p-12 text-center">
-        <div class="mx-auto w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <HeroIcon name="archive-box" class="w-7 h-7 text-gray-400" />
-        </div>
-        <h3 class="text-base font-semibold text-gray-900 mb-1">Belum ada kerdus dipindai</h3>
-        <p class="text-sm text-gray-500">
-          Pindai QR kerdus atau ketik kodenya di atas — jejaknya akan muncul di tabel ini.
-        </p>
-      </div>
-    {:else}
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jam</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Kode Kerdus</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jenis</th>
-              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Jumlah</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Metode</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dipindai oleh</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Catatan</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-100">
-            {#each log.data as baris (baris.id)}
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{waktuTampil(baris)}</td>
-                <td class="px-4 py-3">
-                  <div class="text-sm font-mono font-medium text-gray-900">{baris.kode_kerdus}</div>
-                  <div class="flex flex-wrap gap-1 mt-1">
-                    {#if baris.asal === 'mandiri'}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-600 border border-gray-200">
-                        belum terdaftar
-                      </span>
-                    {/if}
-                    {#if baris.ulang}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-600 border border-gray-200">
-                        pindai ulang
-                      </span>
-                    {/if}
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-700">
-                  <span class="inline-flex items-center gap-2">
-                    {#if baris.jenis_kode}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600 border border-gray-200">
-                        {baris.jenis_kode}
-                      </span>
-                    {/if}
-                    {baris.jenis}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
-                  {baris.jumlah_mushaf} eks
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                  <span class="inline-flex items-center gap-1.5">
-                    <HeroIcon name={baris.metode === 'manual' ? 'pencil-square' : 'qr-code'} class="w-4 h-4 text-gray-400" />
-                    {baris.metode === 'manual' ? 'Ketik manual' : 'Pindai QR'}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-700">{baris.oleh}</td>
-                <td class="px-4 py-3 text-sm text-gray-500">{baris.catatan || '—'}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="px-4 py-3 border-t border-gray-100">
-        <!-- Pemilih ukuran halaman disembunyikan: tabel muatan di halaman yang sama
-             sudah punya, dan `per_page` berlaku untuk keduanya. -->
-        <Pagination data={log} {perPage} perPageOptions={perPageOptions} tanpaPemilihPerHalaman={true} />
-      </div>
-    {/if}
-  </div>
-</section>

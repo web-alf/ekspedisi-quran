@@ -113,7 +113,7 @@
       <!-- Panel pindai kerdus: hanya untuk sisi distribusi (propnya tidak dikirim ke kurir) -->
       {#if pindaiKerdus}
         <div class="mb-6 sm:mb-8">
-          <PindaiKerdusPanel pindai={pindaiKerdus} {perPage} perPageOptions={perPageOptions} />
+          <PindaiKerdusPanel pindai={pindaiKerdus} />
         </div>
       {/if}
 

@@ -757,6 +757,12 @@ Route::middleware(['auth'])->group(function () {
         Route::post('pindai-kerdus', [PindaiKerdusController::class, 'store'])
             ->middleware('permission:distribusi.pindai-kerdus')
             ->name('pindai-kerdus.store');
+        // Isi kerdus (daftar mushaf/resi) untuk sisi distribusi. Bukan box-tracking.show:
+        // halaman itu milik gudang (izin warehouse.boxes.view), manager distribusi tidak
+        // memegangnya.
+        Route::get('pindai-kerdus/kerdus/{box}', [PindaiKerdusController::class, 'show'])
+            ->middleware('permission:distribusi.pindai-kerdus')
+            ->name('pindai-kerdus.show');
 
         Route::patch('mushaf-requests/{mushafRequest}/status', [App\Http\Controllers\Admin\MushafRequestController::class, 'updateStatus'])
             ->middleware('permission:mushaf-requests.update|mushaf-requests.approve|mushaf-requests.reject')

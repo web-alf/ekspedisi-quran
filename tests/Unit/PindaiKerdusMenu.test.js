@@ -74,18 +74,17 @@ describe('Janji tampilan panel', () => {
         expect(panel).not.toContain('jumlah_fisik:');
     });
 
-    it('riwayat menampilkan jam, jumlah, metode, dan siapa yang memindai — tanpa kolom verifikasi', () => {
-        for (const kolom of ['Jam', 'Kode Kerdus', 'Jenis', 'Jumlah', 'Metode', 'Dipindai oleh']) {
-            expect(panel).toContain(`>${kolom}</th>`);
-        }
-        expect(panel).not.toContain('>Fisik</th>');
-        expect(panel).not.toContain('>Hasil</th>');
-        expect(panel).toContain('{baris.oleh}');
-        expect(panel).toContain('{baris.jumlah_mushaf} eks');
+    it('tidak ada tabel riwayat terpisah yang menduplikasi daftar kerdus', () => {
+        expect(panel).not.toContain('{#each log.data');
+        expect(panel).not.toContain('pindai_tanggal');
     });
 
     it('daftar kerdus siap meniru kolom Tracking Kerdus gudang, tanpa status verifikasi', () => {
         for (const kolom of ['Kode Kerdus', 'Status', 'Jenis Quran', 'Progress', 'Isi (Satuan)', 'QR Kerdus', 'User', 'Seal Code', 'Tanggal']) {
+            expect(panel).toContain(`>${kolom}</th>`);
+        }
+        // Pindai terakhir diadopsi dari tabel riwayat lama.
+        for (const kolom of ['Dipindai', 'Metode', 'Dipindai oleh']) {
             expect(panel).toContain(`>${kolom}</th>`);
         }
         expect(panel).toContain('{box.qr_code_base64}');
@@ -99,9 +98,16 @@ describe('Janji tampilan panel', () => {
         expect(panel).toContain("router.reload({ only: ['pindaiKerdus'] })");
     });
 
-    it('filter panel memakai awalan pindai_ supaya tidak menimpa filter tabel muatan', () => {
-        for (const kunci of ['pindai_tanggal', 'pindai_jenis_quran_id', 'pindai_user_id', 'pindai_cari', 'pindai_page']) {
+    it('filter daftar kerdus memakai awalan siap_ supaya tidak menimpa filter tabel muatan', () => {
+        for (const kunci of ['siap_gudang', 'siap_cari', 'siap_page']) {
             expect(panel).toContain(kunci);
         }
+    });
+
+    it('kode kerdus bisa diklik untuk melihat mushaf di dalamnya', () => {
+        expect(panel).toContain('on:click={() => bukaDetail(box)}');
+        expect(panel).toContain('/admin/pindai-kerdus/kerdus/${box.id}');
+        expect(panel).toContain('{#each detail.mushaf as m');
+        expect(panel).toContain('{#each detail.riwayat_pindai as r}');
     });
 });

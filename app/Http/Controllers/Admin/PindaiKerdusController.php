@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\PermissionEnum;
 use App\Http\Controllers\Controller;
+use App\Models\PackingBox;
 use App\Models\PindaiKerdusLog;
 use App\Services\PindaiKerdusService;
 use Illuminate\Http\JsonResponse;
@@ -48,5 +49,13 @@ class PindaiKerdusController extends Controller
         $hasil = $pindai->catat($request->user(), $validated);
 
         return response()->json($hasil['data'], $hasil['status']);
+    }
+
+    /**
+     * Detail isi satu kerdus: daftar mushaf (resi) di dalamnya dan riwayat pindainya.
+     */
+    public function show(PackingBox $box, PindaiKerdusService $pindai): JsonResponse
+    {
+        return response()->json($pindai->detailKerdus($box));
     }
 }

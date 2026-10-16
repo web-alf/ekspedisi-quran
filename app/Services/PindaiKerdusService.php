@@ -146,7 +146,7 @@ final class PindaiKerdusService
         $cari = trim($request->string('siap_cari')->toString());
 
         $daftar = PackingBox::query()
-            ->with(['jenisQuran', 'gudang:id,kode,nama', 'dailyPackingTask.user:id,name'])
+            ->with(['jenisQuran', 'gudang:id,kode,nama', 'dailyPackingTask.user:id,name', 'pindaiKerdusTerakhir.user:id,name'])
             ->withCount('packingItems')
             ->whereIn('status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED])
             ->where(fn (Builder $q) => $q->doesntHave('packingItems')
@@ -189,6 +189,13 @@ final class PindaiKerdusService
                 'seal_code' => $box->seal_code,
                 'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
                 'created_at' => $box->created_at?->format('d/m/Y H:i'),
+                // Pindai terakhir sisi distribusi (menggantikan tabel riwayat terpisah yang
+                // dulu menduplikasi kode & jenis kerdus yang sama).
+                'dipindai_pada' => $box->pindaiKerdusTerakhir?->created_at?->format('d/m/Y H:i'),
+                'dipindai_metode' => $box->pindaiKerdusTerakhir?->metode,
+                'dipindai_oleh' => $box->pindaiKerdusTerakhir
+                    ? ($box->pindaiKerdusTerakhir->user?->name ?? 'Akun terhapus')
+                    : null,
             ];
         });
 
@@ -196,6 +203,75 @@ final class PindaiKerdusService
             'daftar' => $daftar,
             'filters' => ['gudang' => $gudang, 'cari' => $cari],
             'gudangList' => Gudang::query()->orderBy('id')->get(['id', 'kode', 'nama']),
+        ];
+    }
+
+    /**
+     * Isi satu kerdus untuk sisi distribusi: tiap mushaf (1 resi = 1 mushaf) beserta
+     * wakif, donatur, status, dan siapa yang mengemasnya — plus seluruh riwayat pindai
+     * kerdus itu, karena riwayat tidak lagi punya tabel sendiri di panel.
+     *
+     * @return array<string, mixed>
+     */
+    public function detailKerdus(PackingBox $box): array
+    {
+        $box->load([
+            'jenisQuran',
+            'gudang:id,kode,nama',
+            'dailyPackingTask.user:id,name',
+            'packingItems' => fn ($q) => $q->orderBy('urutan_dalam_box')->orderBy('id'),
+            'packingItems.pengiriman.donatur:id,nama_donatur',
+            'packingItems.pengiriman.wakafItem',
+            'packingItems.pengiriman.jenisQuran:id,kode_jenis,nama_jenis',
+            'packingItems.pengiriman.status:id,nama,slug',
+            'packingItems.packedByUser:id,name',
+        ]);
+
+        $riwayat = PindaiKerdusLog::query()
+            ->with('user:id,name')
+            ->where('packing_box_id', $box->id)
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
+        return [
+            'kerdus' => [
+                'id' => $box->id,
+                'kode_kerdus' => $box->kode_kerdus,
+                'status_info' => $box->getStatusInfo(),
+                'jenis_quran' => $box->jenisQuran->nama_jenis ?? 'Belum ditentukan',
+                'gudang' => $box->gudang?->nama,
+                'terisi' => $box->jumlah_terisi,
+                'kapasitas' => $box->kapasitas,
+                'jumlah_mushaf' => $box->jumlahEksIsi(),
+                'user_name' => $box->dailyPackingTask?->user?->name ?? 'N/A',
+                'seal_code' => $box->seal_code,
+                'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
+            ],
+            'mushaf' => $box->packingItems->map(function ($item) {
+                $resi = $item->pengiriman;
+
+                return [
+                    'urutan' => $item->urutan_dalam_box,
+                    'no_resi' => $resi?->no_resi,
+                    'jenis' => $resi?->jenisQuran?->nama_jenis,
+                    'jenis_kode' => $resi?->jenisQuran?->kode_jenis,
+                    'jumlah' => (int) ($item->quantity ?: 1),
+                    'wakif' => $resi?->wakafItem?->wakif_name ?? $resi?->donatur?->nama_donatur,
+                    'donatur' => $resi?->donatur?->nama_donatur,
+                    'status' => $resi?->status?->nama,
+                    'dikemas_oleh' => $item->packedByUser?->name,
+                    'dikemas_pada' => $item->packed_at?->format('d/m/Y H:i'),
+                    'tracking_url' => $resi?->tracking_url,
+                ];
+            })->values(),
+            'riwayat_pindai' => $riwayat->map(fn (PindaiKerdusLog $log) => [
+                'waktu' => $log->created_at?->format('d/m/Y H:i'),
+                'metode' => $log->metode,
+                'oleh' => $log->user?->name ?? 'Akun terhapus',
+                'jumlah_mushaf' => $log->jumlah_mushaf,
+                'catatan' => $log->catatan,
+            ])->values(),
         ];
     }
 
