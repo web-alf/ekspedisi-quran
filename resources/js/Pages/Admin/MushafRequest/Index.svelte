@@ -1,0 +1,1494 @@
+<script>
+  import { router } from '@inertiajs/svelte';
+  import { page } from '@inertiajs/svelte';
+  import { fade, scale } from 'svelte/transition';
+  import { onMount } from 'svelte';
+  import FlashMessage from '../../../Components/FlashMessage.svelte';
+  import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
+  import { can } from '../../../utils/permissions.js';
+  // Dipanggil di handleFileSelect dan submitImport; tanpa impor ini, menolak
+  // berkas yang salah atau gagal import melempar ReferenceError dan pengguna
+  // tidak melihat pesan apa pun.
+  import { showError, showWarning } from '../../../stores/toast.js';
+  import { canonicalProvince, provinceFromGeoJson } from '../../../utils/provinceName.js';
+  import {
+    pisahkanTitikRusak,
+    sebaranPerProvinsi,
+    lembagaPerProvinsi,
+    kelompokkanPerPiksel,
+    buatIkonPin,
+    isiPopupKelompok,
+    warnaKategori,
+    labelKategori,
+    WARNA_KATEGORI,
+    formatAngka,
+    JARAK_GABUNG_PIKSEL,
+  } from '../../../utils/mapMarkers.js';
+  
+  // Props from Inertia
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
+  export let mushafRequests = { data: [], links: [], from: 0, to: 0, total: 0 };
+  export const errors = {};
+  export const auth = {};
+  export const flash = {};
+  export const settings = {};
+  
+  // Gaya untuk pin lokasi di atas peta.
+  //
+  // Ukuran pin TIDAK diatur di sini — ditentukan oleh buatIkonPin() supaya bisa
+  // diperkecil tanpa memotong gambarnya. Kalau ukuran ditulis di dua tempat,
+  // aturan yang satu menimpa yang lain dan ujung pin terpotong.
+  const markerStyle = '<' + 'style>' + `
+      .pin {
+        position: relative;
+        cursor: pointer;
+        transform-origin: 50% 100%;
+        transition: filter 0.2s;
+      }
+      .pin svg { display: block; }
+      .pin:hover { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45)); z-index: 1000; }
+      .pin:hover svg { transform: scale(1.16); transform-origin: 50% 100%; }
+      .pin .lubang {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+      .pin .angka {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+      }
+
+      /* Isi popup pin */
+      .leaflet-popup-content { font-size: 13px; line-height: 1.45; }
+      .pop-kat {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10.5px;
+        font-weight: 700;
+        margin-bottom: 5px;
+        color: #fff;
+      }
+      .pop-judul { font-weight: 700; font-size: 13.5px; margin-bottom: 5px; }
+      .pop-b { display: flex; gap: 6px; }
+      .pop-l { color: #6b7280; min-width: 78px; font-size: 11.5px; }
+      .pop-pisah { height: 1px; background: #e5e7eb; margin: 7px 0; }
+      .pop-total { font-weight: 700; }
+      .pop-pecah { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+      .pop-pecah span {
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 10.5px;
+      }
+      .pop-lembaga { margin-bottom: 6px; }
+      .pop-lembaga .alamat { color: #6b7280; font-size: 11px; }
+      .pop-koord { margin-top: 7px; font-size: 10.5px; color: #6b7280; }
+
+      /* Legenda kategori pin (di bawah peta) */
+      .legenda-kategori {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #4b5563;
+      }
+      .legenda-kategori .butir { display: flex; align-items: center; gap: 5px; }
+      .legenda-kategori .tanda {
+        width: 9px;
+        height: 13px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 1.5px solid rgba(0, 0, 0, 0.18);
+      }
+      .legenda-kategori b { color: #111827; font-weight: 600; }
+  ` + '</' + 'style>';
+  
+  // Inject styles
+  if (typeof document !== 'undefined') {
+    const styleElement = document.createElement('div');
+    styleElement.innerHTML = markerStyle;
+    document.head.appendChild(styleElement.firstElementChild);
+  }
+  export let filters = {};
+  export let mapData = [];
+  // Statistik per grup kategori, dihitung server dari SELURUH permintaan selesai.
+  export let kategoriStats = {};
+  export let stats = {
+    total: 0,
+    pending: 0,
+    reviewed: 0,
+    approved: 0,
+    rejected: 0,
+    processed: 0,
+    completed: 0
+  };
+  
+  // Initialize filter values to prevent undefined errors
+  $: if (!filters.search) filters.search = '';
+  $: if (!filters.status) filters.status = '';
+  $: if (!filters.start_date) filters.start_date = '';
+  $: if (!filters.end_date) filters.end_date = '';
+
+  /**
+   * Ikon tiap grup kategori.
+   *
+   * Kuncinya memakai nama grup apa adanya dari `MushafRequest::KATEGORI_LABELS`.
+   * Peta kategori (sub-kategori → grup) sengaja TIDAK disalin lagi di sini:
+   * salinan itulah yang dulu basi — "Lembaga Lainnya", "Panti Asuhan/Anak
+   * Yatim", dan "Muallaf" tidak ada di salinan itu, sehingga permintaannya jatuh
+   * ke "Tidak Dikategorikan" dan kartunya menampilkan angka yang salah.
+   */
+  const IKON_KATEGORI = {
+    'Lembaga Pendidikan & Pembinaan': 'academic-cap',
+    'Komunitas & Dakwah Kemasyarakatan': 'user-group',
+    'Lembaga Sosial & Pemerintahan': 'building-office-2',
+    'Penerima Manfaat Khusus': 'heart',
+    'Tidak Dikategorikan': 'question-mark-circle'
+  };
+
+  const ikonKategori = (kategori) => IKON_KATEGORI[kategori] || 'question-mark-circle';
+
+  $: totalDistribusi = Object.values(kategoriStats)
+    .reduce((total, data) => total + (data.totalMushaf || 0) + (data.totalIqra || 0), 0);
+  
+  let search = filters.search || '';
+  let statusFilter = filters.status || '';
+  let startDate = filters.start_date || '';
+  let endDate = filters.end_date || '';
+  let showDeleteModal = false;
+  let requestToDelete = null;
+  let showImportModal = false;
+  let importFile = null;
+  let importFileInput = null;
+  
+  // Permission checks
+  $: canRead = can.mushafRequests.read();
+  $: canDelete = can.mushafRequests.delete();
+  
+  // Current date for max date attribute
+  let currentDate = new Date().toISOString().split('T')[0];
+  
+  // Map variables
+  let map;
+  let isMapInitialized = false;
+  let provinceLayer;
+  let markerLayer;
+  let L = null; // Will hold Leaflet module
+
+  // Pin digambar sedikit lebih kecil dari ukuran penuhnya agar warna provinsi di
+  // bawahnya tetap terbaca. Diukur dalam piksel layar.
+  const SKALA_PIN = 0.78;
+
+  // Hasil pemisahan titik: diisi sekali saat peta disiapkan, lalu dipakai ulang
+  // oleh lapisan provinsi maupun lapisan pin.
+  let titikSah = [];
+  let titikRusak = [];
+  
+  onMount(async () => {
+    // Load Leaflet dynamically and initialize the map
+    try {
+      // Leaflet CSS is bundled locally (resources/css/leaflet.css via app.js),
+      // so no CDN <link> is needed here — injecting one violates the site CSP.
+      // Import Leaflet module
+      const leafletModule = await import('leaflet');
+      
+      // Handle different module structures
+      if (leafletModule.default) {
+        L = leafletModule.default;
+      } else if (leafletModule.L) {
+        L = leafletModule.L;
+      } else {
+        L = leafletModule;
+      }
+      
+      // Verify L is properly loaded
+      if (!L || typeof L.map !== 'function') {
+        throw new Error('Leaflet failed to load properly');
+      }
+      
+      // Wait for DOM to be ready and container to exist
+      const waitForContainer = () => {
+        return new Promise((resolve) => {
+          const checkContainer = () => {
+            const container = document.getElementById('distribution-map');
+            if (container && container.offsetParent !== null) {
+              resolve();
+            } else {
+              setTimeout(checkContainer, 50);
+            }
+          };
+          checkContainer();
+        });
+      };
+      
+      await waitForContainer();
+      initializeMap();
+      
+    } catch (error) {
+      console.error('Failed to load Leaflet:', error);
+      // Show error in the map container
+      const mapContainer = document.getElementById('distribution-map');
+      if (mapContainer) {
+        mapContainer.innerHTML = `
+          <div class="flex items-center justify-center h-full">
+            <div class="text-center text-red-600">
+              <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <p class="font-medium">Error loading map</p>
+              <p class="text-sm">${error.message}</p>
+            </div>
+          </div>
+        `;
+      }
+    }
+  });
+  
+  // Fungsi untuk mendapatkan warna berdasarkan jumlah distribusi
+  function getColorByDistributionDensity(total) {
+    return total > 1000 ? '#800026' :
+           total > 500  ? '#BD0026' :
+           total > 200  ? '#E31A1C' :
+           total > 100  ? '#FC4E2A' :
+           total > 50   ? '#FD8D3C' :
+           total > 20   ? '#FEB24C' :
+           total > 10   ? '#FED976' :
+                          '#FFEDA0';
+  }
+  
+  /**
+   * Susun kembali pin setiap peta selesai bergerak.
+   *
+   * Inilah yang menyatukan kedua perilaku: pin tampil sendiri-sendiri saat peta
+   * cukup besar, dan bergabung sendiri saat ruangnya sempit.
+   */
+  function gambarPin() {
+    if (!markerLayer) return [];
+
+    markerLayer.clearLayers();
+
+    const kelompok = kelompokkanPerPiksel(
+      titikSah,
+      (lat, lng) => map.latLngToContainerPoint([lat, lng]),
+      JARAK_GABUNG_PIKSEL
+    );
+
+    kelompok.forEach((k) => {
+      const utama = k.anggota[0];
+      const ikon = buatIkonPin(warnaKategori(utama.kategori), SKALA_PIN, k.anggota.length);
+
+      const penanda = L.marker([k.lat, k.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: ikon.html,
+          iconSize: [ikon.lebar, ikon.tinggi],
+          iconAnchor: ikon.jangkar,
+          popupAnchor: [0, -ikon.jangkar[1]],
+          tooltipAnchor: [ikon.lebar / 2, -ikon.jangkar[1]],
+        }),
+      }).bindPopup(isiPopupKelompok(k), { maxWidth: 320 });
+
+      penanda.bindTooltip(
+        k.anggota.length === 1
+          ? `${utama.nama} · ${formatAngka(utama.jumlah)} mushaf`
+          : `${k.anggota.length} lembaga berdekatan · ${formatAngka(k.jumlah)} mushaf`,
+        { direction: 'top', offset: [0, -30] }
+      );
+
+      penanda.addTo(markerLayer);
+    });
+
+    return kelompok;
+  }
+
+  /** Pasang lapisan pin dan legenda kategorinya. */
+  function pasangPin() {
+    if (!map || !L) return;
+
+    markerLayer = L.layerGroup().addTo(map);
+    gambarPin();
+
+    map.on('zoomend moveend', gambarPin);
+
+    addKategoriLegend();
+  }
+
+  /** Legenda warna pin per kategori lembaga, di bawah peta. */
+  function addKategoriLegend() {
+    const wadah = document.getElementById('peta-kategori-legend');
+    if (!wadah || wadah.dataset.terisi === '1') return;
+
+    wadah.innerHTML =
+      '<b>Kategori:</b>' +
+      Object.keys(WARNA_KATEGORI)
+        .map(
+          (k) =>
+            `<span class="butir"><span class="tanda" style="background:${warnaKategori(k)}"></span>` +
+            `${labelKategori(k)}</span>`
+        )
+        .join('') +
+      '<span class="butir"><span class="tanda" style="background:#9ca3af"></span>Lainnya</span>';
+
+    wadah.dataset.terisi = '1';
+  }
+
+  // Fungsi untuk mendapatkan teks status
+  function getStatusText(status) {
+    const statusMap = {
+      'pending': 'Menunggu Review',
+      'reviewed': 'Sedang Direview',
+      'approved': 'Disetujui',
+      'rejected': 'Ditolak',
+      'processed': 'Sudah Diproses',
+      'completed': 'Selesai'
+    };
+    return statusMap[status] || status;
+  }
+  
+  // Fungsi untuk mendapatkan ikon status
+  function getStatusIcon(status) {
+    const iconMap = {
+      'pending': 'clock',
+      'reviewed': 'eye',
+      'approved': 'check-circle',
+      'rejected': 'x-circle',
+      'processed': 'cube',
+      'completed': 'sparkles'
+    };
+    return iconMap[status] || 'document-text';
+  }
+  
+  function initializeMap() {
+    if (typeof window === 'undefined' || isMapInitialized) return;
+    
+    // Make sure Leaflet is available and properly loaded
+    if (!L || typeof L.map !== 'function') {
+      console.error('Leaflet is not properly loaded');
+      return;
+    }
+    
+    // Get the map container and ensure it exists
+    const mapContainer = document.getElementById('distribution-map');
+    if (!mapContainer) {
+      console.error('Map container not found');
+      return;
+    }
+    
+    // Clear any existing map instance
+    if (map) {
+      try {
+        map.remove();
+      } catch (e) {
+        console.warn('Error removing existing map:', e);
+      }
+      map = null;
+    }
+    
+    try {
+      // Create the map centered on Indonesia with appropriate bounds
+      map = L.map('distribution-map', {
+        center: [-2.5, 118], // Pusat Indonesia
+        zoom: 5,
+        minZoom: 5, // Limit zoom out to show only Indonesia
+        maxZoom: 15, // Allow more zoom in for detail
+        maxBounds: [
+          [-15, 90], // Southwest corner (diperluas untuk mencegah user bisa scroll terlalu jauh)
+          [10, 145]   // Northeast corner (diperluas untuk mencegah user bisa scroll terlalu jauh)
+        ],
+        maxBoundsViscosity: 1.0, // Maksimal "kekuatan" dari maxBounds, mencegah user sama sekali untuk keluar dari batas
+        scrollWheelZoom: true,   // Enable scroll wheel zoom
+        zoomControl: true        // Enable default zoom control
+      }).setView([-2.5, 118], 5);
+    
+    // Hide loading indicator once map is initialized
+    const mapContainerElement = document.getElementById('distribution-map');
+    const loadingIndicator = mapContainerElement?.querySelector('.absolute.inset-0');
+    if (loadingIndicator) {
+      loadingIndicator.style.display = 'none';
+    }
+    
+    // Add tile layer (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+    
+    // Filter data for completed distributions only
+    const completedData = Array.isArray(mapData) ? mapData.filter(item => item.status === 'completed') : [];
+
+    // titikSah/titikRusak diisi ke variabel modul, bukan variabel lokal: lapisan
+    // provinsi dan lapisan pin harus memakai daftar yang sama.
+    //
+    // Titik berkoordinat rusak dibuang SEKALI di sini, sehingga angka pada pin
+    // tidak mungkin berbeda dengan angka pada provinsi.
+    ({ sah: titikSah, rusak: titikRusak } = pisahkanTitikRusak(completedData));
+
+    if (titikRusak.length > 0) {
+      console.warn(
+        `[peta] ${titikRusak.length} titik dibuang karena koordinatnya di luar wilayah Indonesia:`,
+        titikRusak.map(t => `${t.nama} (${t.lat}, ${t.lng})`)
+      );
+    }
+
+    // Kunci provinsi dinormalkan agar ejaan berbeda tetap menyatu
+    const distributionByProvince = sebaranPerProvinsi(titikSah, canonicalProvince);
+    const jumlahLembagaPerProvinsi = lembagaPerProvinsi(titikSah, canonicalProvince);
+    
+    // Load GeoJSON provinsi Indonesia
+    fetch('/data/geojson/indonesia-province-simple.json')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('GeoJSON file could not be loaded');
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Log untuk debugging
+        
+        // Tambahkan layer GeoJSON dengan warna berdasarkan distribusi
+        provinceLayer = L.geoJSON(data, {
+          style: function(feature) {
+            // Nama provinsi dari GeoJSON dinormalkan agar cocok dengan data
+            const provinceName = provinceFromGeoJson(feature.properties);
+            
+            // Dapatkan total distribusi untuk provinsi ini
+            const totalDistribution = distributionByProvince[provinceName] || 0;
+            
+            return {
+              fillColor: getColorByDistributionDensity(totalDistribution),
+              weight: 1,
+              opacity: 1,
+              color: 'white',
+              dashArray: '',
+              fillOpacity: 0.7
+            };
+          },
+          onEachFeature: function(feature, layer) {
+            const provinceName = provinceFromGeoJson(feature.properties);
+            const totalDistribution = distributionByProvince[provinceName] || 0;
+            
+            // Calculate additional stats for this province (nama dinormalkan juga)
+            const provinceData = completedData.filter(item => canonicalProvince(item.provinsi) === provinceName);
+            const totalLembaga = jumlahLembagaPerProvinsi[provinceName] || 0;
+            const totalShipments = provinceData.length;
+            
+            // Add hover tooltip (keep the original hover functionality)
+            const tooltipContent = `
+              <div class="province-tooltip">
+                <h4 class="font-semibold text-sm mb-2">${provinceName}</h4>
+                <div class="text-xs space-y-1">
+                  <div>📚 Total Mushaf: <b>${totalDistribution.toLocaleString('id-ID')}</b></div>
+                  <div>🏢 Jumlah Lembaga: <b>${totalLembaga}</b></div>
+                  <div>📦 Total Pengiriman: <b>${totalShipments}</b></div>
+                </div>
+              </div>
+            `;
+            
+            // Smart tooltip positioning based on province location
+            const bounds = layer.getBounds();
+            const center = bounds.getCenter();
+            let direction = 'top';
+            let offset = [0, -10];
+            
+            // Check if province is in northern part of Indonesia (like Aceh)
+            if (center.lat > 0) {
+              direction = 'bottom';
+              offset = [0, 10];
+            }
+            // Check if province is on the eastern edge
+            else if (center.lng > 130) {
+              direction = 'left';
+              offset = [-10, 0];
+            }
+            // Check if province is on the western edge
+            else if (center.lng < 100) {
+              direction = 'right';
+              offset = [10, 0];
+            }
+            
+            layer.bindTooltip(tooltipContent, {
+              permanent: false,
+              direction: direction,
+              offset: offset,
+              className: 'custom-tooltip'
+            });
+            
+            // Add hover effect (keep the original red border hover)
+            layer.on({
+              mouseover: function(e) {
+                layer.setStyle({
+                  weight: 2,
+                  color: '#eb3434', // Use project's red color
+                  dashArray: '',
+                  fillOpacity: 0.9
+                });
+                
+                if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                  layer.bringToFront();
+                }
+              },
+              mouseout: function(e) {
+                provinceLayer.resetStyle(layer);
+              },
+              // Keep zoom functionality but prevent blue border
+              click: function(e) {
+                map.fitBounds(layer.getBounds());
+                layer.setStyle({
+                  weight: 1,
+                  color: 'white',
+                  dashArray: '',
+                  fillOpacity: 0.7
+                });
+              }
+            });
+          }
+        }).addTo(map);
+
+        // Pin lokasi di atas lapisan provinsi
+        pasangPin();
+
+        // Tambahkan legenda untuk distribusi di luar peta
+        addDistributionLegend();
+      })
+      .catch(error => {
+        console.error('Error loading GeoJSON:', error);
+        // Fallback: show distribution legend only
+        addDistributionLegend();
+      });
+      
+      isMapInitialized = true;
+      
+    } catch (error) {
+      console.error('Error initializing map:', error);
+      
+      // Show error in the map container
+      const mapContainer = document.getElementById('distribution-map');
+      if (mapContainer) {
+        const loadingIndicator = mapContainer.querySelector('.absolute.inset-0');
+        if (loadingIndicator) {
+          loadingIndicator.innerHTML = `
+            <div class="flex items-center justify-center h-full">
+              <div class="text-center text-red-600">
+                <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="font-medium">Error initializing map</p>
+                <p class="text-sm">${error.message}</p>
+              </div>
+            </div>
+          `;
+        }
+      }
+      
+      // Still show distribution legend even if map fails
+      try {
+        addDistributionLegend();
+      } catch (legendError) {
+        console.error('Error adding distribution legend:', legendError);
+      }
+    }
+  }
+  
+  
+  // Fungsi untuk menambahkan legenda distribusi
+  function addDistributionLegend() {
+    // Buat elemen legenda di luar peta
+    const mapContainer = document.getElementById('distribution-map');
+    const legendElement = document.createElement('div');
+    legendElement.className = 'map-legend bg-white p-3 rounded-lg shadow-md mt-3 border border-gray-200';
+    
+    // Buat konten legenda dalam satu baris
+    const legendContent = document.createElement('div');
+    legendContent.className = 'flex items-center flex-wrap gap-x-3 gap-y-2';
+    
+    // Judul legenda
+    const legendTitle = document.createElement('div');
+    legendTitle.className = 'font-semibold text-sm mr-2';
+    legendTitle.textContent = 'Distribusi Al-Qur\'an (Selesai):';
+    legendContent.appendChild(legendTitle);
+    
+    // Array untuk level distribusi
+    const grades = [
+      { range: '0–10', color: '#FFEDA0' },
+      { range: '10–20', color: '#FED976' },
+      { range: '20–50', color: '#FEB24C' },
+      { range: '50–100', color: '#FD8D3C' },
+      { range: '100–200', color: '#FC4E2A' },
+      { range: '200–500', color: '#E31A1C' },
+      { range: '500–1000', color: '#BD0026' },
+      { range: '1000+', color: '#800026' }
+    ];
+    
+    // Tambahkan setiap item legenda dalam satu baris
+    grades.forEach(grade => {
+      const legendItem = document.createElement('div');
+      legendItem.className = 'flex items-center text-xs';
+      
+      const colorBox = document.createElement('span');
+      colorBox.className = 'inline-block mr-1';
+      colorBox.style.backgroundColor = grade.color;
+      colorBox.style.width = '16px';
+      colorBox.style.height = '16px';
+      
+      const label = document.createElement('span');
+      label.textContent = `${grade.range} unit`;
+      
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(label);
+      legendContent.appendChild(legendItem);
+    });
+    
+    legendElement.appendChild(legendContent);
+    
+    // Temukan container map-container
+    const mapContainerParent = mapContainer.parentElement.parentElement;
+    
+    // Tambahkan legenda setelah container peta
+    mapContainerParent.appendChild(legendElement);
+  }
+  
+  // Debounce search
+  let searchTimeout;
+  function handleSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      applyFilters();
+    }, 300);
+  }
+  
+  function applyFilters() {
+    const params = {};
+    if (search) params.search = search;
+    if (statusFilter) params.status = statusFilter;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    
+    router.get('/admin/mushaf-requests', params, {
+      preserveState: true,
+      preserveScroll: true
+    });
+  }
+  
+  function resetFilters() {
+    search = '';
+    statusFilter = '';
+    startDate = '';
+    endDate = '';
+    router.get('/admin/mushaf-requests');
+  }
+  
+  function confirmDelete(request) {
+    requestToDelete = request;
+    showDeleteModal = true;
+  }
+  
+  function handleDelete() {
+    if (requestToDelete) {
+      router.delete(`/admin/mushaf-requests/${requestToDelete.id}`, {
+        onSuccess: () => {
+          showDeleteModal = false;
+          requestToDelete = null;
+        }
+      });
+    }
+  }
+  
+  function cancelDelete() {
+    showDeleteModal = false;
+    requestToDelete = null;
+  }
+  
+  function formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+  
+  function getStatusBadge(status) {
+    const statusMap = {
+      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'reviewed': 'bg-blue-100 text-blue-800 border-blue-200',
+      'approved': 'bg-green-100 text-green-800 border-green-200',
+      'rejected': 'bg-red-100 text-red-800 border-red-200',
+      'processed': 'bg-purple-100 text-purple-800 border-purple-200',
+      'completed': 'bg-emerald-100 text-emerald-800 border-emerald-200'
+    };
+    return statusMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+
+  function exportData() {
+    // Build query parameters based on current filters
+    const params = new URLSearchParams();
+
+    if (search) params.append('search', search);
+    if (statusFilter) params.append('status', statusFilter);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    // Create the export URL
+    const exportUrl = `/admin/mushaf-requests-export?${params.toString()}`;
+
+    // Trigger download
+    window.location.href = exportUrl;
+  }
+
+  function downloadTemplate() {
+    window.location.href = '/admin/mushaf-requests-template';
+  }
+
+  function openImportModal() {
+    showImportModal = true;
+  }
+
+  function closeImportModal() {
+    showImportModal = false;
+    importFile = null;
+    if (importFileInput) importFileInput.value = '';
+  }
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+      // Validate file type
+      const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+      if (!validTypes.includes(file.type)) {
+        showError('Format File Tidak Valid', 'Hanya file Excel (.xlsx, .xls) yang diperbolehkan. Hanya file Excel (.xlsx, .xls) yang diperbolehkan.');
+        event.target.value = '';
+        return;
+      }
+
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showError('File Terlalu Besar', 'Ukuran file maksimal 10MB. Maksimal 10MB.');
+        event.target.value = '';
+        return;
+      }
+
+      importFile = file;
+    }
+  }
+
+  function submitImport() {
+    if (!importFile) {
+      showWarning('File Belum Dipilih', 'Silakan pilih file Excel terlebih dahulu');
+      return;
+    }
+
+    console.log('Submitting import with file:', importFile.name);
+
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+    formData.append('_token', csrfToken);
+
+    router.post('/admin/mushaf-requests-import', formData, {
+      forceFormData: true,
+      preserveState: false,
+      preserveScroll: false,
+      onBefore: () => {
+        console.log('Import started...');
+      },
+      onSuccess: (page) => {
+        console.log('Import success response:', page);
+        closeImportModal();
+      },
+      onError: (errors) => {
+        console.error('Import error:', errors);
+        showError('Error Import', 'Error saat import: ' + (errors.file || errors.message || 'Unknown error'));
+      },
+      onFinish: () => {
+        console.log('Import request finished');
+      }
+    });
+  }
+  // Tutup daftar baris yang gagal. Muat ulang tanpa preserveState supaya
+  // flash 'import_errors' tidak ikut terkirim lagi pada permintaan berikutnya.
+  function tutupDaftarGagal() {
+    router.reload({ preserveScroll: true });
+  }
+
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/mushaf-requests?${params.toString()}`, { preserveScroll: true });
+  }
+
+</script>
+
+<AdminLayout>
+  <!-- Page Header -->
+  <div class="mb-6 lg:mb-8">
+    <div class="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Manajemen Permintaan Mushaf</h2>
+        <p class="text-gray-600">Kelola permintaan mushaf dari lembaga dan pesantren</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          on:click={downloadTemplate}
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 gap-1.5"
+          title="Download template Excel untuk import data"
+        >
+          <HeroIcon name="document-text" class="w-4 h-4" />
+          <span>Template</span>
+        </button>
+        <button
+          on:click={openImportModal}
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 gap-1.5"
+        >
+          <HeroIcon name="arrow-up-tray" class="w-4 h-4" />
+          <span>Import Excel</span>
+        </button>
+        <button
+          on:click={exportData}
+          class="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 gap-1.5"
+        >
+          <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
+          <span>Export Excel</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+    <!-- Distribution Map -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-100 hover:shadow-lg transition-shadow duration-300">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <HeroIcon name="map-pin" class="h-5 w-5 text-[#eb3434]" />
+        <span>Peta Penyebaran Distribusi Al-Qur'an</span>
+      </h3>
+      
+      <!-- Tambahkan card untuk info peta -->
+      <!-- Gunakan gradient dan border untuk peta -->
+      <div class="p-1 bg-gradient-to-r from-[#eb3434] to-[#f59e0b] rounded-lg shadow-lg hover:shadow-xl transition-all duration-300">
+        <div class="bg-white p-4 rounded-lg">
+          <!-- Info Card for Map -->
+          <div class="bg-blue-50 p-3 rounded-lg mb-3 text-sm text-gray-600 border-l-4 border-blue-500">
+            <p>Visualisasi sebaran permintaan mushaf dari lembaga di seluruh Indonesia. Warna pada peta menunjukkan intensitas permintaan per provinsi.</p>
+          </div>
+          
+          <!-- Map Container -->
+          <div id="distribution-map" class="w-full h-[400px] rounded-lg border border-gray-200 bg-gray-100 relative overflow-hidden">
+            <!-- Loading indicator -->
+            <div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg z-10">
+              <div class="text-center">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#eb3434]"></div>
+                <p class="mt-4 text-gray-600">Memuat peta distribusi...</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Legenda kategori pin: diisi oleh addKategoriLegend() -->
+          <div id="peta-kategori-legend" class="legenda-kategori"></div>
+
+          <!-- Legend will be added here by JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6 border border-gray-100 hover:shadow-lg transition-shadow duration-300">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <HeroIcon name="building-office-2" class="h-5 w-5 text-[#eb3434]" />
+        <span>Statistik Distribusi berdasarkan Kategori Lembaga</span>
+      </h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {#each Object.entries(kategoriStats) as [category, data]}
+          <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 rounded-lg bg-red-50 text-[#eb3434] flex items-center justify-center">
+                  <HeroIcon name={ikonKategori(category)} class="w-5 h-5" />
+                </div>
+                <h4 class="font-medium text-gray-800 text-sm">{category}</h4>
+              </div>
+              <span class="text-xs bg-[#eb3434] text-white px-2 py-1 rounded-full">{data.count}</span>
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs">
+                <span class="text-gray-600">Total Mushaf:</span>
+                <span class="font-semibold text-gray-800">{data.totalMushaf.toLocaleString('id-ID')}</span>
+              </div>
+              <div class="flex justify-between text-xs">
+                <span class="text-gray-600">Total IQRA:</span>
+                <span class="font-semibold text-gray-800">{data.totalIqra.toLocaleString('id-ID')}</span>
+              </div>
+              <div class="flex justify-between text-xs border-t border-gray-300 pt-1">
+                <span class="text-gray-700 font-medium">Total:</span>
+                <span class="font-bold text-[#eb3434]">{(data.totalMushaf + data.totalIqra).toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+          </div>
+        {/each}
+      </div>
+      
+      <!-- Summary -->
+      <div class="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-gray-700">Total keseluruhan distribusi:</span>
+          <span class="text-lg font-bold text-blue-700">{totalDistribusi.toLocaleString('id-ID')} unit</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Total</div>
+        <div class="mt-1 text-2xl font-semibold text-gray-900">{stats.total}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Menunggu Review</div>
+        <div class="mt-1 text-2xl font-semibold text-yellow-600">{stats.pending}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Sedang Direview</div>
+        <div class="mt-1 text-2xl font-semibold text-blue-600">{stats.reviewed}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Disetujui</div>
+        <div class="mt-1 text-2xl font-semibold text-green-600">{stats.approved}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Sudah Diproses</div>
+        <div class="mt-1 text-2xl font-semibold text-purple-600">{stats.processed}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div class="text-sm font-medium text-gray-500">Selesai</div>
+        <div class="mt-1 text-2xl font-semibold text-emerald-600">{stats.completed}</div>
+      </div>
+    </div>
+    
+    <!-- Filters & Search -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+      <div class="flex flex-col space-y-4">
+        <!-- Search and Status Filters -->
+        <div class="flex flex-col md:flex-row gap-4">
+          <div class="flex-1">
+            <input
+              type="text"
+              bind:value={search}
+              on:input={handleSearch}
+              placeholder="Cari berdasarkan nama lembaga, nomor resi, provinsi, atau alamat..."
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#eb3434] focus:border-[#eb3434]"
+            />
+          </div>
+          <div class="flex gap-4">
+            <select
+              bind:value={statusFilter}
+              on:change={applyFilters}
+              class="w-48 pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-[#eb3434] focus:border-[#eb3434]"
+            >
+              <option value="">Semua Status</option>
+              <option value="pending">Menunggu Review</option>
+              <option value="reviewed">Sedang Direview</option>
+              <option value="approved">Disetujui</option>
+              <option value="rejected">Ditolak</option>
+              <option value="processed">Sudah Diproses</option>
+              <option value="completed">Selesai</option>
+            </select>
+            <button
+              on:click={resetFilters}
+              class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        
+        <!-- Date Range Filter -->
+        <div class="flex flex-col md:flex-row gap-4">
+          <div class="flex-1">
+            <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Tanggal Mulai</label>
+            <input
+              id="start_date"
+              type="date"
+              bind:value={startDate}
+              on:change={applyFilters}
+              max={currentDate}
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#eb3434] focus:border-[#eb3434]"
+            />
+          </div>
+          <div class="flex-1">
+            <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">Tanggal Akhir</label>
+            <input
+              id="end_date"
+              type="date"
+              bind:value={endDate}
+              on:change={applyFilters}
+              max={currentDate}
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-[#eb3434] focus:border-[#eb3434]"
+            />
+          </div>
+        </div>
+      </div>
+      
+      <!-- Active Filters -->
+      {#if startDate || endDate || statusFilter || search}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {#if search}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
+              <span>Pencarian: {search}</span>
+              <button 
+                on:click={() => { search = ''; applyFilters(); }}
+                class="ml-2 text-blue-600 hover:text-blue-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if statusFilter}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
+              <span>Status: {getStatusText(statusFilter)}</span>
+              <button 
+                on:click={() => { statusFilter = ''; applyFilters(); }}
+                class="ml-2 text-purple-600 hover:text-purple-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if startDate}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
+              <span>Mulai: {startDate}</span>
+              <button 
+                on:click={() => { startDate = ''; applyFilters(); }}
+                class="ml-2 text-blue-600 hover:text-blue-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if endDate}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
+              <span>Sampai: {endDate}</span>
+              <button 
+                on:click={() => { endDate = ''; applyFilters(); }}
+                class="ml-2 text-blue-600 hover:text-blue-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+    
+    <!-- Requests Table -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Informasi Permintaan
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Kontak
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Tanggal
+              </th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {#if mushafRequests.data && mushafRequests.data.length > 0}
+              {#each mushafRequests.data as request}
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4">
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">{request.nama_lembaga}</div>
+                      {#if request.kategori_lembaga}
+                        <div class="text-xs text-gray-500">Kategori: {request.kategori_lembaga}</div>
+                      {/if}
+                      <div class="text-sm text-gray-600">
+                        {#if request.alamat_detail || request.kelurahan_desa || request.kecamatan || request.kota_kabupaten || request.provinsi}
+                          {[request.alamat_detail, request.kelurahan_desa, request.kecamatan, request.kota_kabupaten, request.provinsi].filter(Boolean).join(', ')}
+                        {:else}
+                          {request.alamat_lengkap}
+                        {/if}
+                        {#if request.kode_pos}
+                          <span class="text-xs text-gray-400 ml-1">{request.kode_pos}</span>
+                        {/if}
+                      </div>
+                      <div class="text-xs text-gray-500 mt-1">No. Request: {request.no_request}</div>
+                      <div class="text-xs text-gray-500 flex gap-2">
+                        <span>Mushaf: {request.approved_breakdown?.mushaf ?? request.jumlah_mushaf}</span>
+                        {#if (request.approved_breakdown?.a5 ?? request.jumlah_mushaf_a5) > 0}<span>A5: {request.approved_breakdown?.a5 ?? request.jumlah_mushaf_a5}</span>{/if}
+                        {#if (request.approved_breakdown?.a6 ?? request.jumlah_mushaf_a6) > 0}<span>A6: {request.approved_breakdown?.a6 ?? request.jumlah_mushaf_a6}</span>{/if}
+                        <span>IQRA: {request.approved_breakdown?.iqra ?? request.jumlah_iqra}</span>
+                        <span class="font-medium">Total: {request.approved_breakdown?.total ?? (request.jumlah_mushaf + request.jumlah_iqra)}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div>
+                      <div class="text-sm text-gray-900">{request.nama_pengurus_1}</div>
+                      <div class="text-sm text-gray-500">{request.whatsapp_pengurus_1}</div>
+                      <div class="text-sm text-gray-500">{request.jabatan_pengurus_1}</div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border {getStatusBadge(request.status)}">
+                      <HeroIcon name={getStatusIcon(request.status)} class="w-3.5 h-3.5 mr-1" />
+                      <span>{getStatusText(request.status)}</span>
+                    </span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="text-sm text-gray-900">{formatDate(request.created_at)}</div>
+                  </td>
+                  <td class="px-6 py-4 text-right text-sm font-medium">
+                    <div class="flex justify-end space-x-2">
+                      <button
+                        on:click={() => router.visit(`/admin/mushaf-requests/${request.id}`)}
+                        class="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
+                        title="Lihat Detail"
+                      >
+                        <HeroIcon name="eye" class="w-4 h-4" />
+                      </button>
+                      {#if request.status !== 'completed'}
+                        <button
+                          on:click={() => confirmDelete(request)}
+                          class="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
+                          title="Hapus"
+                        >
+                          <HeroIcon name="trash" class="w-4 h-4" />
+                        </button>
+                      {/if}
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            {:else}
+              <tr>
+                <td colspan="5" class="px-6 py-12 text-center">
+                  <div class="text-gray-500">
+                    <HeroIcon name="document-text" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p class="text-lg font-medium">Tidak ada permintaan mushaf</p>
+                    <p class="text-sm">Belum ada permintaan mushaf yang masuk</p>
+                  </div>
+                </td>
+              </tr>
+            {/if}
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Pagination -->
+      {#if mushafRequests.links && mushafRequests.links.length > 0 && mushafRequests.total > 0}
+        <div class="px-6 py-4 border-t border-gray-200">
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-500">
+              Menampilkan {mushafRequests.from} - {mushafRequests.to} dari {mushafRequests.total} data
+            </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
+            <div class="flex gap-2">
+              {#each mushafRequests.links as link}
+                <button
+                  class="px-3 py-1 rounded {link.active ? 'bg-[#eb3434] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}"
+                  class:disabled={!link.url}
+                  on:click={() => link.url && router.visit(link.url)}
+                >
+                  {@html link.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+</AdminLayout>
+
+<!-- Delete Confirmation Modal -->
+{#if showDeleteModal}
+  <div class="fixed inset-0 overflow-y-auto" style="z-index: 9999;" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div
+        class="modal-overlay fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        on:click={cancelDelete}
+        on:keydown={(e) => e.key === 'Escape' && cancelDelete()}
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        transition:fade={{ duration: 200 }}
+      ></div>
+
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div
+        class="modal-content inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6"
+        transition:scale={{ duration: 200, start: 0.95 }}
+      >
+        <div class="sm:flex sm:items-start">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+            <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-red-600" />
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+              Hapus Permintaan
+            </h3>
+            <div class="mt-2">
+              <p class="text-sm text-gray-500">
+                Apakah Anda yakin ingin menghapus permintaan ini? Tindakan ini tidak dapat dibatalkan.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            on:click={handleDelete}
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+          >
+            Hapus
+          </button>
+          <button
+            type="button"
+            on:click={cancelDelete}
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#eb3434] sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Import Modal -->
+{#if showImportModal}
+  <div class="fixed inset-0 overflow-y-auto" style="z-index: 9999;" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div
+        class="modal-overlay fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        on:click={closeImportModal}
+        on:keydown={(e) => e.key === 'Escape' && closeImportModal()}
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        transition:fade={{ duration: 200 }}
+      ></div>
+
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div
+        class="modal-content inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6"
+        transition:scale={{ duration: 200, start: 0.95 }}
+      >
+        <div class="sm:flex sm:items-start">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
+            <HeroIcon name="arrow-up-tray" class="h-6 w-6 text-indigo-600" />
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+              Import Data Mushaf Request
+            </h3>
+            <div class="mt-4">
+              <p class="text-sm text-gray-500 mb-4">
+                Upload file Excel (.xlsx atau .xls) untuk import data permintaan mushaf secara bulk.
+              </p>
+
+              <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  on:change={handleFileSelect}
+                  bind:this={importFileInput}
+                  class="hidden"
+                  id="import-file-input"
+                />
+                <label for="import-file-input" class="cursor-pointer">
+                  <HeroIcon name="arrow-up-tray" class="mx-auto h-12 w-12 text-gray-400" />
+                  <p class="mt-2 text-sm text-gray-600">
+                    {importFile ? importFile.name : 'Klik untuk memilih file atau drag & drop'}
+                  </p>
+                  <p class="mt-1 text-xs text-gray-500">
+                    Excel files up to 10MB
+                  </p>
+                </label>
+              </div>
+
+              <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p class="text-xs text-blue-800">
+                  <strong>💡 Tips:</strong> Download template terlebih dahulu untuk format yang benar.
+                  Template berisi <strong>lembar "Data"</strong> untuk diisi dan
+                  <strong>lembar "Panduan Kolom"</strong> yang menjelaskan tiap kolom —
+                  kolomnya sudah disamakan dengan bagian "Informasi Lembaga" pada halaman detail.
+                </p>
+                <p class="mt-2 text-xs text-blue-800">
+                  Hanya <strong>lembar pertama ("Data")</strong> yang dibaca, jadi jangan
+                  memindahkan atau mengganti nama lembar itu. Baris yang belum memenuhi
+                  syarat tidak ikut masuk, dan penyebabnya akan ditampilkan setelah import.
+                </p>
+                <button
+                  type="button"
+                  on:click={downloadTemplate}
+                  class="mt-2 inline-flex items-center text-xs font-medium text-blue-700 underline hover:text-blue-900"
+                >
+                  Download template Excel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-2">
+          <button
+            type="button"
+            on:click={submitImport}
+            disabled={!importFile}
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Import
+          </button>
+          <button
+            type="button"
+            on:click={closeImportModal}
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Daftar baris yang gagal saat import.
+     Datanya sudah dihitung controller sejak awal, tetapi tidak pernah sampai
+     ke sini: middleware tidak meneruskan 'import_errors', jadi pengguna hanya
+     diberi tahu "ada N baris gagal" tanpa tahu baris mana dan kenapa. -->
+{#if $page.props.flash?.import_errors?.length}
+  <div class="fixed inset-0 overflow-y-auto" style="z-index: 9999;" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" on:click={tutupDaftarGagal}></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:p-6">
+        <div class="sm:flex sm:items-start gap-3">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
+            <HeroIcon name="exclamation-triangle" class="h-6 w-6 text-amber-600" />
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+            <h3 class="text-lg font-medium text-gray-900">
+              {$page.props.flash.import_errors.length} Baris Gagal Diimport
+            </h3>
+            <p class="mt-1 text-sm text-gray-500">
+              Baris berikut TIDAK ikut masuk. Perbaiki berkasnya lalu import ulang,
+              atau isi datanya lewat halaman detail.
+            </p>
+
+            <div class="mt-4 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-medium text-gray-500 w-16">Baris</th>
+                    <th class="px-3 py-2 text-left font-medium text-gray-500">Penyebab</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                  {#each $page.props.flash.import_errors as err}
+                    <tr>
+                      <td class="px-3 py-2 text-gray-900 whitespace-nowrap">{err.row ?? '-'}</td>
+                      <td class="px-3 py-2 text-gray-700">{err.error ?? '-'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            on:click={tutupDaftarGagal}
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 sm:w-auto sm:text-sm"
+          >
+            Mengerti
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Flash Messages -->
+<FlashMessage />
+
+<style>
+  .font-cairo {
+    font-family: 'Cairo', 'Noto Sans Arabic', sans-serif;
+  }
+  
+  /* Animasi untuk peta */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  #distribution-map {
+    animation: fadeIn 0.8s ease-in-out;
+    position: relative !important;
+    z-index: 1 !important;
+    isolation: isolate !important;
+    transform: translateZ(0) !important;
+  }
+
+  /* Ensure map and its children stay below modals */
+  #distribution-map,
+  #distribution-map * {
+    z-index: 1 !important;
+  }
+
+  /* Modal z-index hierarchy - overlay behind, content in front */
+  div[role="dialog"] {
+    z-index: 10000 !important;
+  }
+
+  .modal-overlay {
+    z-index: 1 !important;
+    position: absolute !important;
+  }
+
+  .modal-content {
+    z-index: 2 !important;
+    position: relative !important;
+  }
+  
+  
+  /* Styling untuk legenda di luar peta */
+  .map-legend {
+    animation: fadeIn 0.8s ease-in-out;
+  }
+  
+</style>

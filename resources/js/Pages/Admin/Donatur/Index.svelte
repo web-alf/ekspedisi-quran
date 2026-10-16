@@ -1,0 +1,999 @@
+<script>
+  import { router, page } from '@inertiajs/svelte';
+  import { fade, scale } from 'svelte/transition';
+  import AdminLayout from '../../../Layouts/AdminLayout.svelte';
+  import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import PerPageSelector from '../../../Components/PerPageSelector.svelte';
+  import { can } from '../../../utils/permissions.js';
+  import { toast, dialog } from '../../../utils/notifications.js';
+  
+  export let donatur;
+  export let filters = {};
+  export let stats = {};
+  export let perPage = 20;
+  export let perPageOptions = [10, 20, 50, 100, 200];
+  
+  let search = filters.search || '';
+  let kodeDonatur = filters.kode_donatur || '';
+  let startDate = filters.start_date || '';
+  let endDate = filters.end_date || '';
+  
+  // Check specific permissions
+  $: canCreate = can.donatur.create();
+  $: canEdit = can.donatur.update();
+  $: canDelete = can.donatur.delete();
+  $: canImport = can.donatur.import();
+  $: canExport = can.donatur.export();
+
+  // Import modal state
+  let showImportModal = false;
+  let importFile = null;
+  let importFileInput;
+  let importErrors = [];
+  let pratinjau = null;
+
+  // Current date for max date attribute
+  let currentDate = new Date().toISOString().split('T')[0];
+  
+  // Debounce search
+  let searchTimeout;
+  function handleSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      applyFilters();
+    }, 300);
+  }
+  
+  // Debounce kode donatur search
+  let kodeDonaturTimeout;
+  function handleKodeDonaturSearch() {
+    clearTimeout(kodeDonaturTimeout);
+    kodeDonaturTimeout = setTimeout(() => {
+      applyFilters();
+    }, 300);
+  }
+  
+  function applyFilters() {
+    const params = {};
+    if (search) params.search = search;
+    if (kodeDonatur) params.kode_donatur = kodeDonatur;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    
+    router.get('/admin/donatur', params, {
+      preserveState: true,
+      preserveScroll: true
+    });
+  }
+  
+  function resetFilters() {
+    search = '';
+    kodeDonatur = '';
+    startDate = '';
+    endDate = '';
+    router.get('/admin/donatur', {}, { preserveScroll: true });
+  }
+  
+  function handleCreate() {
+    router.visit('/admin/donatur/create');
+  }
+  
+  function handleView(donationId) {
+    router.visit(`/admin/donatur/${donationId}`);
+  }
+  
+  function handleEdit(donationId) {
+    router.visit(`/admin/donatur/${donationId}/edit`);
+  }
+  
+  async function handleDelete(donation) {
+    // Sama seperti di halaman detail: sebutkan apa yang ikut terhapus dan minta kode
+    // donaturnya diketik. Menghapus dari daftar sama permanennya dengan dari detail.
+    const confirmed = await dialog.confirmDeletePermanen({
+      nama: `donatur ${donation.nama_donatur} (${donation.kode_donatur})`,
+      rincian: [
+        `${donation.total_wakaf_items ?? 0} item wakaf`,
+        `${donation.total_pengiriman ?? 0} resi`,
+      ],
+      ketikUntuk: donation.kode_donatur
+    });
+    if (confirmed) {
+      const url = `/admin/donatur/${donation.id}?konfirmasi_kode=${encodeURIComponent(donation.kode_donatur)}`;
+
+      router.delete(url, {
+        onSuccess: () => {
+          toast.success('Donatur berhasil dihapus');
+        },
+        onError: (errors) => {
+          console.error('Delete error:', errors);
+
+          // Display specific error message from backend
+          let errorMessage = 'Gagal menghapus donatur';
+          if (errors.error) {
+            errorMessage = errors.error;
+          }
+
+          toast.error(errorMessage, 'Error', { duration: 8000 });
+        }
+      });
+    }
+  }
+
+  function exportData() {
+    const params = new URLSearchParams();
+
+    if (search) params.append('search', search);
+    if (kodeDonatur) params.append('kode_donatur', kodeDonatur);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const exportUrl = `/admin/donatur-export?${params.toString()}`;
+    window.location.href = exportUrl;
+  }
+
+  function downloadTemplate() {
+    window.location.href = '/admin/donatur-template';
+  }
+
+  function openImportModal() {
+    showImportModal = true;
+  }
+
+  function closeImportModal() {
+    showImportModal = false;
+    importFile = null;
+    importErrors = [];
+    pratinjau = null;
+    if (importFileInput) importFileInput.value = '';
+  }
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Hanya file Excel (.xlsx, .xls) yang diperbolehkan.');
+        event.target.value = '';
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('Ukuran file maksimal 10MB.');
+        event.target.value = '';
+        return;
+      }
+
+      importFile = file;
+      hitungPratinjau(file);
+    }
+  }
+
+  // Membaca berkas lebih dulu untuk menunjukkan berapa yang AKAN masuk, sebelum
+  // apa pun tersimpan. Salah ketik jumlah pada puluhan ribu baris tidak lagi
+  // ketahuan setelah impor selesai, tapi sebelum ditekan Import.
+  async function hitungPratinjau(file) {
+    pratinjau = { memuat: true };
+    importErrors = [];
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('_token', csrfToken);
+
+    try {
+      const res = await fetch('/admin/donatur-import-pratinjau', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        pratinjau = null;
+        toast.error(data.message || 'Gagal membaca berkas.');
+        return;
+      }
+
+      pratinjau = {
+        memuat: false,
+        jumlahDonatur: data.jumlah_donatur,
+        jumlahMushaf: data.jumlah_mushaf,
+        a5: data.a5,
+        a6: data.a6,
+        iqra: data.iqra,
+        donaturBaru: data.donatur_baru,
+        donaturAda: data.donatur_ada,
+        perDonatur: data.per_donatur || [],
+        galat: data.galat || [],
+      };
+
+      if (data.galat && data.galat.length > 0) {
+        importErrors = data.galat;
+      }
+    } catch (e) {
+      pratinjau = null;
+      toast.error('Gagal membaca berkas: ' + e.message);
+    }
+  }
+
+  function submitImport() {
+    if (!importFile) {
+      toast.warning('File Belum Dipilih', 'Silakan pilih file Excel terlebih dahulu');
+      return;
+    }
+
+    // Kalau pratinjau menemukan galat, jangan biarkan berkas itu diimpor sebelum
+    // diperbaiki — lebih baik menolak di sini daripada menyimpan data setengah benar.
+    if (pratinjau && pratinjau.galat && pratinjau.galat.length > 0) {
+      toast.warning('Berkas Masih Bermasalah', 'Perbaiki dulu ' + pratinjau.galat.length + ' baris yang dilaporkan.');
+      return;
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+    formData.append('_token', csrfToken);
+
+    router.post('/admin/donatur-import', formData, {
+      forceFormData: true,
+      preserveState: false,
+      preserveScroll: false,
+      onSuccess: () => {
+        closeImportModal();
+      },
+      onError: (errors) => {
+        console.error('Import error:', errors);
+        toast.error('Error saat import: ' + (errors.file || errors.message || 'Unknown error'));
+      }
+    });
+  }
+
+  function formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+  
+  function formatJenisWakaf(jenisArray, donation) {
+    // Ensure donation object exists
+    if (!donation) return '-';
+    
+    // Always display types based on actual counts, regardless of jenis_wakaf_dipilih
+    // This ensures IQRA is shown even if it wasn't in the original selection
+    const labels = [];
+    
+    if (donation.total_a5_count > 0) {
+      labels.push(`A5 (${donation.total_a5_count})`);
+    }
+    if (donation.total_a6_count > 0) {
+      labels.push(`A6 (${donation.total_a6_count})`);
+    }
+    if (donation.total_iqra_count > 0) {
+      labels.push(`IQRA (${donation.total_iqra_count})`);
+    }
+    
+    return labels.length > 0 ? labels.join(', ') : '-';
+  }
+  
+  // Helper function to build pagination URL
+  function buildPaginationUrl(page) {
+    const params = new URLSearchParams();
+    params.set('page', page);
+    
+    // Preserve current filters
+    if (search) params.set('search', search);
+    if (kodeDonatur) params.set('kode_donatur', kodeDonatur);
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    
+    return `/admin/donatur?${params.toString()}`;
+  }
+  // Ganti ukuran halaman: kembali ke halaman 1 supaya pengguna tidak terlempar ke
+  // halaman yang melewati batas.
+  function gantiPerHalaman() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', perPage);
+    params.set('page', '1');
+    router.visit(`/admin/donatur?${params.toString()}`, { preserveScroll: true });
+  }
+
+</script>
+
+<svelte:head>
+  <title>Manajemen Donasi Wakaf - Admin Ekspedisi Qur'an</title>
+</svelte:head>
+
+<AdminLayout>
+  <!-- Page Header -->
+  <div class="mb-6 lg:mb-8">
+    <div class="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
+      <div>
+        <h2 class="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Manajemen Donasi Wakaf</h2>
+        <p class="text-gray-600">Sistem baru: Donatur dapat mewakafkan Al-Qur'an untuk diri sendiri atau orang lain</p>
+      </div>
+      
+      <div class="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
+        {#if canImport}
+          <button
+            on:click={downloadTemplate}
+            class="inline-flex items-center justify-center px-3 py-2 lg:px-4 lg:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors gap-1.5"
+            title="Download template Excel untuk import data"
+          >
+            <HeroIcon name="document-text" class="w-4 h-4" />
+            <span class="hidden sm:inline">Template</span>
+            <span class="sm:hidden">Template</span>
+          </button>
+          <button
+            on:click={openImportModal}
+            class="inline-flex items-center justify-center px-3 py-2 lg:px-4 lg:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors gap-1.5"
+          >
+            <HeroIcon name="arrow-up-tray" class="w-4 h-4" />
+            <span class="hidden sm:inline">Import Excel</span>
+            <span class="sm:hidden">Import</span>
+          </button>
+        {/if}
+        {#if canExport}
+          <button
+            on:click={exportData}
+            class="inline-flex items-center justify-center px-3 py-2 lg:px-4 lg:py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition-colors gap-1.5"
+          >
+            <HeroIcon name="arrow-down-tray" class="w-4 h-4" />
+            <span class="hidden sm:inline">Export Excel</span>
+            <span class="sm:hidden">Export</span>
+          </button>
+        {/if}
+        {#if canCreate}
+          <button
+            on:click={handleCreate}
+            class="bg-[#eb3434] hover:bg-red-600 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+          >
+            <HeroIcon name="plus" class="w-4 h-4" />
+            <span class="hidden sm:inline">Tambah Donasi</span>
+            <span class="sm:hidden">Tambah</span>
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+    
+  <!-- Statistics Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 mb-6">
+    <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+      <div class="flex items-center">
+        <div class="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+          <HeroIcon name="users" class="w-5 h-5 lg:w-6 lg:h-6" />
+        </div>
+        <div class="ml-3 lg:ml-4 min-w-0 flex-1">
+          <p class="text-xs lg:text-sm font-medium text-gray-600 truncate">Total Donatur</p>
+          <p class="text-lg lg:text-2xl font-bold text-gray-900">{stats.total_donatur || 0}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+      <div class="flex items-center">
+        <div class="w-10 h-10 lg:w-12 lg:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600">
+          <HeroIcon name="book-open" class="w-5 h-5 lg:w-6 lg:h-6" />
+        </div>
+        <div class="ml-3 lg:ml-4 min-w-0 flex-1">
+          <p class="text-xs lg:text-sm font-medium text-gray-600 truncate">Total Qur'an A5</p>
+          <p class="text-lg lg:text-2xl font-bold text-gray-900">{stats.total_quran_a5 || 0}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+      <div class="flex items-center">
+        <div class="w-10 h-10 lg:w-12 lg:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 text-purple-600">
+          <HeroIcon name="book-open" class="w-5 h-5 lg:w-6 lg:h-6" />
+        </div>
+        <div class="ml-3 lg:ml-4 min-w-0 flex-1">
+          <p class="text-xs lg:text-sm font-medium text-gray-600 truncate">Total Qur'an A6</p>
+          <p class="text-lg lg:text-2xl font-bold text-gray-900">{stats.total_quran_a6 || 0}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6">
+      <div class="flex items-center">
+        <div class="w-10 h-10 lg:w-12 lg:h-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0 text-orange-600">
+          <HeroIcon name="book-open" class="w-5 h-5 lg:w-6 lg:h-6" />
+        </div>
+        <div class="ml-3 lg:ml-4 min-w-0 flex-1">
+          <p class="text-xs lg:text-sm font-medium text-gray-600 truncate">Total Iqra</p>
+          <p class="text-lg lg:text-2xl font-bold text-gray-900">{stats.total_iqra || 0}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+    
+  <!-- Search & Filter -->
+  <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100 p-4 lg:p-6 mb-6">
+    <div class="space-y-4">
+      <!-- Search Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Search -->
+        <div>
+          <label for="search-donasi" class="block text-sm font-medium text-gray-700 mb-2">Cari Donasi</label>
+          <input
+            type="text"
+            id="search-donasi"
+            bind:value={search}
+            on:input={handleSearch}
+            placeholder="Nama donatur, nomor HP, atau email..."
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+          />
+        </div>
+        
+        <!-- Kode Donatur Filter -->
+        <div>
+          <label for="filter-kode-donatur" class="block text-sm font-medium text-gray-700 mb-2">Filter Kode Donatur</label>
+          <input
+            type="text"
+            id="filter-kode-donatur"
+            bind:value={kodeDonatur}
+            on:input={handleKodeDonaturSearch}
+            placeholder="Masukkan kode donatur..."
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+          />
+        </div>
+      </div>
+      
+      <!-- Date Range Filter and Reset Button -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div>
+          <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">Tanggal Mulai</label>
+          <input
+            id="start_date"
+            type="date"
+            bind:value={startDate}
+            on:change={applyFilters}
+            max={currentDate}
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+          />
+        </div>
+        <div>
+          <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">Tanggal Akhir</label>
+          <input
+            id="end_date"
+            type="date"
+            bind:value={endDate}
+            on:change={applyFilters}
+            max={currentDate}
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434]"
+          />
+        </div>
+        <!-- Reset Button -->
+        <div class="flex items-end">
+          <button
+            on:click={resetFilters}
+            class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+          >
+            Reset Filter
+          </button>
+        </div>
+      </div>
+      
+      <!-- Active Filters -->
+      {#if startDate || endDate || search || kodeDonatur}
+        <div class="flex flex-wrap gap-2">
+          {#if search}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
+              <span>Pencarian: {search}</span>
+              <button 
+                on:click={() => { search = ''; applyFilters(); }}
+                class="ml-2 text-blue-600 hover:text-blue-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if kodeDonatur}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-800">
+              <span>Kode: {kodeDonatur}</span>
+              <button 
+                on:click={() => { kodeDonatur = ''; applyFilters(); }}
+                class="ml-2 text-indigo-600 hover:text-indigo-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if startDate}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
+              <span>Mulai: {startDate}</span>
+              <button 
+                on:click={() => { startDate = ''; applyFilters(); }}
+                class="ml-2 text-green-600 hover:text-green-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+          
+          {#if endDate}
+            <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
+              <span>Sampai: {endDate}</span>
+              <button 
+                on:click={() => { endDate = ''; applyFilters(); }}
+                class="ml-2 text-purple-600 hover:text-purple-800"
+              >
+                &times;
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
+
+  <!-- Donations Table -->
+  <div class="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100">
+    <div class="px-4 lg:px-6 py-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900">Daftar Donasi Wakaf</h3>
+      <p class="text-sm text-gray-500">Total: {donatur.total || 0} donasi</p>
+    </div>
+    
+    <!-- Desktop Table -->
+    <div class="hidden lg:block overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donatur</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakaf</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donasi Terakhir</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {#each donatur.data as donation}
+            <tr class="hover:bg-gray-50">
+              <!-- Donatur Info -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center mr-3">
+                    <span class="text-sm font-medium text-indigo-800">{donation.nama_donatur ? donation.nama_donatur.charAt(0) : 'D'}</span>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium text-gray-900">{donation.nama_donatur || 'Nama tidak tersedia'}</div>
+                    <div class="text-sm text-gray-500">{donation.no_hp || 'No HP tidak tersedia'}</div>
+                    {#if donation.kode_donatur}
+                      <div class="text-xs text-gray-600 font-mono">Kode: {donation.kode_donatur}</div>
+                    {/if}
+                    {#if donation.email}
+                      <div class="text-xs text-gray-400">{donation.email}</div>
+                    {/if}
+                  </div>
+                </div>
+              </td>
+              
+              <!-- Wakaf Info -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-gray-900">{formatJenisWakaf(donation.jenis_wakaf_dipilih, donation)}</div>
+                <div class="text-sm text-gray-500">Total: {(donation.total_a5_count || 0) + (donation.total_a6_count || 0) + (donation.total_iqra_count || 0)} Al-Qur'an</div>
+                <div class="text-xs text-gray-400">
+                  {donation.prayer_mode === 'semua_donatur' ? 'Atas nama donatur' : 'Custom individual'}
+                </div>
+              </td>
+              
+              <!-- Date -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-gray-900">{formatDate(donation.donation_date)}</div>
+                <div class="text-xs text-gray-400">Oleh: {donation.creator?.name || 'Administrator System'}</div>
+              </td>
+              
+              <!-- Status -->
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex flex-wrap gap-1">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {donation.donation_count || 1} donasi
+                  </span>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {(donation.total_a5_count || 0) + (donation.total_a6_count || 0) + (donation.total_iqra_count || 0)} mushaf
+                  </span>
+                </div>
+              </td>
+              
+              <!-- Actions -->
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div class="flex justify-end space-x-2">
+                  <button
+                    on:click={() => handleView(donation.id)}
+                    class="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded transition-colors"
+                    title="Lihat Detail"
+                  >
+                    <HeroIcon name="eye" class="w-4 h-4" />
+                  </button>
+                  {#if canEdit}
+                    <button
+                      on:click={() => handleEdit(donation.id)}
+                      class="text-yellow-600 hover:text-yellow-900 p-1 hover:bg-yellow-50 rounded transition-colors"
+                      title="Edit"
+                    >
+                      <HeroIcon name="pencil-square" class="w-4 h-4" />
+                    </button>
+                  {/if}
+                  {#if canDelete}
+                    <button
+                      on:click={() => handleDelete(donation)}
+                      class="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
+                      title="Hapus"
+                    >
+                      <HeroIcon name="trash" class="w-4 h-4" />
+                    </button>
+                  {/if}
+                </div>
+              </td>
+            </tr>
+          {:else}
+            <tr>
+              <td colspan="5" class="px-6 py-12 text-center">
+                <div class="text-gray-500">
+                  <HeroIcon name="users" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p class="text-lg font-medium">Tidak ada donasi ditemukan</p>
+                  <p class="text-sm">
+                    {#if filters.search}Coba ubah kata kunci pencarian atau{/if}
+                    {#if canCreate}
+                      <button on:click={handleCreate} class="text-blue-600 hover:text-blue-800 underline">tambah donasi baru</button>
+                    {/if}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile Cards -->
+    <div class="lg:hidden">
+      {#each donatur.data as donation}
+        <div class="border-b border-gray-200 p-4 hover:bg-gray-50 transition-colors">
+          <div class="flex items-start space-x-3">
+            <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <span class="text-lg font-medium text-indigo-800">{donation.nama_donatur ? donation.nama_donatur.charAt(0) : 'D'}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                  <h4 class="text-sm font-medium text-gray-900 truncate">{donation.nama_donatur || 'Nama tidak tersedia'}</h4>
+                  <p class="text-xs text-gray-500">{donation.no_hp || 'No HP tidak tersedia'}</p>
+                  {#if donation.kode_donatur}
+                    <p class="text-xs text-gray-600 font-mono">Kode: {donation.kode_donatur}</p>
+                  {/if}
+                  {#if donation.email}
+                    <p class="text-xs text-gray-400 truncate">{donation.email}</p>
+                  {/if}
+                </div>
+                <div class="flex space-x-1 ml-2 flex-shrink-0">
+                  <button
+                    on:click={() => handleView(donation.id)}
+                    class="text-indigo-600 hover:text-indigo-900 p-2 hover:bg-indigo-50 rounded-full transition-colors"
+                    title="Lihat Detail"
+                  >
+                    <HeroIcon name="eye" class="w-4 h-4" />
+                  </button>
+                  {#if canEdit}
+                    <button
+                      on:click={() => handleEdit(donation.id)}
+                      class="text-yellow-600 hover:text-yellow-900 p-2 hover:bg-yellow-50 rounded-full transition-colors"
+                      title="Edit"
+                    >
+                      <HeroIcon name="pencil-square" class="w-4 h-4" />
+                    </button>
+                  {/if}
+                  {#if canDelete}
+                    <button
+                      on:click={() => handleDelete(donation)}
+                      class="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-full transition-colors"
+                      title="Hapus"
+                    >
+                      <HeroIcon name="trash" class="w-4 h-4" />
+                    </button>
+                  {/if}
+                </div>
+              </div>
+              
+              <div class="mt-2">
+                <div class="text-sm text-gray-900">{formatJenisWakaf(donation.jenis_wakaf_dipilih, donation)}</div>
+                <div class="text-sm text-gray-500">Total: {(donation.total_a5_count || 0) + (donation.total_a6_count || 0) + (donation.total_iqra_count || 0)} Al-Qur'an</div>
+              </div>
+              
+              <div class="mt-2 flex flex-wrap gap-1">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {donation.donation_count || 1} donasi
+                </span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {(donation.total_a5_count || 0) + (donation.total_a6_count || 0) + (donation.total_iqra_count || 0)} mushaf
+                </span>
+              </div>
+              
+              <div class="mt-2 text-xs text-gray-500">
+                <div>Tanggal: {formatDate(donation.donation_date)}</div>
+                <div>Oleh: {donation.creator?.name || 'Administrator System'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div class="p-8 text-center">
+          <div class="text-gray-500">
+            <HeroIcon name="users" class="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p class="text-lg font-medium">Tidak ada donasi ditemukan</p>
+            <p class="text-sm">
+              {#if filters.search}Coba ubah kata kunci pencarian atau{/if}
+              <button on:click={handleCreate} class="text-blue-600 hover:text-blue-800 underline">tambah donasi baru</button>
+            </p>
+          </div>
+        </div>
+      {/each}
+    </div>
+    
+    <!-- Pagination -->
+    {#if donatur.last_page > 1}
+      <div class="px-4 sm:px-6 py-4 border-t border-gray-200">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div class="text-sm text-gray-500 text-center sm:text-left">
+            Menampilkan {donatur.from} - {donatur.to} dari {donatur.total} hasil
+          </div>
+            <PerPageSelector bind:perPage options={perPageOptions} id="per_page_tabel" onchange={gantiPerHalaman} />
+          <div class="flex justify-center sm:justify-end items-center space-x-1">
+            <!-- Previous -->
+            {#if donatur.prev_page_url}
+              <button
+                on:click={() => router.visit(donatur.prev_page_url, { preserveScroll: true })}
+                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center gap-1"
+              >
+                <HeroIcon name="chevron-left" class="w-4 h-4" />
+                <span class="hidden sm:inline">Sebelumnya</span>
+                <span class="sm:hidden">Prev</span>
+              </button>
+            {:else}
+              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center gap-1">
+                <HeroIcon name="chevron-left" class="w-4 h-4" />
+                <span class="hidden sm:inline">Sebelumnya</span>
+                <span class="sm:hidden">Prev</span>
+              </span>
+            {/if}
+            
+            <!-- Page Numbers -->
+            {#if donatur.last_page <= 7}
+              <!-- Show all pages if 7 or less -->
+              {#each Array(donatur.last_page) as _, i}
+                {@const pageNum = i + 1}
+                <button
+                  on:click={() => router.visit(buildPaginationUrl(pageNum), { preserveScroll: true })}
+                  class="px-3 py-2 text-sm rounded-md {pageNum === donatur.current_page ? 'bg-red-600 text-white font-medium' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+                >
+                  {pageNum}
+                </button>
+              {/each}
+            {:else}
+              <!-- Show smart pagination for more than 7 pages -->
+              
+              <!-- First page -->
+              <button
+                on:click={() => router.visit(buildPaginationUrl(1), { preserveScroll: true })}
+                class="px-3 py-2 text-sm rounded-md {1 === donatur.current_page ? 'bg-red-600 text-white font-medium' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+              >
+                1
+              </button>
+              
+              <!-- Dots if current page is far from start -->
+              {#if donatur.current_page > 4}
+                <span class="px-2 py-2 text-sm text-gray-400">...</span>
+              {/if}
+              
+              <!-- Pages around current page -->
+              {@const startPage = Math.max(2, donatur.current_page - 1)}
+              {@const endPage = Math.min(donatur.last_page - 1, donatur.current_page + 1)}
+              {#each Array(endPage - startPage + 1).fill().map((_, i) => startPage + i) as pageNum}
+                {#if pageNum !== 1 && pageNum !== donatur.last_page && pageNum >= 2 && pageNum <= donatur.last_page - 1}
+                  <button
+                    on:click={() => router.visit(buildPaginationUrl(pageNum), { preserveScroll: true })}
+                    class="px-3 py-2 text-sm rounded-md {pageNum === donatur.current_page ? 'bg-red-600 text-white font-medium' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+                  >
+                    {pageNum}
+                  </button>
+                {/if}
+              {/each}
+              
+              <!-- Dots if current page is far from end -->
+              {#if donatur.current_page < donatur.last_page - 3}
+                <span class="px-2 py-2 text-sm text-gray-400">...</span>
+              {/if}
+              
+              <!-- Last page -->
+              {#if donatur.last_page > 1}
+                <button
+                  on:click={() => router.visit(buildPaginationUrl(donatur.last_page), { preserveScroll: true })}
+                  class="px-3 py-2 text-sm rounded-md {donatur.last_page === donatur.current_page ? 'bg-red-600 text-white font-medium' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+                >
+                  {donatur.last_page}
+                </button>
+              {/if}
+            {/if}
+            
+            <!-- Next -->
+            {#if donatur.next_page_url}
+              <button
+                on:click={() => router.visit(donatur.next_page_url, { preserveScroll: true })}
+                class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md flex items-center gap-1"
+              >
+                <span class="hidden sm:inline">Selanjutnya</span>
+                <span class="sm:hidden">Next</span>
+                <HeroIcon name="chevron-right" class="w-4 h-4" />
+              </button>
+            {:else}
+              <span class="px-3 py-2 text-sm text-gray-300 cursor-not-allowed rounded-md flex items-center gap-1">
+                <span class="hidden sm:inline">Selanjutnya</span>
+                <span class="sm:hidden">Next</span>
+                <HeroIcon name="chevron-right" class="w-4 h-4" />
+              </span>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Import Modal -->
+  {#if showImportModal}
+    <div class="fixed inset-0 overflow-y-auto" style="z-index: 9999;" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div
+          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+          on:click={closeImportModal}
+          on:keydown={(e) => e.key === 'Escape' && closeImportModal()}
+          role="button"
+          tabindex="0"
+          aria-label="Close modal"
+          transition:fade={{ duration: 200 }}
+        ></div>
+
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        <div
+          class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6"
+          transition:scale={{ duration: 200, start: 0.95 }}
+        >
+          <div class="sm:flex sm:items-start">
+            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10 text-indigo-600">
+              <HeroIcon name="arrow-up-tray" class="h-6 w-6" />
+            </div>
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+              <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                Import Data Donatur
+              </h3>
+              <div class="mt-4">
+                <p class="text-sm text-gray-500 mb-4">
+                  Upload file Excel (.xlsx atau .xls) untuk import data donatur secara bulk.
+                </p>
+
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    on:change={handleFileSelect}
+                    bind:this={importFileInput}
+                    class="hidden"
+                    id="import-file-input"
+                  />
+                  <label for="import-file-input" class="cursor-pointer">
+                    <HeroIcon name="arrow-up-tray" class="mx-auto h-12 w-12 text-gray-400" />
+                    <p class="mt-2 text-sm text-gray-600">
+                      {importFile ? importFile.name : 'Klik untuk memilih file atau drag & drop'}
+                    </p>
+                    <p class="mt-1 text-xs text-gray-500">
+                      Excel files up to 10MB
+                    </p>
+                  </label>
+                </div>
+
+                {#if pratinjau?.memuat}
+                  <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 animate-pulse">
+                    <div class="h-3 w-40 rounded bg-gray-300"></div>
+                    <div class="mt-3 h-3 w-full rounded bg-gray-200"></div>
+                    <div class="mt-2 h-3 w-3/4 rounded bg-gray-200"></div>
+                    <p class="mt-3 text-xs text-gray-500">Membaca berkas…</p>
+                  </div>
+                {:else if pratinjau}
+                  <div class="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                    <p class="text-sm font-medium text-gray-900">Hasil pembacaan berkas</p>
+                    <p class="mt-1 text-xs text-gray-500">Periksa dulu angka di bawah sebelum menekan Import.</p>
+
+                    <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <dt class="text-gray-600">Donatur</dt>
+                      <dd class="text-right font-semibold text-gray-900">{pratinjau.jumlahDonatur}</dd>
+                      <dt class="text-gray-600">Total mushaf</dt>
+                      <dd class="text-right font-semibold text-gray-900">{pratinjau.jumlahMushaf}</dd>
+                      <dt class="pl-4 text-gray-500">A5</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.a5}</dd>
+                      <dt class="pl-4 text-gray-500">A6</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.a6}</dd>
+                      <dt class="pl-4 text-gray-500">Iqra</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.iqra}</dd>
+                      <dt class="text-gray-600">Donatur baru</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.donaturBaru}</dd>
+                      <dt class="text-gray-600">Menambah data lama</dt>
+                      <dd class="text-right text-gray-700">{pratinjau.donaturAda}</dd>
+                    </dl>
+
+                    {#if pratinjau.perDonatur.length > 0}
+                      <details class="mt-3">
+                        <summary class="cursor-pointer text-xs text-gray-600">
+                          Lihat rincian per donatur ({pratinjau.perDonatur.length})
+                        </summary>
+                        <div class="mt-2 max-h-40 overflow-y-auto rounded border border-gray-200">
+                          <table class="w-full text-left text-xs">
+                            {#each pratinjau.perDonatur as d}
+                              <tr class="border-b border-gray-100 last:border-0">
+                                <td class="px-2 py-1 font-mono text-gray-700">{d.kode}</td>
+                                <td class="px-2 py-1 text-gray-500">{d.baris} baris</td>
+                                <td class="px-2 py-1 text-right text-gray-700">{d.mushaf} mushaf</td>
+                                <td class="px-2 py-1 text-right text-gray-500">
+                                  {#if d.wakifBerbeda > 1}{d.wakifBerbeda} nama{/if}
+                                </td>
+                              </tr>
+                            {/each}
+                          </table>
+                        </div>
+                      </details>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if pratinjau?.galat?.length > 0}
+                  <div class="mt-4 rounded-lg border border-gray-200 p-3">
+                    <p class="text-xs font-semibold text-red-700">
+                      {pratinjau.galat.length} baris bermasalah — perbaiki dulu di berkas Excel
+                    </p>
+                    <div class="mt-2 max-h-32 overflow-y-auto">
+                      {#each pratinjau.galat.slice(0, 20) as g}
+                        <p class="text-xs text-red-700">Baris {g.row}: {g.error}</p>
+                      {/each}
+                      {#if pratinjau.galat.length > 20}
+                        <p class="mt-1 text-xs text-gray-500">… dan {pratinjau.galat.length - 20} lagi</p>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+
+                <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p class="text-xs text-blue-800">
+                    <strong>Tips:</strong> Download template terlebih dahulu untuk format yang benar.
+                    Satu donatur boleh ditulis beberapa baris bila mushafnya berbeda nama wakif.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-2">
+            <button
+              type="button"
+              on:click={submitImport}
+              disabled={!importFile}
+              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Import
+            </button>
+            <button
+              type="button"
+              on:click={closeImportModal}
+              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+</AdminLayout>

@@ -1,0 +1,48 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build && cp public/build/.vite/manifest.json public/build/manifest.json",
+        "dev": "vite",
+        "test": "vitest",
+        "test:ui": "vitest --ui",
+        "test:run": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "puppeteer:donatur": "node scripts/puppeteer-donatur-dummy.js --url http://localhost:8000",
+        "puppeteer:batch": "node scripts/puppeteer-donatur-dummy.js --url http://localhost:8000 --batch 5",
+        "puppeteer:complete": "node scripts/puppeteer-donor-complete.js --url http://localhost:8000 --count 5",
+        "puppeteer:mushaf": "node scripts/puppeteer-mushaf-request.js --url http://localhost:8000 --action create --count 3"
+    },
+    "devDependencies": {
+        "@tailwindcss/forms": "^0.5.10",
+        "@tailwindcss/typography": "^0.5.16",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/svelte": "^5.2.8",
+        "@vitest/ui": "^3.2.4",
+        "autoprefixer": "^10.4.21",
+        "axios": "^1.11.0",
+        "concurrently": "^9.0.1",
+        "jsdom": "^27.0.0",
+        "laravel-vite-plugin": "^1.2.0",
+        "postcss": "^8.5.3",
+        "tailwindcss": "^3.4.17",
+        "terser": "^5.43.1",
+        "vite": "^5.4.19",
+        "vitest": "^3.2.4"
+    },
+    "dependencies": {
+        "@inertiajs/svelte": "^2.0.11",
+        "@sveltejs/vite-plugin-svelte": "^3.1.2",
+        "@tinymce/tinymce-svelte": "^3.1.0",
+        "chart.js": "^4.5.0",
+        "clsx": "^2.1.1",
+        "html5-qrcode": "^2.3.8",
+        "leaflet": "^1.9.4",
+        "lucide-svelte": "^0.511.0",
+        "qr-scanner": "^1.4.2",
+        "qrcode": "^1.5.4",
+        "svelte": "^4.2.20",
+        "svelte-tel-input": "^3.6.1",
+        "tailwind-merge": "^3.3.0"
+    }
+}

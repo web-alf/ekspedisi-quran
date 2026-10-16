@@ -1,0 +1,594 @@
+<?php
+
+namespace App\Models;
+
+use App\Services\Cache\StatusPengirimanCache;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+
+class PackingBox extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'daily_packing_task_id',
+        'kode_kerdus',
+        'jenis_quran_id',
+        // LOKASI MUSHAF (2026-10-15). Tanpa baris ini, `PackingBox::create(['gudang_id' =>
+        // ...])` MEMBUANG lokasinya tanpa galat — kerdusnya jadi tanpa gudang walau tugasnya
+        // jelas milik gudang tertentu.
+        'gudang_id',
+        'assigned_user_id',
+        'assignment_type',
+        'is_shared_box',
+        'created_by_supervisor',
+        'target_completion_date',
+        'kapasitas',
+        'jumlah_terisi',
+        'status',
+        'sealed_at',
+        'seal_code',
+        'box_metadata',
+    ];
+
+    protected $casts = [
+        'sealed_at' => 'datetime',
+        'target_completion_date' => 'date',
+        'is_shared_box' => 'boolean',
+        'box_metadata' => 'array',
+    ];
+
+    /**
+     * Status constants
+     */
+    const STATUS_EMPTY = 'empty';
+
+    const STATUS_FILLING = 'filling';
+
+    const STATUS_FULL = 'full';
+
+    const STATUS_SEALED = 'sealed';
+
+    /**
+     * Relationships
+     */
+    public function dailyPackingTask()
+    {
+        return $this->belongsTo(DailyPackingTask::class);
+    }
+
+    public function packingItems()
+    {
+        return $this->hasMany(PackingItem::class);
+    }
+
+    /**
+     * Pindai kerdus sisi distribusi yang TERAKHIR atas kerdus ini.
+     */
+    public function pindaiKerdusTerakhir(): HasOne
+    {
+        return $this->hasOne(PindaiKerdusLog::class)->latestOfMany('id');
+    }
+
+    /**
+     * Gudang tempat kerdus ini berada.
+     *
+     * Relasi, bukan kolom biasa: `packing_boxes.gudang_id` diisi sekali saat kerdus dibuat
+     * (lihat `DailyPackingTask::gudangKerdus()`), lalu tidak lagi bergantung pada tugasnya.
+     */
+    public function gudang(): BelongsTo
+    {
+        return $this->belongsTo(Gudang::class);
+    }
+
+    /**
+     * Berapa eks mushaf di dalam kerdus menurut data.
+     *
+     * `packing_items.quantity` adalah jumlah eks per baris resi — sumber yang paling dekat
+     * dengan isi fisik. `packing_boxes.jumlah_terisi` dipakai sebagai cadangan; keduanya
+     * semestinya sama, tetapi kerdus yang diisi lewat jalur lain bisa saja hanya memperbarui
+     * salah satunya.
+     */
+    public function jumlahEksIsi(): int
+    {
+        $dariItem = $this->relationLoaded('packingItems')
+            ? (int) $this->packingItems->sum('quantity')
+            : (int) $this->packingItems()->sum('quantity');
+
+        return $dariItem > 0 ? $dariItem : (int) $this->jumlah_terisi;
+    }
+
+    /**
+     * Alasan kerdus ini BELUM boleh dimuat ke kurir, atau null bila boleh.
+     *
+     * Syaratnya: verifikasi isi TERAKHIR oleh sisi distribusi berhasil 'cocok', DAN isi
+     * kerdus di data belum berubah sejak verifikasi itu. Yang terakhir yang dihitung —
+     * kerdus yang dulu cocok lalu dipindai ulang dan selisih harus ikut terblokir.
+     */
+    public function alasanBelumBolehDimuat(): ?string
+    {
+        $verifikasi = $this->pindaiKerdusTerakhir;
+
+        if (! $verifikasi || $verifikasi->hasil === null) {
+            return "Kerdus {$this->kode_kerdus} belum diverifikasi isinya oleh distribusi.";
+        }
+
+        if ($verifikasi->hasil === PindaiKerdusLog::HASIL_SELISIH) {
+            return "Kerdus {$this->kode_kerdus} berstatus SELISIH (fisik {$verifikasi->jumlah_fisik} eks, data {$verifikasi->jumlah_mushaf} eks). Bereskan isinya lalu pindai ulang.";
+        }
+
+        if ($verifikasi->jumlah_mushaf !== $this->jumlahEksIsi()) {
+            return "Isi kerdus {$this->kode_kerdus} berubah sejak diverifikasi. Pindai ulang untuk verifikasi.";
+        }
+
+        return null;
+    }
+
+    public function jenisQuran()
+    {
+        return $this->belongsTo(JenisQuran::class, 'jenis_quran_id');
+    }
+
+    public function assignedUser()
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    public function createdBySupervisor()
+    {
+        return $this->belongsTo(User::class, 'created_by_supervisor');
+    }
+
+    public function sharedBoxAssignments()
+    {
+        return $this->hasMany(SharedBoxAssignment::class);
+    }
+
+    /**
+     * Scopes
+     */
+    public function scopeActive($query)
+    {
+        return $query->whereIn('status', [self::STATUS_EMPTY, self::STATUS_FILLING]);
+    }
+
+    public function scopeFilling($query)
+    {
+        return $query->where('status', self::STATUS_FILLING);
+    }
+
+    /**
+     * Get jenis-specific badge styling
+     */
+    public function getJenisBadgeAttribute()
+    {
+        if (! $this->jenisQuran) {
+            return ['class' => 'bg-gray-100 text-gray-800', 'label' => 'Belum ditentukan'];
+        }
+
+        return [
+            'class' => $this->jenisQuran->badge_class,
+            'label' => $this->jenisQuran->nama_jenis,
+        ];
+    }
+
+    public function getRemainingSpaceAttribute()
+    {
+        return $this->kapasitas - $this->jumlah_terisi;
+    }
+
+    public function getIsFullAttribute()
+    {
+        return $this->jumlah_terisi >= $this->kapasitas;
+    }
+
+    public function getIsSealedAttribute()
+    {
+        return $this->status === self::STATUS_SEALED;
+    }
+
+    public function getProgressPercentageAttribute()
+    {
+        if ($this->kapasitas == 0) {
+            return 0;
+        }
+
+        return round(($this->jumlah_terisi / $this->kapasitas) * 100, 2);
+    }
+
+    /**
+     * Methods
+     */
+    public function addItem(Pengiriman $pengiriman, $userId)
+    {
+        return $this->addItemSafe($pengiriman, $userId);
+    }
+
+    /**
+     * Add item to box with race condition safety - enhanced version
+     */
+    public function addItemSafe(Pengiriman $pengiriman, $userId)
+    {
+        return DB::transaction(function () use ($pengiriman, $userId) {
+            // Lock this box record to prevent concurrent modifications
+            $lockedBox = self::where('id', $this->id)->lockForUpdate()->first();
+
+            if (! $lockedBox) {
+                throw new \Exception('Kerdus tidak ditemukan atau sudah dihapus');
+            }
+
+            // Use the locked instance for all operations
+            $this->setRawAttributes($lockedBox->getAttributes());
+            $this->syncOriginal();
+
+            // Capacity validation with locked data
+            if ($this->jumlah_terisi >= $this->kapasitas) {
+                throw new \Exception('Kerdus sudah penuh');
+            }
+
+            if ($this->is_sealed) {
+                throw new \Exception('Kerdus sudah disegel');
+            }
+
+            // Resi yang sedang dalam dokumen perpindahan gudang belum boleh dikemas: saat
+            // dokumennya diterima, lokasi resi pindah ke gudang tujuan sementara kerdusnya
+            // tetap di gudang asal.
+            $kodeTransfer = $pengiriman->kodeTransferMushafTerbukaTerkunci();
+
+            if ($kodeTransfer) {
+                throw new \Exception("Resi {$pengiriman->no_resi} sedang dalam dokumen perpindahan {$kodeTransfer} yang belum diterima. Terima atau batalkan dokumennya dulu.");
+            }
+
+            // Validasi jenis Quran - 1 kerdus hanya 1 jenis
+            if ($this->jenis_quran_id && $this->jenis_quran_id != $pengiriman->jenis_quran_id) {
+                $jenisKerdus = $this->jenisQuran->nama_jenis ?? 'Unknown';
+                $jenisItem = $pengiriman->jenisQuran->nama_jenis ?? 'Unknown';
+                throw new \Exception("Kerdus ini khusus untuk {$jenisKerdus}. Item yang akan dimasukkan adalah {$jenisItem}. Tidak bisa dicampur!");
+            }
+
+            // Set jenis Quran dan update kapasitas jika kerdus masih kosong
+            if (! $this->jenis_quran_id) {
+                $jenisQuran = $pengiriman->jenisQuran;
+                $newCapacity = $jenisQuran ? $jenisQuran->getDefaultCapacity() : 20;
+
+                $this->update([
+                    'jenis_quran_id' => $pengiriman->jenis_quran_id,
+                    'kapasitas' => $newCapacity,
+                ]);
+            }
+
+            // Start filling if empty
+            if ($this->status === self::STATUS_EMPTY) {
+                $this->update(['status' => self::STATUS_FILLING]);
+            }
+
+            // Add item with quantity consideration
+            $quantity = $pengiriman->jumlah_quran ?? 1;
+
+            // Final capacity check with exact numbers
+            if (($this->jumlah_terisi + $quantity) > $this->kapasitas) {
+                $available = $this->kapasitas - $this->jumlah_terisi;
+                throw new \Exception("Tidak cukup ruang di kerdus. Tersedia: {$available}, dibutuhkan: {$quantity}");
+            }
+
+            // Get current count of items with lock to prevent race conditions in sequence
+            $currentItemCount = $this->packingItems()->lockForUpdate()->count();
+
+            $item = $this->packingItems()->create([
+                'pengiriman_id' => $pengiriman->id,
+                'packed_by' => $userId,
+                'packed_at' => now(),
+                'urutan_dalam_box' => $currentItemCount + 1,
+                'quantity' => $quantity,
+            ]);
+
+            // Atomic update of count with explicit locking
+            $this->increment('jumlah_terisi', $quantity);
+
+            // LOKASI MUSHAF (2026-10-15): kerdus adalah bukti fisik lokasi, jadi isi resinya
+            // ikut menyesuaikan. Dua arah:
+            //  1. kerdus belum ber-gudang tapi resinya sudah → kerdus mewarisi (supaya kerdus
+            //     yang dibuat sebelum kolom ini ada tetap bisa terbaca lokasinya);
+            //  2. kerdus sudah ber-gudang → resi mengikuti kerdusnya.
+            // Perubahan lokasi yang BUKAN lewat dokumen perpindahan tetap tercatat di log —
+            // kalau tidak, mushaf bisa "berpindah" tanpa jejak hanya karena dimasukkan kerdus.
+            if (! $this->gudang_id && $pengiriman->gudang_id) {
+                $this->update(['gudang_id' => $pengiriman->gudang_id]);
+            } elseif ($this->gudang_id && (int) $pengiriman->gudang_id !== (int) $this->gudang_id) {
+                if ($pengiriman->gudang_id) {
+                    Log::info('Lokasi mushaf berpindah mengikuti kerdus (bukan lewat dokumen perpindahan)', [
+                        'no_resi' => $pengiriman->no_resi,
+                        'gudang_sebelumnya' => $pengiriman->gudang_id,
+                        'gudang_kerdus' => $this->gudang_id,
+                        'kode_kerdus' => $this->kode_kerdus,
+                    ]);
+                }
+
+                $pengiriman->update(['gudang_id' => $this->gudang_id]);
+            }
+
+            // Re-check capacity after increment to handle edge cases
+            $this->refresh();
+            if ($this->jumlah_terisi >= $this->kapasitas) {
+                $this->markAsFull();
+            }
+
+            return $item;
+        }, 3); // Retry up to 3 times for deadlock resolution
+    }
+
+    /**
+     * Mark box as full
+     */
+    public function markAsFull()
+    {
+        $this->update(['status' => self::STATUS_FULL]);
+
+        // Auto seal if configured
+        if (config('packing.auto_seal_on_full', true)) {
+            $this->seal();
+        }
+    }
+
+    /**
+     * Seal the box
+     * ✅ Transaction-wrapped untuk atomicity
+     */
+    public function seal()
+    {
+        return DB::transaction(function () {
+            // Status dicek pada baris yang DIKUNCI, bukan instance di memori: auto-seal
+            // saat kerdus penuh bisa bersamaan dengan klik "Segel". Tanpa ini, yang
+            // kedua menimpa seal_code yang sudah tercetak di label dan mengaktifkan
+            // kerdus berikutnya dua kali.
+            $terkunci = static::whereKey($this->getKey())->lockForUpdate()->first();
+
+            if (! $terkunci) {
+                return;
+            }
+
+            $this->setRawAttributes($terkunci->getAttributes(), true);
+
+            if ($this->is_sealed) {
+                return;
+            }
+
+            $this->update([
+                'status' => self::STATUS_SEALED,
+                'sealed_at' => now(),
+                'seal_code' => $this->generateSealCode(),
+            ]);
+
+            // Setelah tersegel, isi kerdus bukan lagi "sedang dipacking".
+            // Sebelum ini tidak ada satu pun kode yang menulis status
+            // 'selesai-packing' — akibatnya stok "Siap Distribusi" di Monitor
+            // Gudang selalu 0 dan tahap pengiriman di halaman publik tidak pernah
+            // bergerak sampai admin mengubah statusnya manual satu per satu.
+            $this->advancePackedShipmentsToReady();
+
+            // Activate next box
+            $task = $this->dailyPackingTask;
+            $nextBox = $task?->getNextBox();
+            if ($nextBox) {
+                $nextBox->update(['status' => self::STATUS_FILLING]);
+            }
+        }, 3); // Retry up to 3 times for deadlock
+    }
+
+    /**
+     * Naikkan status pengiriman isi kerdus dari 'packing' ke 'selesai-packing'.
+     *
+     * Hanya pengiriman yang masih berstatus 'packing' yang disentuh: pengiriman
+     * yang sudah lebih jauh (mis. sudah dikirim) tidak boleh mundur, dan
+     * pengiriman yang belum masuk packing tidak ikut terpengaruh.
+     */
+    protected function advancePackedShipmentsToReady(): void
+    {
+        $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
+        $readyStatusId = StatusPengirimanCache::getIdBySlug('selesai-packing');
+
+        if (! $packingStatusId || ! $readyStatusId) {
+            return;
+        }
+
+        $pengirimanIds = $this->packingItems()
+            ->whereHas('pengiriman', fn ($query) => $query->where('status_id', $packingStatusId))
+            ->pluck('pengiriman_id')
+            ->unique()
+            ->values();
+
+        // Syarat status asal diulang di UPDATE: resi yang di sela-sela pembacaan tadi
+        // sudah dimajukan proses lain (mis. ke 'pengiriman') tidak boleh mundur.
+        Pengiriman::whereIn('id', $pengirimanIds)
+            ->where('status_id', $packingStatusId)
+            ->update(['status_id' => $readyStatusId]);
+    }
+
+    /**
+     * Generate unique seal code
+     */
+    private function generateSealCode()
+    {
+        return strtoupper(substr(md5($this->kode_kerdus.now()), 0, 8));
+    }
+
+    /**
+     * Get items with relations
+     */
+    public function getItemsWithDetails()
+    {
+        return $this->packingItems()
+            ->with(['pengiriman' => function ($query) {
+                $query->with(['donatur', 'jenisQuran', 'wakafItem']);
+            }])
+            ->orderBy('urutan_dalam_box')
+            ->get();
+    }
+
+    /**
+     * Get box content summary
+     */
+    public function getContentSummary()
+    {
+        $items = $this->packingItems()->with(['pengiriman.donatur', 'pengiriman.jenisQuran', 'pengiriman.wakafItem', 'packedByUser'])->get();
+
+        return [
+            'total_items' => $items->count(),
+            'jenis_quran' => $this->jenisQuran->nama_jenis ?? 'Belum ditentukan',
+            'items' => $items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'no_resi' => $item->pengiriman->no_resi,
+                    'donatur' => $item->pengiriman->donatur->nama_donatur ?? 'N/A',
+                    'wakif' => $item->pengiriman->wakafItem->wakif_name ?? $item->pengiriman->donatur->nama_donatur ?? 'N/A',
+                    'urutan_dalam_box' => $item->urutan_dalam_box,
+                    'packed_at' => $item->packed_at->format('d/m/Y H:i'),
+                    'packed_by_name' => $item->packedByUser->name ?? 'Unknown',
+                ];
+            }),
+            'box_info' => [
+                'kode_kerdus' => $this->kode_kerdus,
+                'status' => $this->status,
+                'kapasitas' => $this->kapasitas,
+                'terisi' => $this->jumlah_terisi,
+                'progress_percentage' => $this->progress_percentage,
+                'seal_code' => $this->seal_code,
+                'sealed_at' => $this->sealed_at?->format('d/m/Y H:i'),
+                'created_at' => $this->created_at->format('d/m/Y H:i'),
+            ],
+        ];
+    }
+
+    /**
+     * Get box status with color
+     */
+    public function getStatusInfo()
+    {
+        $statusMap = [
+            'empty' => ['label' => 'Kosong', 'color' => 'gray', 'bg' => 'bg-gray-100', 'text' => 'text-gray-800'],
+            'filling' => ['label' => 'Sedang Diisi', 'color' => 'blue', 'bg' => 'bg-blue-100', 'text' => 'text-blue-800'],
+            'full' => ['label' => 'Penuh', 'color' => 'yellow', 'bg' => 'bg-yellow-100', 'text' => 'text-yellow-800'],
+            'sealed' => ['label' => 'Tersegel', 'color' => 'green', 'bg' => 'bg-green-100', 'text' => 'text-green-800'],
+        ];
+
+        return $statusMap[$this->status] ?? $statusMap['empty'];
+    }
+
+    /**
+     * Check if box can accept specific jenis quran
+     */
+    public function canAcceptJenisQuran($jenisQuranId)
+    {
+        // Jika kerdus kosong, bisa terima jenis apapun
+        if (! $this->jenis_quran_id) {
+            return true;
+        }
+
+        // Jika sudah ada jenis, hanya bisa terima jenis yang sama
+        return $this->jenis_quran_id == $jenisQuranId;
+    }
+
+    /**
+     * Get available space for specific jenis quran
+     */
+    public function getAvailableSpaceForJenis($jenisQuranId)
+    {
+        if (! $this->canAcceptJenisQuran($jenisQuranId)) {
+            return 0;
+        }
+
+        return $this->remaining_space;
+    }
+
+    /**
+     * Generate Box QR Code for bulk operations
+     */
+    public function generateBoxQR()
+    {
+        // Simplified: Only box code for cleaner QR
+        return QrCode::format('png')
+            ->size(200)
+            ->margin(1)
+            ->generate($this->kode_kerdus);
+    }
+
+    /**
+     * Get Box QR data as base64 string for embedding in HTML
+     */
+    public function getBoxQRBase64()
+    {
+        return 'data:image/png;base64,'.base64_encode($this->generateBoxQR());
+    }
+
+    /**
+     * Get Box QR data structure for API/JSON responses
+     * Now returns simple string instead of complex JSON
+     */
+    public function getBoxQRData()
+    {
+        // Simplified: Only return box code
+        return $this->kode_kerdus;
+    }
+
+    /**
+     * Ambil kode kerdus dari isi kotak pindai / ketikan petugas.
+     *
+     * Kode kerdus bisa datang sebagai teks polos, JSON pemindai lama, atau teks
+     * berlebih (spasi, tanda kutip, tag). Bentuknya KB-YYYYMMDD-USER-JENIS-NN.
+     *
+     * Ditaruh di model, bukan disalin ke tiap controller: normalisasi yang berbeda
+     * antar halaman berarti kode yang sama jadi kerdus yang berbeda di tiap layar.
+     */
+    public static function kodeDariPindai(string $mentah): string
+    {
+        $teks = trim(strip_tags($mentah));
+
+        $terurai = json_decode($teks, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($terurai)) {
+            $teks = (string) ($terurai['kode_kerdus'] ?? $terurai['box_code'] ?? $teks);
+        }
+
+        if (preg_match('/KB-[A-Z0-9\-]+/i', $teks, $m)) {
+            return strtoupper($m[0]);
+        }
+
+        return $teks;
+    }
+
+    /**
+     * Validate if scanned QR data belongs to this box
+     */
+    public function validateQRData($qrData)
+    {
+        // Handle both old JSON format and new simple format
+        if (is_string($qrData)) {
+            // Try JSON decode for backward compatibility
+            $decoded = json_decode($qrData, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                // Old JSON format
+                return isset($decoded['type']) &&
+                       $decoded['type'] === 'box' &&
+                       isset($decoded['kode_kerdus']) &&
+                       $decoded['kode_kerdus'] === $this->kode_kerdus;
+            }
+
+            // New simple format - just the box code
+            return $qrData === $this->kode_kerdus;
+        }
+
+        // If already array (old format)
+        if (is_array($qrData)) {
+            return isset($qrData['type']) &&
+                   $qrData['type'] === 'box' &&
+                   isset($qrData['kode_kerdus']) &&
+                   $qrData['kode_kerdus'] === $this->kode_kerdus;
+        }
+
+        return false;
+    }
+}

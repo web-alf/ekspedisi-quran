@@ -1,0 +1,732 @@
+<?php
+
+namespace App\Models;
+
+use App\Services\Cache\StatusPengirimanCache;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+class MushafRequest extends Model
+{
+    use HasFactory;
+
+    // Konstanta untuk kategori lembaga
+    public const KATEGORI_LEMBAGA = [
+        'PENDIDIKAN' => [
+            'Pondok Pesantren',
+            'Rumah Tahfidz/Rumah Qur\'an',
+            'TPQ/TPA/Madin',
+            'Sekolah/Madrasah',
+        ],
+        'KOMUNITAS' => [
+            'Masjid/Mushola/Majelis Taklim/Jamaah Masjid',
+            'Masyarakat/Jamaah Alfatihah',
+            'Organisasi/Paguyuban/Event Sosial/Komunitas',
+            'Santri & Karyawan Alfatihah',
+        ],
+        'SOSIAL_PEMERINTAHAN' => [
+            'Yayasan',
+            'Panti Asuhan/Anak Yatim',
+            'RT/RW/Pemerintah Desa/Kecamatan',
+            'Lembaga Lainnya',
+        ],
+        'PENERIMA_KHUSUS' => [
+            'Muallaf',
+            'Penerima Manfaat Khusus Lainnya',
+        ],
+    ];
+
+    public const KATEGORI_LABELS = [
+        'PENDIDIKAN' => 'Lembaga Pendidikan & Pembinaan',
+        'KOMUNITAS' => 'Komunitas & Dakwah Kemasyarakatan',
+        'SOSIAL_PEMERINTAHAN' => 'Lembaga Sosial & Pemerintahan',
+        'PENERIMA_KHUSUS' => 'Penerima Manfaat Khusus',
+    ];
+
+    protected $fillable = [
+        'no_request',
+        'nama_lembaga',
+        'kategori_lembaga',
+        'alamat_lengkap',
+        // New detailed address fields
+        'provinsi',
+        'provinsi_id',
+        'kota_kabupaten',
+        'kota_kabupaten_id',
+        'kecamatan',
+        'kecamatan_id',
+        'kelurahan_desa',
+        'kelurahan_desa_id',
+        'kode_pos',
+        'alamat_detail',
+        'link_gmaps',
+        'latitude',
+        'longitude',
+        // Existing fields
+        'nama_pengurus_1',
+        'jabatan_pengurus_1',
+        'whatsapp_pengurus_1',
+        'nama_pengurus_2',
+        'jabatan_pengurus_2',
+        'whatsapp_pengurus_2',
+        'urgensi_request',
+        'jumlah_mushaf',
+        'jumlah_mushaf_a5',
+        'jumlah_mushaf_a6',
+        'jumlah_iqra',
+        'jumlah_mushaf_approved',
+        'jumlah_mushaf_a5_approved',
+        'jumlah_mushaf_a6_approved',
+        'jumlah_iqra_approved',
+        'catatan_perubahan_jumlah',
+        'jenis_mushaf_diminta',
+        'sumber_info',
+        'foto_santri_path',
+        'foto_lembaga_path',
+        'file_nama_santri_path',
+        'status',
+        'catatan_admin',
+        'approved_at',
+        'rejected_at',
+        'pengiriman_id',
+        'reviewed_by',
+    ];
+
+    protected $casts = [
+        'jenis_mushaf_diminta' => 'array',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
+    ];
+
+    /**
+     * Accessor terhitung yang selalu dikirim ke frontend.
+     *
+     * `approved_breakdown` adalah SATU-SATUNYA sumber angka "disetujui" di UI —
+     * dipakai halaman detail, daftar, modal edit, dan proses ke pengiriman —
+     * supaya seluruh tampilan tidak lagi menampilkan angka yang berbeda-beda.
+     */
+    protected $appends = ['approved_breakdown'];
+
+    /**
+     * Boot method untuk auto-generate no_request
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->no_request)) {
+                $model->no_request = $model->generateUniqueNoRequest();
+            }
+
+            // Auto-generate alamat_lengkap jika fields detail diisi
+            if (empty($model->alamat_lengkap)) {
+                $model->alamat_lengkap = $model->generateAlamatLengkap();
+            }
+        });
+
+        // Jaga agar kolom `jumlah_mushaf_approved` tidak pernah menyimpang dari
+        // pecahannya (A5 + A6 + IQRA). Kolom ini juga berfungsi sebagai penanda
+        // "jumlah disetujui sudah pernah ditetapkan" — lihat has_approved_quantities.
+        static::saving(function ($model) {
+            if ($model->isDirty([
+                'jumlah_mushaf_a5_approved',
+                'jumlah_mushaf_a6_approved',
+                'jumlah_iqra_approved',
+            ])) {
+                $model->jumlah_mushaf_approved = (int) $model->jumlah_mushaf_a5_approved
+                    + (int) $model->jumlah_mushaf_a6_approved
+                    + (int) $model->jumlah_iqra_approved;
+            }
+        });
+
+        static::updating(function ($model) {
+            // Update alamat_lengkap jika ada perubahan di fields detail
+            if ($model->isDirty(['provinsi', 'kota_kabupaten', 'kecamatan', 'kelurahan_desa', 'alamat_detail'])) {
+                $model->alamat_lengkap = $model->generateAlamatLengkap();
+            }
+        });
+    }
+
+    /**
+     * Generate alamat lengkap dari komponen alamat detail
+     */
+    public function generateAlamatLengkap()
+    {
+        $components = array_filter([
+            $this->alamat_detail,
+            $this->kelurahan_desa,
+            $this->kecamatan,
+            $this->kota_kabupaten,
+            $this->provinsi,
+            $this->kode_pos,
+        ]);
+
+        return implode(', ', $components);
+    }
+
+    /**
+     * Generate nomor request unik dengan format REQ-YYYY-XXXXX
+     *
+     * Race-condition safe: memakai database sequence (NoRequestSequence)
+     * dengan lockForUpdate + transaction, sehingga dua permintaan publik
+     * yang datang paralel tidak akan menghasilkan nomor yang sama.
+     */
+    public function generateUniqueNoRequest()
+    {
+        $tahun = (int) date('Y');
+
+        // Ambil nomor berikutnya secara atomic dari sequence table
+        $nextNumber = NoRequestSequence::getNextNumber($tahun);
+
+        return "REQ-{$tahun}-".str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Relationship: Request reviewed by User
+     */
+    public function reviewer()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    /**
+     * Relationship: Request processed to Pengiriman
+     */
+    public function pengiriman()
+    {
+        return $this->belongsTo(Pengiriman::class);
+    }
+
+    /**
+     * SELURUH kiriman permintaan ini (satu mushaf = satu resi = satu QR).
+     *
+     * `pengiriman()` di atas hanya menunjuk kiriman PERTAMA — penunjuk lama yang masih
+     * dipakai halaman lain. Sejak permintaan dipecah per mushaf, satu permintaan bisa
+     * punya puluhan resi, jadi setiap keputusan yang menyangkut KESELURUHAN (permintaan
+     * selesai, tahap pengiriman di halaman publik, ringkasan di halaman detail) harus
+     * lewat relasi ini — bukan lewat satu kiriman pertama.
+     */
+    public function pengirimans(): HasMany
+    {
+        return $this->hasMany(Pengiriman::class, 'mushaf_request_id');
+    }
+
+    /**
+     * Apakah SELURUH kiriman permintaan ini sudah sampai (diterima / dibatalkan)?
+     *
+     * Permintaan yang dipecah jadi 80 resi baru boleh berstatus selesai setelah ke-80-nya
+     * diterima — bukan setelah resi pertama sampai. Resi yang dibatalkan tidak menghalangi
+     * selamanya; ia hanya tidak dihitung.
+     */
+    public function semuaPengirimanDiterima(): bool
+    {
+        $statusDiterima = StatusPengirimanCache::getIdBySlug('diterima');
+        $statusBatal = StatusPengirimanCache::getIdBySlug('batal');
+        $statusSah = array_filter([$statusDiterima, $statusBatal]);
+
+        $resi = $this->pengirimans()->get();
+
+        if ($resi->isEmpty()) {
+            // Data lama: kiriman ditunjuk lewat `pengiriman_id` saja, tanpa
+            // `mushaf_request_id` di kirimannya (kolom itu baru ditulis sejak perbaikan
+            // 2026-10-11). Tanpa cadangan ini, permintaan lama tidak akan pernah selesai.
+            $resi = collect(array_filter([$this->pengiriman]));
+        }
+
+        if ($resi->isEmpty()) {
+            return false;
+        }
+
+        return $resi->every(fn (Pengiriman $kiriman) => in_array((int) $kiriman->status_id, $statusSah, true));
+    }
+
+    /**
+     * Accessors untuk status
+     */
+    public function getStatusLabelAttribute()
+    {
+        return match ($this->status) {
+            'pending' => 'Menunggu Review',
+            'reviewed' => 'Sedang Direview',
+            'approved' => 'Disetujui',
+            'rejected' => 'Ditolak',
+            'processed' => 'Sudah Diproses',
+            'completed' => 'Selesai',
+            default => 'Unknown'
+        };
+    }
+
+    public function getStatusColorAttribute()
+    {
+        return match ($this->status) {
+            'pending' => 'yellow',
+            'reviewed' => 'blue',
+            'approved' => 'green',
+            'rejected' => 'red',
+            'processed' => 'purple',
+            'completed' => 'emerald',
+            default => 'gray'
+        };
+    }
+
+    /**
+     * Accessor untuk total mushaf yang diminta
+     */
+    public function getTotalMushafAttribute()
+    {
+        return $this->jumlah_mushaf_a5 + $this->jumlah_mushaf_a6 + $this->jumlah_iqra;
+    }
+
+    /**
+     * Accessor untuk total mushaf Al-Qur'an saja (A5 + A6)
+     */
+    public function getTotalMushafQuranAttribute()
+    {
+        return $this->jumlah_mushaf_a5 + $this->jumlah_mushaf_a6;
+    }
+
+    /**
+     * Accessor untuk total mushaf yang disetujui
+     */
+    public function getTotalMushafApprovedAttribute()
+    {
+        return $this->approved_breakdown['total'];
+    }
+
+    /**
+     * Accessor untuk total mushaf Al-Qur'an yang disetujui (A5 + A6)
+     */
+    public function getTotalMushafQuranApprovedAttribute()
+    {
+        return $this->approved_breakdown['mushaf'];
+    }
+
+    /**
+     * Angka "disetujui" dalam satu bentuk tunggal untuk seluruh UI.
+     *
+     * Sebelumnya setiap tampilan memakai rumusnya sendiri
+     * (`jumlah_mushaf_approved ?? jumlah_mushaf` di satu tempat,
+     * `total_mushaf_approved` di tempat lain), sehingga satu permintaan bisa
+     * menampilkan beberapa angka berbeda setelah jumlahnya diedit.
+     *
+     * Sumber kebenarannya adalah pecahan A5 + A6 + IQRA. Kolom lama
+     * `jumlah_mushaf_approved` hanya dipakai sebagai penanda apakah angka
+     * disetujui sudah pernah ditetapkan (lihat has_approved_quantities), dan
+     * sudah dijaga agar selalu sama dengan penjumlahan pecahan tersebut.
+     *
+     * @return array{mushaf: int, iqra: int, total: int, a5: int, a6: int, a5_requested: int, a6_requested: int, iqra_requested: int, total_requested: int}
+     */
+    public function getApprovedBreakdownAttribute(): array
+    {
+        $a5Requested = (int) $this->jumlah_mushaf_a5;
+        $a6Requested = (int) $this->jumlah_mushaf_a6;
+        $iqraRequested = (int) $this->jumlah_iqra;
+
+        // Selama jumlah disetujui belum pernah ditetapkan, yang ditampilkan adalah
+        // jumlah yang DIAJUKAN. Data produksi menunjukkan hampir semua permintaan
+        // ada dalam keadaan ini; tanpa fallback, seluruh tampilan akan berubah
+        // menjadi 0 dan tim kehilangan angka yang selama ini mereka lihat.
+        $a5 = $this->has_approved_quantities ? (int) $this->jumlah_mushaf_a5_approved : $a5Requested;
+        $a6 = $this->has_approved_quantities ? (int) $this->jumlah_mushaf_a6_approved : $a6Requested;
+        $iqra = $this->has_approved_quantities ? (int) $this->jumlah_iqra_approved : $iqraRequested;
+
+        return [
+            'mushaf' => $a5 + $a6,
+            'iqra' => $iqra,
+            'total' => $a5 + $a6 + $iqra,
+            'a5' => $a5,
+            'a6' => $a6,
+            'a5_requested' => $a5Requested,
+            'a6_requested' => $a6Requested,
+            'iqra_requested' => $iqraRequested,
+            'total_requested' => $a5Requested + $a6Requested + $iqraRequested,
+        ];
+    }
+
+    /**
+     * Apakah jumlah yang disetujui sudah pernah ditetapkan tim?
+     *
+     * Kolom `jumlah_mushaf_approved` (nullable) dipakai sebagai penanda; kolom
+     * pecahannya NOT NULL default 0 sehingga tidak bisa dipakai untuk membedakan
+     * "belum diisi" dari "disetujui 0".
+     */
+    public function getHasApprovedQuantitiesAttribute(): bool
+    {
+        return ! is_null($this->jumlah_mushaf_approved);
+    }
+
+    /**
+     * Check apakah ada perubahan jumlah antara yang diajukan dan disetujui
+     *
+     * Hanya bermakna setelah jumlah disetujui ditetapkan; sebelum itu selalu
+     * false agar penjaga proses ke pengiriman tidak memblokir permintaan yang
+     * jumlahnya memang belum pernah disesuaikan.
+     */
+    public function getHasQuantityChangeAttribute()
+    {
+        if (! $this->has_approved_quantities) {
+            return false;
+        }
+
+        return $this->approved_breakdown['total'] !== $this->total_mushaf;
+    }
+
+    /**
+     * Get persentase perubahan jumlah
+     */
+    public function getQuantityChangePercentageAttribute()
+    {
+        if ($this->total_mushaf === 0) {
+            return 0;
+        }
+
+        $difference = $this->approved_breakdown['total'] - $this->total_mushaf;
+
+        return round(($difference / $this->total_mushaf) * 100, 2);
+    }
+
+    /**
+     * Accessor untuk daftar jenis mushaf dengan jumlah
+     */
+    public function getJenisMushafListAttribute()
+    {
+        if (! $this->jenis_mushaf_diminta) {
+            return '';
+        }
+
+        $jenis = [];
+        if (in_array('A5', $this->jenis_mushaf_diminta) && $this->jumlah_mushaf_a5 > 0) {
+            $jenis[] = "Al-Qur'an A5 ({$this->jumlah_mushaf_a5} buah)";
+        }
+        if (in_array('A6', $this->jenis_mushaf_diminta) && $this->jumlah_mushaf_a6 > 0) {
+            $jenis[] = "Al-Qur'an A6 ({$this->jumlah_mushaf_a6} buah)";
+        }
+        if (in_array('IQRA', $this->jenis_mushaf_diminta) && $this->jumlah_iqra > 0) {
+            $jenis[] = "IQRA' ({$this->jumlah_iqra} buah)";
+        }
+
+        return implode(', ', $jenis);
+    }
+
+    /**
+     * Accessor untuk alamat lengkap yang terformat
+     */
+    public function getFormattedAddressAttribute()
+    {
+        return $this->generateAlamatLengkap();
+    }
+
+    /**
+     * Accessor untuk koordinat sebagai array
+     */
+    public function getCoordinatesAttribute()
+    {
+        if (! $this->latitude || ! $this->longitude) {
+            return null;
+        }
+
+        return [
+            'lat' => (float) $this->latitude,
+            'lng' => (float) $this->longitude,
+        ];
+    }
+
+    /**
+     * Accessor untuk kategori lembaga dengan emoji
+     */
+    public function getKategoriLembagaWithEmojiAttribute()
+    {
+        $emojiMap = [
+            'Pondok Pesantren' => '🎓 Pondok Pesantren',
+            'Rumah Tahfidz/Rumah Qur\'an' => '🎓 Rumah Tahfidz/Rumah Qur\'an',
+            'TPQ/TPA/Madin' => '🎓 TPQ/TPA/Madin',
+            'Sekolah/Madrasah' => '🎓 Sekolah/Madrasah',
+            'Masjid/Mushola/Majelis Taklim/Jamaah Masjid' => '🕌 Masjid/Mushola/Majelis Taklim/Jamaah Masjid',
+            'Masyarakat/Jamaah Alfatihah' => '🕌 Masyarakat/Jamaah Alfatihah',
+            'Organisasi/Paguyuban/Event Sosial/Komunitas' => '🕌 Organisasi/Paguyuban/Event Sosial/Komunitas',
+            'Santri & Karyawan Alfatihah' => '🕌 Santri & Karyawan Alfatihah',
+            'Yayasan' => '🏛️ Yayasan',
+            'Panti Asuhan/Anak Yatim' => '🏛️ Panti Asuhan/Anak Yatim',
+            'RT/RW/Pemerintah Desa/Kecamatan' => '🏛️ RT/RW/Pemerintah Desa/Kecamatan',
+            'Lembaga Lainnya' => '🏛️ Lembaga Lainnya',
+            'Muallaf' => '🤲 Muallaf',
+            'Penerima Manfaat Khusus Lainnya' => '🤲 Penerima Manfaat Khusus Lainnya',
+        ];
+
+        return $emojiMap[$this->kategori_lembaga] ?? $this->kategori_lembaga;
+    }
+
+    /**
+     * Accessor untuk grup kategori
+     */
+    public function getGrupKategoriAttribute()
+    {
+        foreach (self::KATEGORI_LEMBAGA as $grup => $kategoris) {
+            if (in_array($this->kategori_lembaga, $kategoris)) {
+                return self::KATEGORI_LABELS[$grup];
+            }
+        }
+
+        return 'Lainnya';
+    }
+
+    /**
+     * Statistik distribusi per grup kategori lembaga.
+     *
+     * Dihitung dari SELURUH permintaan berstatus `completed`, bukan dari halaman
+     * yang sedang dibuka. Kartu di halaman daftar dulu menjumlahkan
+     * `mushafRequests.data` — yaitu halaman yang sedang tampil — sehingga selalu
+     * bernilai nol selama halaman itu belum memuat satu pun permintaan selesai.
+     * Daftarnya diurutkan terbaru dulu, sementara yang selesai justru yang paling
+     * lama, jadi kartunya memang selalu kosong.
+     *
+     * Pengelompokan memakai accessor `grup_kategori` sebagai satu-satunya sumber
+     * kebenaran. Peta kategori yang pernah disalin ke frontend menjadi basi —
+     * kategori seperti "Lembaga Lainnya" dan "Muallaf" tidak ada di peta itu,
+     * sehingga permintaannya jatuh ke "Tidak Dikategorikan".
+     *
+     * @return array<string, array{count: int, totalMushaf: int, totalIqra: int}>
+     */
+    public static function statistikGrupKategori(): array
+    {
+        $statistik = [];
+
+        foreach (self::KATEGORI_LABELS as $label) {
+            $statistik[$label] = ['count' => 0, 'totalMushaf' => 0, 'totalIqra' => 0];
+        }
+
+        self::query()
+            ->where('status', 'completed')
+            ->get([
+                'id', 'kategori_lembaga',
+                'jumlah_mushaf_a5', 'jumlah_mushaf_a6', 'jumlah_iqra',
+                'jumlah_mushaf_approved', 'jumlah_mushaf_a5_approved',
+                'jumlah_mushaf_a6_approved', 'jumlah_iqra_approved',
+            ])
+            ->each(function (self $permintaan) use (&$statistik): void {
+                $label = $permintaan->grup_kategori;
+
+                if (! isset($statistik[$label])) {
+                    $statistik[$label] = ['count' => 0, 'totalMushaf' => 0, 'totalIqra' => 0];
+                }
+
+                $angka = $permintaan->approved_breakdown;
+
+                $statistik[$label]['count']++;
+                $statistik[$label]['totalMushaf'] += $angka['mushaf'];
+                $statistik[$label]['totalIqra'] += $angka['iqra'];
+            });
+
+        return $statistik;
+    }
+
+    /**
+     * Accessor untuk check apakah punya koordinat
+     */
+    public function getHasCoordinatesAttribute()
+    {
+        return ! is_null($this->latitude) && ! is_null($this->longitude);
+    }
+
+    /**
+     * URL untuk foto santri
+     */
+    public function getFotoSantriUrlAttribute()
+    {
+        return $this->foto_santri_path ? Storage::url($this->foto_santri_path) : null;
+    }
+
+    /**
+     * URL untuk foto lembaga
+     */
+    public function getFotoLembagaUrlAttribute()
+    {
+        return $this->foto_lembaga_path ? Storage::url($this->foto_lembaga_path) : null;
+    }
+
+    /**
+     * URL untuk file nama santri
+     */
+    public function getFileNamaSantriUrlAttribute()
+    {
+        return $this->file_nama_santri_path ? Storage::url($this->file_nama_santri_path) : null;
+    }
+
+    /**
+     * Scopes
+     */
+    public function scopePending($query)
+    {
+        return $query->where('status', 'pending');
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', 'approved');
+    }
+
+    public function scopeRejected($query)
+    {
+        return $query->where('status', 'rejected');
+    }
+
+    public function scopeProcessed($query)
+    {
+        return $query->where('status', 'processed');
+    }
+
+    public function scopeCompleted($query)
+    {
+        return $query->where('status', 'completed');
+    }
+
+    /**
+     * Scope untuk filtering by kategori lembaga
+     */
+    public function scopeByKategori($query, $kategori)
+    {
+        return $query->where('kategori_lembaga', $kategori);
+    }
+
+    public function scopeByGrupKategori($query, $grup)
+    {
+        $mapping = [
+            'pendidikan' => self::KATEGORI_LEMBAGA['PENDIDIKAN'],
+            'komunitas' => self::KATEGORI_LEMBAGA['KOMUNITAS'],
+            'sosial' => self::KATEGORI_LEMBAGA['SOSIAL_PEMERINTAHAN'],
+            'khusus' => self::KATEGORI_LEMBAGA['PENERIMA_KHUSUS'],
+        ];
+
+        if (isset($mapping[$grup])) {
+            return $query->whereIn('kategori_lembaga', $mapping[$grup]);
+        }
+
+        return $query;
+    }
+
+    public function scopeWithCoordinates($query)
+    {
+        return $query->whereNotNull('latitude')->whereNotNull('longitude');
+    }
+
+    /**
+     * Scope untuk radius search (requires raw SQL)
+     * Menggunakan Haversine formula untuk mencari berdasarkan jarak
+     */
+    public function scopeWithinRadius($query, $latitude, $longitude, $radiusKm = 10)
+    {
+        $haversine = '(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))';
+
+        return $query->select('*')
+            ->selectRaw("{$haversine} AS distance", [$latitude, $longitude, $latitude])
+            ->whereRaw("{$haversine} < ?", [$latitude, $longitude, $latitude, $radiusKm])
+            ->orderBy('distance');
+    }
+
+    /**
+     * Helper methods untuk update status
+     */
+    public function approve($adminId, $catatan = null)
+    {
+        // Guard: hanya request yang masih pending/reviewed yang bisa disetujui.
+        // Mencegah request yang sudah rejected/approved/processed/completed di-approve ulang
+        // (race condition: dua admin approve bersamaan, atau approve setelah reject).
+        return $this->ubahStatusDariTinjauan('disetujui', [
+            'status' => 'approved',
+            'approved_at' => now(),
+            'reviewed_by' => $adminId,
+            'catatan_admin' => $catatan,
+        ]);
+    }
+
+    public function reject($adminId, $catatan)
+    {
+        // Guard: hanya request yang masih pending/reviewed yang bisa ditolak.
+        return $this->ubahStatusDariTinjauan('ditolak', [
+            'status' => 'rejected',
+            'rejected_at' => now(),
+            'reviewed_by' => $adminId,
+            'catatan_admin' => $catatan,
+        ]);
+    }
+
+    /**
+     * Ubah status permintaan yang masih pending/reviewed.
+     *
+     * Status dicek pada baris yang DIKUNCI, bukan pada instance di memori: dulu
+     * CS A menyetujui dan CS B menolak permintaan yang sama hampir bersamaan,
+     * keduanya lolos penjaga, dan penulis terakhir menang.
+     *
+     * @param  array<string, mixed>  $atribut
+     */
+    private function ubahStatusDariTinjauan(string $tindakan, array $atribut): bool
+    {
+        return DB::transaction(function () use ($tindakan, $atribut) {
+            $terkunci = static::whereKey($this->getKey())->lockForUpdate()->firstOrFail();
+
+            $this->setRawAttributes($terkunci->getAttributes(), true);
+
+            if (! in_array($this->status, ['pending', 'reviewed'], true)) {
+                throw new \Exception("Permintaan dengan status {$this->status} tidak dapat {$tindakan}");
+            }
+
+            return $this->update($atribut);
+        });
+    }
+
+    public function markAsProcessed($pengirimanId, $adminId)
+    {
+        return $this->update([
+            'status' => 'processed',
+            'pengiriman_id' => $pengirimanId,
+            'reviewed_by' => $adminId,
+        ]);
+    }
+
+    /**
+     * Helper method untuk geocoding (jika diperlukan integrasi dengan Google Maps API)
+     */
+    public function geocodeAddress()
+    {
+        // Implementasi geocoding bisa ditambahkan di sini
+        // Menggunakan Google Maps Geocoding API atau service lainnya
+        // untuk otomatis mendapatkan koordinat dari alamat
+
+        return [
+            'success' => false,
+            'message' => 'Geocoding not implemented yet',
+        ];
+    }
+
+    /**
+     * Helper method untuk mendapatkan statistik berdasarkan kategori
+     */
+    public static function getKategoriStats()
+    {
+        return [
+            'by_kategori' => static::selectRaw('kategori_lembaga, COUNT(*) as total')
+                ->whereNotNull('kategori_lembaga')
+                ->groupBy('kategori_lembaga')
+                ->orderBy('total', 'desc')
+                ->get(),
+
+            'by_grup_kategori' => [
+                'pendidikan' => static::byGrupKategori('pendidikan')->count(),
+                'komunitas' => static::byGrupKategori('komunitas')->count(),
+                'sosial' => static::byGrupKategori('sosial')->count(),
+                'khusus' => static::byGrupKategori('khusus')->count(),
+            ],
+
+            'total_by_kategori' => static::whereNotNull('kategori_lembaga')->count(),
+            'total_requests' => static::count(),
+        ];
+    }
+}

@@ -1,0 +1,1793 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Enums\PermissionEnum;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ScanStatusRequest;
+use App\Models\Donatur;
+use App\Models\Gudang;
+use App\Models\JenisQuran;
+use App\Models\MushafRequest;
+use App\Models\Pengiriman;
+use App\Models\StatusHistory;
+use App\Models\StatusPengiriman;
+use App\Models\TrackingHistory;
+use App\Models\User;
+use App\Services\Cache\StatusPengirimanCache;
+use App\Support\PengirimanStageVisibility;
+use App\Support\PerPage;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+
+class PengirimanController extends Controller
+{
+    /**
+     * Ukuran halaman yang boleh dipilih pengguna pada tabel pengiriman.
+     *
+     * Bawaannya 20, bukan 100: seratus baris sekaligus membuat tabel berat dan
+     * sulit dibaca, sementara 20 cukup untuk sekali layar gulir. `per_page` dari
+     * permintaan SELALU dipaksa cocok dengan daftar ini, supaya nilai asal-asalan
+     * (?per_page=100000) tidak bisa meminta seluruh tabel sekaligus.
+     *
+     * @var array<int, int>
+     */
+    /** Ukuran halaman kini dipusatkan di App\Support\PerPage supaya seragam dengan tabel lain. */
+    public const UKURAN_HALAMAN = PerPage::OPTIONS;
+
+    public const UKURAN_HALAMAN_BAWAAN = PerPage::DEFAULT;
+
+    /**
+     * Display a listing of pengiriman
+     */
+    public function index(Request $request)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_READ->value);
+
+        // Check if this is a special mode request
+        $mode = $request->get('mode');
+
+        if ($mode === 'generate-qr') {
+            return $this->generateQRPage($request);
+        }
+
+        if ($mode === 'scan-status') {
+            return $this->scanStatus();
+        }
+
+        // Default pengiriman index listing
+        $query = Pengiriman::with([
+            'donatur:id,nama_donatur,kode_donatur,no_hp',
+            'wakafItem:id,pengiriman_id,wakif_name,doa_request,relationship_to_donatur',
+            'jenisQuran:id,nama_jenis,kode_jenis',
+            // LOKASI MUSHAF (2026-10-15): gudang tempat mushaf ini berada, ditampilkan
+            // sebagai kolom & filter di Data Resi.
+            'gudang:id,nama,kode',
+            'status:id,nama,slug,warna',
+            'creator:id,name',
+            'sertifikat:id,pengiriman_id,nomor_sertifikat,generated_at',
+            'mushafRequest:id,pengiriman_id,nama_lembaga,status',
+        ]);
+
+        // Role manager hanya menangani pengiriman yang sudah selesai dikerjakan
+        // gudang. Diterapkan di sini (bukan di tampilan) supaya pencarian,
+        // penomoran baris, dan paginasi ikut tunduk pada batas yang sama.
+        PengirimanStageVisibility::applyToQuery($query, $request->user());
+
+        // Search functionality
+        if ($request->search) {
+            $query->where(function ($q) use ($request) {
+                $q->where('no_resi', 'like', '%'.$request->search.'%')
+                    ->orWhere('nama_penerima', 'like', '%'.$request->search.'%')
+                    ->orWhere('alamat_tujuan', 'like', '%'.$request->search.'%')
+                    ->orWhereHas('donatur', function ($wq) use ($request) {
+                        $wq->where('nama_donatur', 'like', '%'.$request->search.'%')
+                            ->orWhere('kode_donatur', 'like', '%'.$request->search.'%');
+                    });
+            });
+        }
+
+        // Filter by status
+        if ($request->status) {
+            $query->where('status_id', $request->status);
+        }
+
+        // Filter by jenis Qur'an
+        if ($request->jenis_quran) {
+            $query->where('jenis_quran_id', $request->jenis_quran);
+        }
+
+        // Filter by GUDANG (LOKASI MUSHAF). Nilai khusus `belum` = resi yang lokasinya
+        // belum ditentukan — daftar ini yang perlu dibereskan lebih dulu, jadi harus bisa
+        // dicari, bukan hanya ditampilkan sebagai tanda hubung.
+        if ($request->gudang) {
+            $request->gudang === 'belum'
+                ? $query->whereNull('gudang_id')
+                : $query->where('gudang_id', $request->gudang);
+        }
+
+        // Filter by alamat status
+        if ($request->alamat_status) {
+            switch ($request->alamat_status) {
+                case 'sudah_diset':
+                    // Has address and recipient (either from mushaf request or manual input)
+                    $query->whereNotNull('alamat_tujuan')
+                        ->whereNotNull('nama_penerima');
+                    break;
+                case 'belum_diset':
+                    // Missing address or recipient
+                    $query->where(function ($q) {
+                        $q->whereNull('alamat_tujuan')
+                            ->orWhereNull('nama_penerima');
+                    });
+                    break;
+            }
+        }
+
+        // Filter by date range
+        if ($request->tanggal_mulai && $request->tanggal_akhir) {
+            $query->whereBetween('tanggal_wakaf', [$request->tanggal_mulai, $request->tanggal_akhir]);
+        } elseif ($request->tanggal_mulai) {
+            $query->whereDate('tanggal_wakaf', '>=', $request->tanggal_mulai);
+        } elseif ($request->tanggal_akhir) {
+            $query->whereDate('tanggal_wakaf', '<=', $request->tanggal_akhir);
+        }
+
+        // Filter by donatur
+        if ($request->donatur_id) {
+            $query->where('donatur_id', $request->donatur_id);
+        }
+
+        // Sort first (before calculating row numbers)
+        $sortBy = $request->sort_by ?? 'no_resi';
+        $sortOrder = $request->sort_order ?? 'desc';
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Ukuran halaman dipilih pengguna, tetapi hanya dari daftar yang sah.
+        // Nilai di luar daftar jatuh ke bawaan — bukan diteruskan apa adanya, supaya
+        // ?per_page=999999 tidak bisa meminta seluruh tabel sekaligus.
+        $perPage = (int) $request->input('per_page', self::UKURAN_HALAMAN_BAWAAN);
+        if (! in_array($perPage, self::UKURAN_HALAMAN, true)) {
+            $perPage = self::UKURAN_HALAMAN_BAWAAN;
+        }
+
+        $page = 1;
+
+        if ($request->filled('number_from') && $request->filled('number_to')) {
+            // Both from and to specified
+            $numberFrom = max(1, (int) $request->number_from);
+            $numberTo = max($numberFrom, (int) $request->number_to);
+
+            // Calculate which page the "from" number is on
+            $page = (int) ceil($numberFrom / $perPage);
+
+            // Calculate how many items to skip within the page
+            $skipInPage = ($numberFrom - 1) % $perPage;
+
+            // Calculate how many items to take
+            $itemsToTake = ($numberTo - $numberFrom + 1);
+
+            // Get the paginated results
+            $pengiriman = $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
+
+            // Slice the collection to get only the specified range
+            $slicedData = collect($pengiriman->items())->slice($skipInPage, $itemsToTake)->values();
+
+            // Rebuild pagination with sliced data
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                $page,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+
+            // Manually set the 'from' property for correct row numbering
+            $pengiriman->from = $numberFrom;
+
+        } elseif ($request->filled('number_from')) {
+            // Only from specified
+            $numberFrom = max(1, (int) $request->number_from);
+            $page = (int) ceil($numberFrom / $perPage);
+
+            $pengiriman = $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
+
+            // Slice to start from the specified number
+            $skipInPage = ($numberFrom - 1) % $perPage;
+            $slicedData = collect($pengiriman->items())->slice($skipInPage)->values();
+
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                $page,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+
+            // Catatan (diketahui, bukan bug baru): nomor baris di tabel dihitung
+            // frontend sebagai `pengiriman.from + index`. Nilai `from` yang di-set
+            // di sini TIDAK sampai ke frontend, karena
+            // LengthAwarePaginator::toArray() mengirim 'from' => firstItem().
+            // Akibatnya, bila "No. Dari" jatuh di halaman terakhir yang terpotong
+            // (mis. 105 dengan 10 baris per halaman), penomoran baris bisa meleset.
+            // Cara memakainya tetap sama seperti sebelumnya; memperbaikinya perlu
+            // menyentuh paginator, di luar lingkup perubahan ukuran halaman ini.
+            $pengiriman->from = $numberFrom;
+
+        } elseif ($request->filled('number_to')) {
+            // Only to specified - show from beginning to specified number
+            $numberTo = max(1, (int) $request->number_to);
+            $lastPage = (int) ceil($numberTo / $perPage);
+
+            $pengiriman = $query->paginate($perPage, ['*'], 'page', $lastPage)->withQueryString();
+
+            // If we're on the last page, slice to end at the specified number
+            $takeInPage = (($numberTo - 1) % $perPage) + 1;
+            $slicedData = collect($pengiriman->items())->take($takeInPage)->values();
+
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                $lastPage,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+
+        } else {
+            // No number filtering, standard pagination
+            $pengiriman = $query->paginate($perPage)->withQueryString();
+        }
+
+        return Inertia::render('Admin/Pengiriman/Index', [
+            'pengiriman' => $pengiriman,
+            'filters' => $request->only(['search', 'status', 'jenis_quran', 'gudang', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
+            'perPage' => $perPage,
+            'perPageOptions' => self::UKURAN_HALAMAN,
+            // LOKASI MUSHAF: pilihan filter gudang di Data Resi. Selalu dikirim (walau
+            // kosong) supaya filter di halaman tidak crash karena prop hilang.
+            'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
+            // Daftar status untuk pemindahan juga dipusatkan: sebelumnya jalur ini
+            // memuat semua status aktif sendiri, sehingga berbeda isi dari halaman
+            // ubah status dan halaman Muatan.
+            'statusList' => PengirimanStageVisibility::visibleProgressStatuses($request->user()),
+            'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
+            'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
+            'stats' => $this->getOptimizedPengirimanStats($request->user()),
+            'stageVisibility' => PengirimanStageVisibility::frontendContext($request->user()),
+        ]);
+    }
+
+    /**
+     * Get optimized pengiriman statistics using single query
+     * Replaces multiple whereHas calls to prevent N+1 query problem
+     */
+    private function getOptimizedPengirimanStats(?User $user = null)
+    {
+        // Role manager tidak boleh melihat angka tahap awal sama sekali — kalau
+        // tetap dihitung, mereka tahu ada 26.096 pengiriman yang disembunyikan.
+        $restricted = PengirimanStageVisibility::restricts($user);
+
+        try {
+
+            // Single query with conditional aggregation - eliminates N+1 problem
+            $query = \DB::table('pengiriman')
+                ->join('status_pengiriman', 'pengiriman.status_id', '=', 'status_pengiriman.id')
+                ->selectRaw('
+                    COUNT(CASE WHEN status_pengiriman.slug = "pemesanan" THEN 1 END) as pemesanan,
+                    COUNT(CASE WHEN status_pengiriman.slug = "packing" THEN 1 END) as packing,
+                    COUNT(CASE WHEN status_pengiriman.slug = "selesai-packing" THEN 1 END) as selesai_packing,
+                    COUNT(CASE WHEN status_pengiriman.slug = "pengiriman" THEN 1 END) as pengiriman,
+                    COUNT(CASE WHEN status_pengiriman.slug = "diterima" THEN 1 END) as diterima
+                ');
+
+            if ($restricted) {
+                $query->whereIn('status_pengiriman.slug', PengirimanStageVisibility::allowedSlugs());
+            }
+
+            $stats = $query->first();
+
+            $result = [
+                'pemesanan' => (int) $stats->pemesanan,
+                'packing' => (int) $stats->packing,
+                'selesai_packing' => (int) $stats->selesai_packing,
+                'pengiriman' => (int) $stats->pengiriman,
+                'diterima' => (int) $stats->diterima,
+            ];
+
+            return $result;
+        } catch (\Exception $e) {
+            // Fallback to individual queries if optimization fails
+            \Log::warning('Optimized pengiriman stats failed, falling back to individual queries: '.$e->getMessage());
+
+            return [
+                'pemesanan' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'pemesanan'))->count(),
+                'packing' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'packing'))->count(),
+                'selesai_packing' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'selesai-packing'))->count(),
+                'pengiriman' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'pengiriman'))->count(),
+                'diterima' => PengirimanStageVisibility::applyToQuery(Pengiriman::query(), $user)
+                    ->whereHas('status', fn ($q) => $q->where('slug', 'diterima'))->count(),
+            ];
+        }
+    }
+
+    /**
+     * Show the form for editing pengiriman
+     */
+    public function edit(Pengiriman $pengiriman)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE->value);
+
+        abort_unless(
+            PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman),
+            403,
+            'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
+        );
+
+        $pengiriman->load(['donatur', 'jenisQuran', 'status', 'creator', 'wakafItem']);
+
+        // OPTIMIZED: Get approved mushaf requests for address selection with column selection
+        $approvedMushafRequests = MushafRequest::approved()
+            ->where(function ($query) use ($pengiriman) {
+                $query->whereNull('pengiriman_id') // Only those not yet processed
+                    ->orWhere('pengiriman_id', $pengiriman->id); // Or the one linked to this pengiriman
+            })
+            ->select('id', 'no_request', 'nama_lembaga', 'alamat_lengkap', 'nama_pengurus_1', 'whatsapp_pengurus_1')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'no_request' => $request->no_request,
+                    'nama_lembaga' => $request->nama_lembaga,
+                    'alamat_lengkap' => $request->alamat_lengkap,
+                    'nama_pengurus_1' => $request->nama_pengurus_1,
+                    'whatsapp_pengurus_1' => $request->whatsapp_pengurus_1,
+                    'label' => "{$request->no_request} - {$request->nama_lembaga}",
+                    'full_address' => $request->alamat_lengkap,
+                ];
+            });
+
+        return Inertia::render('Admin/Pengiriman/Edit', [
+            'pengiriman' => $pengiriman,
+            // Disaring dengan predikat yang sama seperti penegakan di server;
+            // sebelumnya daftar ini memuat SEMUA status, sehingga form edit
+            // menawarkan tahap yang justru ditolak saat disimpan.
+            'statusList' => PengirimanStageVisibility::visibleProgressStatuses(auth()->user()),
+            'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
+            'approvedMushafRequests' => $approvedMushafRequests,
+        ]);
+    }
+
+    /**
+     * Update pengiriman
+     */
+    public function update(Request $request, Pengiriman $pengiriman)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE->value);
+
+        $request->validate([
+            'status_id' => ['required', 'exists:status_pengiriman,id'],
+            'alamat_tujuan' => ['nullable', 'string', 'max:500'],
+            'nama_penerima' => ['nullable', 'string', 'max:255'],
+            'no_hp_penerima' => ['nullable', 'string', 'max:20'],
+            'catatan' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        try {
+            \DB::beginTransaction();
+
+            // Lock the pengiriman row to prevent concurrent status updates
+            $lockedPengiriman = Pengiriman::where('id', $pengiriman->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedPengiriman) {
+                throw new \Exception('Pengiriman tidak ditemukan');
+            }
+
+            $oldStatus = $lockedPengiriman->status_id;
+
+            // Validate status transition ONLY if status actually changes
+            // (update() also handles address/recipient edits with unchanged status)
+            if ((int) $oldStatus !== (int) $request->status_id) {
+                // Batas tahap juga berlaku di jalur ini. Sebelumnya hanya izin
+                // `shipments.update` yang diperiksa, dan izin itu juga dipegang
+                // gudang/supervisor — sehingga form edit bisa dipakai memindahkan
+                // resi ke tahap yang tertutup bagi role tersebut, menembus batas
+                // yang sudah dipasang di jalur ubah-status dan scan.
+                $statusTujuan = StatusPengiriman::find($request->status_id);
+                if (! $statusTujuan || ! PengirimanStageVisibility::bolehPindahkan(
+                    $request->user(),
+                    $lockedPengiriman,
+                    $statusTujuan
+                )) {
+                    throw new \Exception(
+                        PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan)
+                        ?? 'Anda tidak berwenang memindahkan pengiriman ini ke status tersebut.'
+                    );
+                }
+
+                $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
+                if (! $validTransition['valid']) {
+                    throw new \Exception($validTransition['message']);
+                }
+            }
+
+            // Update pengiriman
+            $lockedPengiriman->update($request->only([
+                'status_id', 'alamat_tujuan', 'nama_penerima',
+                'no_hp_penerima', 'catatan',
+            ]));
+
+            // Log status change if changed
+            if ($lockedPengiriman->wasChanged('status_id')) {
+                StatusHistory::create([
+                    'pengiriman_id' => $lockedPengiriman->id,
+                    'status_from' => $oldStatus,
+                    'status_to' => $lockedPengiriman->status_id,
+                    'catatan' => $request->catatan,
+                    'created_by' => auth()->id(),
+                ]);
+            }
+
+            \DB::commit();
+
+            return redirect()->route('admin.pengiriman.index')
+                ->with('success', "Pengiriman {$lockedPengiriman->no_resi} berhasil diupdate.");
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+
+            return back()->withErrors([
+                'error' => 'Gagal mengupdate pengiriman: '.$e->getMessage(),
+            ])->withInput();
+        }
+    }
+
+    /**
+     * Bulk update status
+     */
+    public function bulkUpdateStatus(Request $request)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_BULK_UPDATE->value);
+
+        // Allow both single file and array of files
+        $validator = \Validator::make($request->all(), [
+            'pengiriman_ids' => ['required', 'array'],
+            'pengiriman_ids.*' => ['exists:pengiriman,id'],
+            'status_id' => ['required', 'exists:status_pengiriman,id'],
+            'catatan' => ['nullable', 'string', 'max:1000'],
+            'lokasi' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Add conditional validation for dokumentasi
+        if ($request->has('dokumentasi')) {
+            if (is_array($request->file('dokumentasi'))) {
+                // Multiple files validation
+                $validator->addRules([
+                    'dokumentasi' => ['array'],
+                    'dokumentasi.*' => ['file', 'image', 'max:10240'],
+                ]);
+            } else {
+                // Single file validation
+                $validator->addRules([
+                    'dokumentasi' => ['file', 'image', 'max:10240'],
+                ]);
+            }
+        }
+
+        $validator->validate();
+
+        try {
+            \DB::beginTransaction();
+
+            // Batas tahap diperiksa SEBELUM baris dikunci. Kalau tidak, memindahkan
+            // resi ke tahap yang terlarang akan menulis riwayat status untuk resi
+            // yang gagal di tengah, meninggalkan jejak palsu.
+            $statusTujuan = StatusPengiriman::find($request->status_id);
+            if (! $statusTujuan || ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusTujuan)) {
+                throw new \Exception(
+                    PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan)
+                    ?? 'Anda tidak berwenang memindahkan pengiriman ke status tersebut.'
+                );
+            }
+
+            $updated = 0;
+            $skipped = 0;
+            $pengirimanList = PengirimanStageVisibility::applyToQuery(
+                Pengiriman::query(),
+                $request->user()
+            )
+                ->whereIn('id', $request->pengiriman_ids)
+                ->lockForUpdate()
+                ->get();
+
+            // Handle multiple file uploads (from camera or file input)
+            $uploadedFiles = [];
+            if ($request->hasFile('dokumentasi')) {
+                \Log::info('Has dokumentasi files');
+                $files = is_array($request->file('dokumentasi'))
+                    ? $request->file('dokumentasi')
+                    : [$request->file('dokumentasi')];
+
+                \Log::info('Files to process', ['count' => count($files)]);
+
+                foreach ($files as $index => $file) {
+                    if ($file && $file->isValid()) {
+                        // Sanitize filename for security
+                        $originalName = $file->getClientOriginalName();
+                        $safeBaseName = \Str::slug(pathinfo($originalName, PATHINFO_FILENAME));
+                        $extension = $file->getClientOriginalExtension();
+
+                        // Validate file extension
+                        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                        if (! in_array(strtolower($extension), $allowedExtensions)) {
+                            throw new \Exception('File type not allowed. Only image files are allowed.');
+                        }
+
+                        // Validate MIME type
+                        $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                        if (! in_array($file->getMimeType(), $allowedMimes)) {
+                            throw new \Exception('Invalid file type detected.');
+                        }
+
+                        $filename = 'bulk_'.time().'_'.$index.'_'.$safeBaseName.'.'.$extension;
+                        $path = $file->storeAs('dokumentasi/bulk', $filename, 'public');
+
+                        $uploadedFiles[] = $path;
+                    }
+                }
+            }
+
+            foreach ($pengirimanList as $pengiriman) {
+                $oldStatus = $pengiriman->status_id;
+
+                // Validate status transition — skip illegal transitions (backwards, final, same)
+                $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
+                if (! $validTransition['valid']) {
+                    \Log::info('Bulk update skipped invalid transition', [
+                        'pengiriman_id' => $pengiriman->id,
+                        'no_resi' => $pengiriman->no_resi,
+                        'status_from' => $oldStatus,
+                        'status_to' => $request->status_id,
+                        'reason' => $validTransition['message'],
+                    ]);
+                    $skipped++;
+
+                    continue;
+                }
+
+                // Update status
+                $pengiriman->update(['status_id' => $request->status_id]);
+
+                // Log status change in StatusHistory
+                StatusHistory::create([
+                    'pengiriman_id' => $pengiriman->id,
+                    'status_from' => $oldStatus,
+                    'status_to' => $request->status_id,
+                    'catatan' => $request->catatan ?? 'Bulk update status',
+                    'created_by' => auth()->id(),
+                ]);
+
+                // Create tracking history for the public tracking page
+                TrackingHistory::create([
+                    'pengiriman_id' => $pengiriman->id,
+                    'status_id' => $request->status_id,
+                    'user_id' => auth()->id(),
+                    'tanggal_update' => now(),
+                    'lokasi' => $request->lokasi,
+                    'keterangan' => $request->catatan ?? 'Bulk update status',
+                    'foto_dokumentasi' => ! empty($uploadedFiles) ? $uploadedFiles : null,
+                ]);
+
+                $updated++;
+            }
+
+            \DB::commit();
+
+            // Return JSON response for AJAX requests
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "{$updated} pengiriman berhasil diupdate statusnya."
+                        .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''),
+                    'data' => [
+                        'updated_count' => $updated,
+                        'skipped_count' => $skipped,
+                        'files_uploaded' => count($uploadedFiles),
+                        'file_paths' => $uploadedFiles,
+                    ],
+                ]);
+            }
+
+            return back()->with('success', "{$updated} pengiriman berhasil diupdate statusnya."
+                .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''));
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+
+            \Log::error('Bulk update status failed: '.$e->getMessage(), [
+                'request' => $request->except(['dokumentasi']),
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal bulk update: '.$e->getMessage(),
+                ], 500);
+            }
+
+            return back()->withErrors([
+                'error' => 'Gagal bulk update: '.$e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Bulk set alamat tujuan
+     */
+    public function bulkSetAlamat(Request $request)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE->value);
+
+        $request->validate([
+            'pengiriman_ids' => ['required', 'array'],
+            'pengiriman_ids.*' => ['exists:pengiriman,id'],
+            'alamat_tujuan' => ['required', 'string', 'max:500'],
+            'nama_penerima' => ['nullable', 'string', 'max:255'],
+            'no_hp_penerima' => ['nullable', 'string', 'max:20'],
+            'nama_lembaga' => ['nullable', 'string', 'max:255'],
+            'mushaf_request_id' => ['nullable', 'integer', 'exists:mushaf_requests,id'],
+        ]);
+
+        try {
+            // Batas tahap juga mengikat di jalur tulis: manager tidak boleh
+            // mengubah pengiriman yang tidak bisa dilihatnya, walau ID-nya dikirim
+            // langsung dari luar tampilan.
+            $visibleIds = PengirimanStageVisibility::applyToQuery(
+                Pengiriman::query(),
+                $request->user()
+            )->whereIn('id', $request->pengiriman_ids)->pluck('id');
+
+            // Satu transaksi: set alamat dan tautan permintaan berhasil atau gagal
+            // bersama. Dulu tanpa transaksi, sehingga kegagalan di tengah
+            // meninggalkan alamat terisi tanpa tautan permintaan.
+            $updated = \DB::transaction(function () use ($request, $visibleIds) {
+                $mushafRequest = null;
+
+                // Permintaan dikunci LEBIH DULU daripada resinya — urutan yang sama
+                // dengan "Proses ke Pengiriman", supaya keduanya tidak saling mengunci
+                // (deadlock). Dicek ulang: dua set alamat (atau set alamat dan "Proses
+                // ke Pengiriman") untuk permintaan yang sama tidak boleh sama-sama
+                // menautkan kirimannya.
+                if ($request->filled('mushaf_request_id')) {
+                    $mushafRequest = MushafRequest::whereKey($request->mushaf_request_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $mushafRequest || $mushafRequest->status !== 'approved' || $mushafRequest->pengiriman_id) {
+                        throw ValidationException::withMessages([
+                            'mushaf_request_id' => 'Permintaan mushaf ini sudah diproses atau belum disetujui. Muat ulang halaman lalu pilih permintaan lain.',
+                        ]);
+                    }
+                }
+
+                // Resi dikunci lalu diperiksa: resi yang SUDAH tertaut ke permintaan
+                // lain (mis. baru saja diklaim "Proses ke Pengiriman" oleh CS lain
+                // setelah daftar ini dibuka) tidak boleh ditimpa alamat & tautannya.
+                $milikPermintaanLain = Pengiriman::whereIn('id', $visibleIds)
+                    ->lockForUpdate()
+                    ->get(['id', 'no_resi', 'mushaf_request_id'])
+                    ->filter(fn (Pengiriman $p) => $p->mushaf_request_id !== null
+                        && (int) $p->mushaf_request_id !== (int) $request->input('mushaf_request_id'));
+
+                if ($milikPermintaanLain->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'pengiriman_ids' => 'Resi '.$milikPermintaanLain->pluck('no_resi')->take(5)->implode(', ')
+                            .($milikPermintaanLain->count() > 5 ? ', ...' : '')
+                            .' sudah tertaut ke permintaan mushaf lain. Muat ulang halaman lalu pilih resi lain.',
+                    ]);
+                }
+
+                $updated = Pengiriman::whereIn('id', $visibleIds)
+                    ->update([
+                        'alamat_tujuan' => $request->alamat_tujuan,
+                        'nama_penerima' => $request->nama_penerima,
+                        'no_hp_penerima' => $request->no_hp_penerima,
+                        'nama_lembaga' => $request->nama_lembaga,
+                    ]);
+
+                // Tautkan permintaan mushaf terpilih ke pengiriman yang baru di-set
+                // alamatnya. Tanpa tautan ini, `PengirimanObserver` tidak akan pernah
+                // menemukan permintaannya saat pengiriman berstatus 'diterima', sehingga
+                // permintaan tidak pernah selesai dan tidak muncul di peta distribusi.
+                if ($mushafRequest) {
+                    $pengirimanId = $visibleIds->sort()->first();
+
+                    if ($pengirimanId) {
+                        Pengiriman::whereIn('id', $visibleIds)
+                            ->update(['mushaf_request_id' => $mushafRequest->id]);
+
+                        $mushafRequest->markAsProcessed($pengirimanId, auth()->id());
+                    }
+                }
+
+                return $updated;
+            });
+
+            return back()->with('success', "{$updated} pengiriman berhasil diset alamat tujuannya.");
+
+        } catch (\Exception $e) {
+            return back()->withErrors([
+                'error' => 'Gagal set alamat: '.$e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Show tracking detail
+     */
+    public function show(Pengiriman $pengiriman)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_READ->value);
+
+        // Manager tidak boleh membuka pengiriman di tahap awal lewat URL
+        // langsung: data itu bukan wewenangnya.
+        abort_unless(
+            PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman),
+            403,
+            'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
+        );
+
+        $pengiriman->load([
+            'donatur', 'wakafItem', 'jenisQuran', 'status', 'creator',
+            'statusHistory.statusFrom', 'statusHistory.statusTo', 'statusHistory.creator',
+        ]);
+
+        return Inertia::render('Admin/Pengiriman/Show', [
+            'pengiriman' => $pengiriman,
+            'statusHistory' => $pengiriman->statusHistory()
+                ->with(['statusFrom', 'statusTo', 'creator'])
+                ->orderBy('created_at', 'desc')
+                ->get(),
+        ]);
+    }
+
+    /**
+     * Show QR Code generation page (from root PengirimanController)
+     */
+    public function generateQRPage(Request $request)
+    {
+        // Izin yang sama dengan tab "Generate QR" (TabNavigation.svelte). Hasil
+        // can() sebelumnya dibuang, sehingga siapa pun pemegang shipments.read
+        // bisa membuka halaman ini lewat URL.
+        abort_unless(
+            auth()->user()->hasAnyPermission([PermissionEnum::QR_GENERATE->value, PermissionEnum::WAREHOUSE_QR_GENERATE->value]),
+            403,
+            'Anda tidak memiliki izin membuat QR.'
+        );
+
+        // Show pengiriman with all active non-final statuses (from pemesanan to pengiriman)
+        $activeStatusIds = array_values(StatusPengirimanCache::getIdsBySlug([
+            'pemesanan',
+            'produksi',
+            'kedatangan',
+            'packing',
+            'selesai-packing',
+            'pengiriman',
+        ]));
+
+        if (empty($activeStatusIds)) {
+            // Fallback to IDs 1-6 if cache lookup fails
+            $activeStatusIds = [1, 2, 3, 4, 5, 6];
+        }
+
+        $query = Pengiriman::with([
+            'donatur:id,nama_donatur,kode_donatur,no_hp',
+            'wakafItem:id,pengiriman_id,wakif_name,doa_request,relationship_to_donatur',
+            'mushafRequest:id,pengiriman_id,nama_lembaga,kategori_lembaga',
+            'jenisQuran:id,nama_jenis,kode_jenis',
+            'status:id,nama,slug,warna',
+            'creator:id,name',
+        ])
+            ->whereIn('status_id', $activeStatusIds) // Filter by all active non-final statuses
+            ->select('id', 'no_resi', 'nama_penerima', 'nama_lembaga', 'no_hp_penerima', 'alamat_tujuan', 'donatur_id', 'wakaf_item_id', 'jenis_quran_id', 'status_id', 'jumlah_quran', 'created_at', 'qr_code_path', 'qr_code_data');
+
+        // Batas tahap role manager juga berlaku di halaman Generate QR — daftarnya
+        // memuat data pengiriman yang sama.
+        PengirimanStageVisibility::applyToQuery($query, $request->user());
+
+        // Search functionality
+        if ($request->search) {
+            $query->where(function ($q) use ($request) {
+                $q->where('no_resi', 'like', '%'.$request->search.'%')
+                    ->orWhere('nama_penerima', 'like', '%'.$request->search.'%')
+                    ->orWhere('alamat_tujuan', 'like', '%'.$request->search.'%')
+                    ->orWhereHas('donatur', function ($wq) use ($request) {
+                        $wq->where('nama_donatur', 'like', '%'.$request->search.'%')
+                            ->orWhere('kode_donatur', 'like', '%'.$request->search.'%');
+                    });
+            });
+        }
+
+        // Date filtering
+        if ($request->start_date) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->end_date) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        // Filter by QR status
+        if ($request->qr_status) {
+            if ($request->qr_status === 'has_qr') {
+                $query->whereNotNull('qr_code_data');
+            } elseif ($request->qr_status === 'no_qr') {
+                $query->whereNull('qr_code_data');
+            }
+        }
+
+        // ✅ ENHANCEMENT: Order first (for row number calculation)
+        $query->orderBy('no_resi', 'desc');
+
+        // ✅ ENHANCEMENT: Handle row number filtering for 500 rows pagination
+        // Ukuran halaman dipilih pengguna, sama seperti daftar pengiriman utama.
+        // Dulu dipatok 500 baris sekaligus — terlalu berat, dan pengguna tidak punya
+        // cara memperkecilnya. Halaman ini menampilkan data pengiriman yang sama,
+        // jadi ukuran halamannya harus seragam.
+        $perPage = (int) $request->input('per_page', self::UKURAN_HALAMAN_BAWAAN);
+        if (! in_array($perPage, self::UKURAN_HALAMAN, true)) {
+            $perPage = self::UKURAN_HALAMAN_BAWAAN;
+        }
+        $page = 1;
+
+        if ($request->filled('number_from') && $request->filled('number_to')) {
+            // Both from and to specified
+            $numberFrom = max(1, (int) $request->number_from);
+            $numberTo = max($numberFrom, (int) $request->number_to);
+
+            // Calculate which page the "from" number is on
+            $page = (int) ceil($numberFrom / $perPage);
+
+            // Calculate how many items to skip within the page
+            $skipInPage = ($numberFrom - 1) % $perPage;
+
+            // Calculate how many items to take
+            $itemsToTake = ($numberTo - $numberFrom + 1);
+
+            // Get the paginated results
+            $pengiriman = $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
+
+            // Slice the collection to get only the specified range
+            $slicedData = collect($pengiriman->items())->slice($skipInPage, $itemsToTake)->values();
+
+            // Rebuild pagination with sliced data
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                $page,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+
+            // Manually set the 'from' property for correct row numbering
+            $pengiriman->from = $numberFrom;
+        } elseif ($request->filled('number_from')) {
+            // Only from specified - show from that number onwards
+            $numberFrom = max(1, (int) $request->number_from);
+            $page = (int) ceil($numberFrom / $perPage);
+            $skipInPage = ($numberFrom - 1) % $perPage;
+
+            $pengiriman = $query->paginate($perPage, ['*'], 'page', $page)->withQueryString();
+
+            $slicedData = collect($pengiriman->items())->slice($skipInPage)->values();
+
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                $page,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+
+            $pengiriman->from = $numberFrom;
+        } elseif ($request->filled('number_to')) {
+            // Only to specified - show from beginning to that number
+            $numberTo = max(1, (int) $request->number_to);
+            $itemsToTake = $numberTo;
+
+            $pengiriman = $query->paginate($perPage)->withQueryString();
+
+            $slicedData = collect($pengiriman->items())->slice(0, $itemsToTake)->values();
+
+            $pengiriman = new LengthAwarePaginator(
+                $slicedData,
+                $pengiriman->total(),
+                $perPage,
+                1,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
+            );
+        } else {
+            // No row number filter - normal pagination with 500 rows
+            $pengiriman = $query->paginate($perPage)->withQueryString();
+        }
+
+        // Transform the paginated data
+        $pengiriman->getCollection()->transform(function ($item) {
+            // Ensure jenis_quran has fallback
+            if (! $item->jenisQuran && $item->jenis_quran_id) {
+                // Try to load missing jenis_quran
+                $jenisQuran = JenisQuran::find($item->jenis_quran_id);
+                if ($jenisQuran) {
+                    $item->setRelation('jenisQuran', $jenisQuran);
+                }
+            }
+
+            // Add fallback data if still missing
+            if (! $item->jenisQuran) {
+                $item->setRelation('jenisQuran', (object) [
+                    'id' => null,
+                    'nama_jenis' => 'Al-Quran Standar',
+                    'kode_jenis' => 'DEFAULT',
+                ]);
+            }
+
+            // Ensure status has fallback
+            if (! $item->status && $item->status_id) {
+                $status = StatusPengiriman::find($item->status_id);
+                if ($status) {
+                    $item->setRelation('status', $status);
+                }
+            }
+
+            // Map to consistent format for frontend
+            return [
+                'id' => $item->id,
+                'no_resi' => $item->no_resi,
+                'nama_penerima' => $item->nama_penerima,
+                'nama_lembaga' => $item->mushafRequest?->nama_lembaga ?? $item->nama_lembaga,
+                'no_hp_penerima' => $item->no_hp_penerima ?? null,
+                'alamat_tujuan' => $item->alamat_tujuan,
+                'jumlah_quran' => $item->jumlah_quran,
+                'created_at' => $item->created_at,
+                'has_qr' => ! empty($item->qr_code_path),
+                'qr_url' => $item->qr_code_path ? \Storage::url($item->qr_code_path) : null,
+                'qr_data' => $item->qr_code_data,
+                'donatur' => $item->donatur ? [
+                    'id' => $item->donatur->id,
+                    'nama_donatur' => $item->donatur->nama_donatur,
+                    'kode_donatur' => $item->donatur->kode_donatur,
+                ] : null,
+                'wakaf_item' => $item->wakafItem ? [
+                    'id' => $item->wakafItem->id,
+                    'wakif_name' => $item->wakafItem->wakif_name,
+                    'doa_request' => $item->wakafItem->doa_request,
+                    'relationship_to_donatur' => $item->wakafItem->relationship_to_donatur,
+                ] : null,
+                'jenisQuran' => [
+                    'id' => $item->jenisQuran->id,
+                    'nama_jenis' => $item->jenisQuran->nama_jenis,
+                    'kode_jenis' => $item->jenisQuran->kode_jenis,
+                ],
+                'status' => $item->status ? [
+                    'id' => $item->status->id,
+                    'nama' => $item->status->nama,
+                    'slug' => $item->status->slug,
+                    'warna' => $item->status->warna,
+                ] : [
+                    'id' => 1,
+                    'nama' => 'Pending',
+                    'slug' => 'pending',
+                    'warna' => 'gray',
+                ],
+            ];
+        });
+
+        // Get counts for all active non-final statuses
+        $totalCount = Pengiriman::whereIn('status_id', $activeStatusIds)->count();
+        $totalWithQR = Pengiriman::whereIn('status_id', $activeStatusIds)
+            ->whereNotNull('qr_code_data')
+            ->count();
+        $totalPendingQR = Pengiriman::whereIn('status_id', $activeStatusIds)
+            ->whereNull('qr_code_data')
+            ->count();
+
+        return Inertia::render('Admin/Pengiriman/GenerateQR', [
+            'pengiriman' => $pengiriman,
+            'filters' => $request->only(['search', 'start_date', 'end_date', 'qr_status', 'number_from', 'number_to', 'per_page']),
+            'perPage' => $perPage,
+            'perPageOptions' => self::UKURAN_HALAMAN,
+            'statusList' => StatusPengiriman::active()->select('id', 'nama', 'slug', 'warna')->get(),
+            'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
+            'stats' => [
+                'total_pengiriman' => $totalCount,
+                'pending_qr' => $totalPendingQR,
+                'has_qr' => $totalWithQR,
+                'status_filter' => 'Semua Status Aktif',
+            ],
+        ]);
+    }
+
+    /**
+     * Show QR Status Scanner page
+     */
+    public function scanStatus()
+    {
+        // Izin yang sama dengan tab "Scan QR" (TabNavigation.svelte).
+        abort_unless(
+            auth()->user()->hasAnyPermission([PermissionEnum::QR_SCAN->value, PermissionEnum::WAREHOUSE_QR_SCAN->value]),
+            403,
+            'Anda tidak memiliki izin memindai QR.'
+        );
+
+        return Inertia::render('Admin/Pengiriman/ScanStatus', [
+            'statusList' => StatusPengiriman::active()
+                ->ordered()
+                ->get(['id', 'nama', 'slug', 'deskripsi', 'warna', 'urutan', 'is_final'])
+                ->map(function ($status) {
+                    return [
+                        'id' => $status->id,
+                        'nama' => $status->nama,
+                        'slug' => $status->slug,
+                        'deskripsi' => $status->deskripsi,
+                        'warna' => $status->warna,
+                        'urutan' => $status->urutan,
+                        'is_final' => $status->is_final,
+                        'icon' => $status->icon, // This will use the getIconAttribute method
+                        'badge_class' => $status->badge_class, // This will use the getBadgeClassAttribute method
+                    ];
+                }),
+        ]);
+    }
+
+    /**
+     * Get pengiriman info and valid next statuses for QR scanner
+     */
+    public function getPengirimanStatusInfo($noResi)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_TRACK->value);
+
+        try {
+            $pengiriman = Pengiriman::where('no_resi', $noResi)
+                ->with(['donatur', 'status', 'jenisQuran', 'wakafItem'])
+                ->first();
+
+            if (! $pengiriman) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
+                ], 404);
+            }
+
+            // Resi mudah ditebak (EQ-YYYY-XXXXX), jadi batas tahap manager harus
+            // berlaku di sini juga — bukan hanya di halaman daftar.
+            if (! PengirimanStageVisibility::isVisible(auth()->user(), $pengiriman)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
+                ], 404);
+            }
+
+            // Get next possible statuses
+            $currentStatus = $pengiriman->status;
+            if (! $currentStatus) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Status pengiriman tidak ditemukan',
+                ], 404);
+            }
+
+            try {
+                $nextStatuses = $this->getNextPossibleStatuses($currentStatus->id);
+
+                // Saring dengan wewenang pengguna, memakai sumber yang sama
+                // dengan halaman ubah status.
+                //
+                // Tanpa ini, endpoint ini MEMBOCORKAN seluruh tahap ke depan:
+                // kurir yang memindai resi akan ditawari tahap gudang, dan
+                // manager tahap yang bukan wewenangnya. Penolakan tetap ada di
+                // server saat menyimpan, tetapi menawarkan pilihan yang pasti
+                // ditolak membuat pengguna menebak-nebak.
+                $nextStatuses = $nextStatuses
+                    ->filter(fn ($status) => $status['id'] === null
+                        || PengirimanStageVisibility::bolehPilihStatus(
+                            auth()->user(),
+                            StatusPengiriman::find($status['id'])
+                        ))
+                    ->values();
+            } catch (ModelNotFoundException $e) {
+                \Log::error('Status not found in getPengirimanStatusInfo', [
+                    'no_resi' => $noResi,
+                    'status_id' => $currentStatus->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Status pengiriman tidak valid',
+                ], 400);
+            }
+
+            return response()->json([
+                'success' => true,
+                'pengiriman' => [
+                    'id' => $pengiriman->id,
+                    'no_resi' => $pengiriman->no_resi,
+                    'donatur' => $pengiriman->donatur->nama_donatur ?? 'Unknown',
+                    'wakif' => $pengiriman->wakafItem->wakif_name ?? $pengiriman->donatur->nama_donatur ?? 'Unknown',
+                    'jenis_quran' => $pengiriman->jenisQuran->nama_jenis ?? 'Unknown',
+                    'jumlah_quran' => $pengiriman->jumlah_quran ?? 0,
+                    'current_status' => [
+                        'id' => $currentStatus->id,
+                        'nama' => $currentStatus->nama,
+                        'slug' => $currentStatus->slug,
+                        'warna' => $currentStatus->warna,
+                        'icon' => $currentStatus->icon,
+                        'urutan' => $currentStatus->urutan,
+                        'is_final' => $currentStatus->is_final,
+                    ],
+                ],
+                'validStatuses' => $nextStatuses,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in getPengirimanStatusInfo: '.$e->getMessage(), [
+                'no_resi' => $noResi,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat mengambil data pengiriman',
+            ], 500);
+        }
+    }
+
+    /**
+     * Update status by QR scan - ENHANCED VERSION WITH FILE UPLOAD
+     */
+    public function updateStatusByScan(ScanStatusRequest $request)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE_STATUS->value);
+
+        try {
+            \Log::info('=== SCAN STATUS UPDATE REQUEST ===');
+            \Log::info('No resi from request', ['no_resi' => $request->no_resi]);
+
+            \DB::beginTransaction();
+
+            // Get validated no_resi (prioritizes QR data if available)
+            $noResi = $request->getValidatedNoResi();
+
+            // Find pengiriman with row lock to prevent concurrent status updates
+            $pengiriman = Pengiriman::where('no_resi', $noResi)
+                ->lockForUpdate()
+                ->with(['donatur', 'status', 'jenisQuran'])
+                ->first();
+
+            if (! $pengiriman) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
+                ], 404);
+            }
+
+            $oldStatus = $pengiriman->status_id;
+
+            // Wewenang atas TUJUAN statusnya, bukan hanya atas aksinya.
+            //
+            // Middleware rute hanya memastikan pengguna boleh mengubah status;
+            // ia tidak tahu status APA yang dituju. Tanpa pemeriksaan ini, kurir
+            // bisa memindahkan resi ke tahap gudang (produksi, packing, dst) —
+            // dan bahkan menandainya "diterima", padahal itu wewenang role
+            // distribusi/manager dengan verifikasi manual.
+            $statusTujuan = StatusPengiriman::find($request->status_id);
+            if ($statusTujuan && ! PengirimanStageVisibility::bolehPilihStatus($request->user(), $statusTujuan)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => PengirimanStageVisibility::alasanTidakBolehPilih($request->user(), $statusTujuan),
+                ], 403);
+            }
+
+            // Validate status transition
+            $validTransition = $this->validateStatusTransition($oldStatus, $request->status_id);
+            if (! $validTransition['valid']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Perubahan status tidak valid: '.$validTransition['message'],
+                ], 400);
+            }
+
+            // Prepare status history data
+            $statusHistoryData = [
+                'pengiriman_id' => $pengiriman->id,
+                'status_from' => $oldStatus,
+                'status_to' => $request->status_id,
+                'catatan' => $request->catatan ?? 'Update via QR Scan',
+                'lokasi' => $request->lokasi,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'created_by' => auth()->id(),
+            ];
+
+            // Handle file uploads
+            $uploadedFiles = [];
+            if ($request->hasFile('dokumentasi')) {
+                foreach ($request->file('dokumentasi') as $index => $file) {
+                    if ($file && $file->isValid()) {
+                        // Generate filename using pengiriman no_resi format
+                        $filename = time().'_'.$index.'.'.$file->getClientOriginalExtension();
+
+                        // Store in directory structure: dokumentasi/{no_resi}/{filename}
+                        $directory = "dokumentasi/{$pengiriman->no_resi}";
+                        $path = $file->storeAs($directory, $filename, 'public');
+
+                        // Add to uploaded files array (simple path format)
+                        $uploadedFiles[] = $path;
+                    }
+                }
+            }
+
+            // Add uploaded files to status history
+            if (! empty($uploadedFiles)) {
+                $statusHistoryData['dokumentasi'] = json_encode($uploadedFiles);
+            }
+
+            // Update pengiriman status
+            $pengiriman->update(['status_id' => $request->status_id]);
+
+            // Create status history record
+            StatusHistory::create($statusHistoryData);
+
+            // Create tracking history record (for public tracking page)
+            TrackingHistory::create([
+                'pengiriman_id' => $pengiriman->id,
+                'status_id' => $request->status_id,
+                'user_id' => auth()->id(),
+                'tanggal_update' => now(),
+                'lokasi' => $request->lokasi,
+                'keterangan' => $request->catatan ?? 'Update via QR Scan',
+                'foto_dokumentasi' => ! empty($uploadedFiles) ? $uploadedFiles : null,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+            ]);
+
+            // Log activity
+            \Log::info('Status updated via QR scan with documentation', [
+                'no_resi' => $pengiriman->no_resi,
+                'old_status' => $oldStatus,
+                'new_status' => $request->status_id,
+                'qr_verified' => $request->isQRVerified(),
+                'lokasi' => $request->lokasi,
+                'files_uploaded' => count($uploadedFiles),
+                'user_id' => auth()->id(),
+                'user_name' => auth()->user()->name,
+            ]);
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Status pengiriman {$pengiriman->no_resi} berhasil diupdate",
+                'data' => [
+                    'no_resi' => $pengiriman->no_resi,
+                    'old_status' => $oldStatus,
+                    'new_status' => $request->status_id,
+                    'qr_verified' => $request->isQRVerified(),
+                    'lokasi' => $request->lokasi,
+                    'files_uploaded' => count($uploadedFiles),
+                    'pengiriman' => [
+                        'id' => $pengiriman->id,
+                        'no_resi' => $pengiriman->no_resi,
+                        'donatur' => $pengiriman->donatur->nama_donatur ?? 'Unknown',
+                        'jenis_quran' => $pengiriman->jenisQuran->nama_jenis ?? 'Unknown',
+                        'jumlah_quran' => $pengiriman->jumlah_quran,
+                        'status' => [
+                            'id' => $pengiriman->status->id,
+                            'nama' => $pengiriman->status->nama,
+                            'warna' => $pengiriman->status->warna ?? 'gray',
+                        ],
+                    ],
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+
+            \Log::error('Update status by scan failed: '.$e->getMessage(), [
+                'request' => $request->except(['dokumentasi']), // Exclude files from log
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem saat update status. Silakan coba lagi.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Validate status transition for scan status updates - ENHANCED VERSION
+     */
+    private function validateStatusTransition($currentStatusId, $newStatusId)
+    {
+        $newStatus = StatusPengiriman::findOrFail($newStatusId);
+        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
+
+        // Always allow changing to 'Batal' status
+        if ($newStatus->slug === 'batal') {
+            return [
+                'valid' => true,
+                'message' => 'Status dapat dibatalkan kapan saja',
+            ];
+        }
+
+        // If status is the same, no need to update
+        if ($currentStatusId == $newStatusId) {
+            return [
+                'valid' => false,
+                'message' => 'Status sudah sama, tidak perlu diupdate',
+            ];
+        }
+
+        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
+
+        // If old status is final, it cannot be changed
+        if ($currentStatus->is_final && $currentStatus->slug !== 'batal') {
+            return [
+                'valid' => false,
+                'message' => 'Status sudah final, tidak bisa diubah',
+            ];
+        }
+
+        // Rombakan tahap gudang (2026-10-13): maju dan MUNDUR di dalam tahap
+        // gudang dibebaskan — inilah yang membuat tombol update kembali
+        // berfungsi untuk resi yang sudah "Proses Packing"/"Selesai Packing".
+        // Melompat keluar dari tahap gudang tetap tunduk pada aturan urutan di
+        // bawah, dan hak PICKING tiap role tetap dijaga
+        // PengirimanStageVisibility::bolehPilihStatus().
+        if (PengirimanStageVisibility::bebasDalamTahapGudang($currentStatus, $newStatus)) {
+            return [
+                'valid' => true,
+                'message' => 'Perpindahan dalam tahap gudang dibebaskan (maju/mundur)',
+            ];
+        }
+
+        // SPECIAL CASE: Allow 'Diterima' from 'Pengiriman' or 'Dokumentasi'
+        if ($newStatus->slug === 'diterima' &&
+            in_array($currentStatus->slug, ['pengiriman', 'selesai-packing'])) {
+            return [
+                'valid' => true,
+                'message' => 'Perubahan ke status diterima valid dari pengiriman/dokumentasi',
+            ];
+        }
+
+        // Normal progression check - don't allow backwards (except special cases above)
+        if ($newStatus->urutan < $currentStatus->urutan && $newStatus->slug !== 'batal') {
+            return [
+                'valid' => false,
+                'message' => 'Tidak dapat mengubah status ke tahap sebelumnya',
+            ];
+        }
+
+        return [
+            'valid' => true,
+            'message' => 'Perubahan status valid',
+        ];
+    }
+
+    /**
+     * Enhanced unified QR scan processing method
+     */
+    public function processScanQR(ScanStatusRequest $request)
+    {
+        auth()->user()->can(PermissionEnum::SHIPMENTS_UPDATE_STATUS->value);
+
+        // Add JSON response header immediately
+        if (! $request->expectsJson()) {
+            $request->headers->set('Accept', 'application/json');
+        }
+
+        try {
+            \Log::info('processScanQR started', [
+                'no_resi' => $request->no_resi,
+                'status_id' => $request->status_id,
+                'user_id' => auth()->id(),
+            ]);
+
+            \DB::beginTransaction();
+
+            // Get validated no_resi (prioritizes QR data if available)
+            $noResi = $request->getValidatedNoResi();
+
+            // Find pengiriman (locked to prevent concurrent status updates)
+            $pengiriman = Pengiriman::where('no_resi', $noResi)
+                ->lockForUpdate()
+                ->with(['donatur', 'status', 'jenisQuran'])
+                ->first();
+
+            if (! $pengiriman) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
+                ], 404);
+            }
+
+            $oldStatus = $pengiriman->status_id;
+            $newStatusId = $request->status_id;
+
+            // Validate status transition
+            $validTransition = $this->validateStatusTransition($oldStatus, $newStatusId);
+            if (! $validTransition['valid']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Perubahan status tidak valid: '.$validTransition['message'],
+                ], 400);
+            }
+
+            // Get new status info
+            $newStatus = StatusPengiriman::findOrFail($newStatusId);
+
+            // Handle file uploads - FIXED: Use same format as working updateStatusWithDocs
+            $dokFiles = [];
+            if ($request->hasFile('dokumentasi')) {
+                \Log::info('Processing files for QR scan...');
+                foreach ($request->file('dokumentasi') as $index => $file) {
+                    if ($file && $file->isValid()) {
+                        // Use same filename pattern as working method
+                        $filename = time().'_'.$index.'.'.$file->getClientOriginalExtension();
+
+                        // Store in same directory structure as working method
+                        $path = $file->storeAs('dokumentasi/'.$pengiriman->no_resi, $filename, 'public');
+
+                        // Add to uploaded files array (simple path format like working method)
+                        $dokFiles[] = $path;
+                        \Log::info('File saved for QR scan', ['path' => $path]);
+                    } else {
+                        \Log::warning('Invalid file at index for QR scan', ['index' => $index]);
+                    }
+                }
+            }
+
+            \Log::info('Final dokFiles array for QR scan', ['dokFiles' => $dokFiles]);
+
+            // Update pengiriman status
+            $pengiriman->update(['status_id' => $newStatusId]);
+
+            // Create tracking history record - FIXED: Use same format as working method
+            TrackingHistory::create([
+                'pengiriman_id' => $pengiriman->id,
+                'status_id' => $newStatusId,
+                'user_id' => auth()->id(),
+                'tanggal_update' => now(),
+                'lokasi' => $request->lokasi,
+                'keterangan' => $request->catatan ?? 'Update via QR Scan',
+                'foto_dokumentasi' => $dokFiles, // Use simple array format like working method
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+            ]);
+
+            // Create status history - FIXED: Add missing StatusHistory creation
+            StatusHistory::create([
+                'pengiriman_id' => $pengiriman->id,
+                'status_from' => $oldStatus,
+                'status_to' => $newStatusId,
+                'catatan' => $request->catatan ?? 'Update via QR Scan',
+                'created_by' => auth()->id(),
+            ]);
+
+            // Log activity
+            \Log::info('Status updated via unified QR scan processor', [
+                'no_resi' => $pengiriman->no_resi,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatusId,
+                'qr_verified' => $request->isQRVerified(),
+                'lokasi' => $request->lokasi,
+                'files_uploaded' => count($dokFiles),
+                'user_id' => auth()->id(),
+                'user_name' => auth()->user()->name,
+            ]);
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Status pengiriman {$pengiriman->no_resi} berhasil diupdate ke {$newStatus->nama}",
+                'data' => [
+                    'no_resi' => $pengiriman->no_resi,
+                    'old_status' => $oldStatus,
+                    'new_status' => $newStatusId,
+                    'lokasi' => $request->lokasi,
+                    'qr_verified' => $request->isQRVerified(),
+                    'files_uploaded' => count($dokFiles),
+                    'file_paths' => $dokFiles, // Return simple paths for debugging
+                    'pengiriman' => [
+                        'id' => $pengiriman->id,
+                        'no_resi' => $pengiriman->no_resi,
+                        'donatur' => $pengiriman->donatur->nama_donatur ?? 'Unknown',
+                        'jenis_quran' => $pengiriman->jenisQuran->nama_jenis ?? 'Unknown',
+                        'jumlah_quran' => $pengiriman->jumlah_quran,
+                        'status' => [
+                            'id' => $newStatus->id,
+                            'nama' => $newStatus->nama,
+                            'warna' => $newStatus->warna ?? 'gray',
+                            'icon' => $newStatus->icon ?? '📦',
+                        ],
+                    ],
+                ],
+            ]);
+
+        } catch (ValidationException $e) {
+            \DB::rollback();
+
+            \Log::warning('Validation failed in processScanQR', [
+                'errors' => $e->errors(),
+                'request' => $request->except(['dokumentasi']),
+                'user_id' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid',
+                'errors' => $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+
+            \Log::error('Unified QR scan processor failed: '.$e->getMessage(), [
+                'request' => $request->except(['dokumentasi']), // Exclude files from log
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
+
+            // Return more detailed error for debugging
+            $errorMessage = 'Terjadi kesalahan sistem saat update status.';
+
+            if (app()->environment('local')) {
+                $errorMessage .= ' Debug: '.$e->getMessage().' (Line: '.$e->getLine().')';
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'debug' => app()->environment('local') ? [
+                    'error' => $e->getMessage(),
+                    'line' => $e->getLine(),
+                    'file' => basename($e->getFile()),
+                    'class' => get_class($e),
+                ] : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Get next possible statuses for status transition - FIXED VERSION
+     */
+    private function getNextPossibleStatuses($currentStatusId)
+    {
+        $currentStatus = StatusPengiriman::findOrFail($currentStatusId);
+
+        // If status is already final (except 'batal'), no next status
+        if ($currentStatus->is_final && $currentStatus->slug !== 'batal') {
+            return collect([
+                [
+                    'id' => null,
+                    'nama' => 'Status Sudah Final',
+                    'slug' => 'final',
+                    'deskripsi' => 'Pengiriman telah selesai dan tidak dapat diubah lagi',
+                    'warna' => 'gray',
+                    'urutan' => 999,
+                    'icon' => '🏁',
+                    'is_final' => true,
+                    'badge_class' => 'bg-gray-100 text-gray-800',
+                    'disabled' => true,
+                ],
+            ]);
+        }
+
+        // FIXED: Get all active statuses that can be progressed to
+        $nextStatuses = StatusPengiriman::where('is_active', true)
+            ->where('id', '!=', $currentStatusId) // Exclude current status
+            ->where(function ($query) use ($currentStatus) {
+                // Allow progression to higher order statuses
+                $query->where('urutan', '>', $currentStatus->urutan)
+                      // Always allow 'Batal' status
+                    ->orWhere('slug', 'batal')
+                      // SPECIAL CASE: Allow 'Diterima' from 'Pengiriman' or 'Dokumentasi'
+                    ->orWhere(function ($subQuery) use ($currentStatus) {
+                        // Allow 'diterima' status if current status is 'pengiriman' or 'dokumentasi'
+                        if (in_array($currentStatus->slug, ['pengiriman', 'selesai-packing'])) {
+                            $subQuery->where('slug', 'diterima');
+                        }
+                    });
+            })
+            ->orderBy('urutan')
+            ->get();
+
+        // Map data with safe icon and badge class handling
+        return $nextStatuses->map(function ($status) {
+            // Safe icon handling - use database value or fallback
+            $icon = $status->getAttributeValue('icon') ?: match ($status->slug) {
+                'pending' => '⏳',
+                'dikemas' => '📦',
+                'dikirim' => '🚚',
+                'diterima' => '✅',
+                'batal' => '❌',
+                'pemesanan' => '📝',
+                'produksi' => '🏭',
+                'kedatangan' => '📦',
+                'packing' => '🎁',
+                'selesai-packing' => '✅',
+                'pengiriman' => '🚚',
+                default => '📋'
+            };
+
+            // Safe badge class handling - use warna or fallback
+            $badgeClass = match ($status->warna ?? 'gray') {
+                'gray' => 'bg-gray-100 text-gray-800',
+                'blue' => 'bg-blue-100 text-blue-800',
+                'yellow' => 'bg-yellow-100 text-yellow-800',
+                'green' => 'bg-green-100 text-green-800',
+                'red' => 'bg-red-100 text-red-800',
+                'purple' => 'bg-purple-100 text-purple-800',
+                'indigo' => 'bg-indigo-100 text-indigo-800',
+                'cyan' => 'bg-cyan-100 text-cyan-800',
+                'teal' => 'bg-teal-100 text-teal-800',
+                default => 'bg-gray-100 text-gray-800'
+            };
+
+            return [
+                'id' => $status->id,
+                'nama' => $status->nama,
+                'slug' => $status->slug,
+                'deskripsi' => $status->deskripsi,
+                'warna' => $status->warna,
+                'urutan' => $status->urutan,
+                'icon' => $icon,
+                'is_final' => $status->is_final,
+                'badge_class' => $badgeClass,
+            ];
+        });
+    }
+
+    /**
+     * Bulk generate QR codes for selected pengiriman
+     */
+    public function bulkGenerateQR(Request $request)
+    {
+        auth()->user()->can(PermissionEnum::WAREHOUSE_QR_BULK_GENERATE->value);
+
+        $request->validate([
+            'pengiriman_ids' => ['required', 'array'],
+            'pengiriman_ids.*' => ['exists:pengiriman,id'],
+        ]);
+
+        try {
+            \DB::beginTransaction();
+
+            $results = [];
+            $successCount = 0;
+            $errorCount = 0;
+            $skippedCount = 0;
+
+            $pengirimanList = Pengiriman::with(['donatur', 'jenisQuran'])
+                ->whereIn('id', $request->pengiriman_ids)
+                ->get();
+
+            foreach ($pengirimanList as $pengiriman) {
+                try {
+                    // Check if QR already exists
+                    if ($pengiriman->qr_code_path && \Storage::exists($pengiriman->qr_code_path)) {
+                        $results[] = [
+                            'id' => $pengiriman->id,
+                            'no_resi' => $pengiriman->no_resi,
+                            'status' => 'skipped',
+                            'message' => 'QR Code sudah ada',
+                        ];
+                        $skippedCount++;
+
+                        continue;
+                    }
+
+                    // Generate QR data
+                    $qrController = new QRCodeController;
+
+                    // Create a fake request for the QR controller
+                    $fakeRequest = new Request;
+                    $fakeRequest->headers->set('Accept', 'application/json');
+                    app()->instance('request', $fakeRequest);
+
+                    $result = $qrController->generate($pengiriman);
+
+                    if ($result instanceof JsonResponse) {
+                        $data = $result->getData(true);
+                        if ($data['success'] ?? false) {
+                            $results[] = [
+                                'id' => $pengiriman->id,
+                                'no_resi' => $pengiriman->no_resi,
+                                'status' => 'success',
+                                'message' => 'QR Code berhasil dibuat',
+                                'qr_url' => $data['data']['qr_url'] ?? null,
+                            ];
+                            $successCount++;
+                        } else {
+                            throw new \Exception($data['message'] ?? 'QR generation failed');
+                        }
+                    } else {
+                        $results[] = [
+                            'id' => $pengiriman->id,
+                            'no_resi' => $pengiriman->no_resi,
+                            'status' => 'success',
+                            'message' => 'QR Code berhasil dibuat',
+                        ];
+                        $successCount++;
+                    }
+
+                } catch (\Exception $e) {
+                    $results[] = [
+                        'id' => $pengiriman->id,
+                        'no_resi' => $pengiriman->no_resi,
+                        'status' => 'error',
+                        'message' => $e->getMessage(),
+                    ];
+                    $errorCount++;
+                }
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Bulk QR generation completed. Success: {$successCount}, Errors: {$errorCount}, Skipped: {$skippedCount}",
+                'summary' => [
+                    'total' => count($pengirimanList),
+                    'success' => $successCount,
+                    'errors' => $errorCount,
+                    'skipped' => $skippedCount,
+                ],
+                'results' => $results,
+            ]);
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Bulk QR generation failed: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+}
