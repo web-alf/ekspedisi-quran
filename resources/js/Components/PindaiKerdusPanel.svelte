@@ -20,6 +20,7 @@
    * lengkapnya ada di detail kerdus. Kunci permintaan daftar kerdus berawalan `siap_`
    * supaya tidak menimpa filter tabel muatan di halaman yang sama.
    */
+  import { onDestroy } from 'svelte';
   import { router } from '@inertiajs/svelte';
   import HeroIcon from './UI/HeroIcon.svelte';
   import LazyQRScanner from './LazyQRScanner.svelte';
@@ -209,6 +210,17 @@
       memuatDetail = false;
     }
   }
+
+  // Kunci gulir halaman di belakang selama jendela terbuka — di ponsel, tanpa ini
+  // menggulir daftar mushaf ikut menggulir halaman muatan di belakangnya.
+  $: if (typeof document !== 'undefined') {
+    document.body.style.overflow = detailKode ? 'hidden' : '';
+  }
+
+  // Pindah halaman saat jendela masih terbuka tidak boleh meninggalkan halaman terkunci.
+  onDestroy(() => {
+    if (typeof document !== 'undefined') document.body.style.overflow = '';
+  });
 
   function tutupDetail() {
     detailKode = '';
@@ -703,100 +715,145 @@
   </div>
 </section>
 
-<!-- Detail isi kerdus: mushaf (resi) di dalamnya + riwayat pindai kerdus ini. -->
+<svelte:window on:keydown={(e) => detailKode && e.key === 'Escape' && tutupDetail()} />
+
+<!-- Detail isi kerdus: mushaf (resi) di dalamnya + riwayat pindai kerdus ini.
+     Ponsel/tablet: lembar dari bawah, tiap mushaf jadi kartu (7 kolom tidak muat).
+     Layar lebar (lg+): jendela di tengah dengan tabel. -->
 {#if detailKode}
   <!-- z-[10000]: harus di atas sidebar (z-[9998]) dan header lengket (z-[9990]) AdminLayout. -->
-  <div class="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" role="presentation" on:click|self={tutupDetail}>
-    <div class="bg-white w-full sm:max-w-4xl max-h-[90vh] rounded-t-xl sm:rounded-xl shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="judul-detail-kerdus">
-      <div class="px-6 py-4 border-b border-gray-200 flex items-start gap-3">
+  <div class="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center bg-black/40 sm:p-4" role="presentation" on:click|self={tutupDetail}>
+    <div
+      class="bg-white w-full sm:max-w-2xl lg:max-w-4xl max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-xl shadow-xl flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="judul-detail-kerdus"
+    >
+      <!-- Pegangan lembar bawah (hanya penanda visual di ponsel). -->
+      <div class="sm:hidden flex justify-center pt-2" aria-hidden="true">
+        <span class="h-1 w-10 rounded-full bg-gray-300"></span>
+      </div>
+
+      <div class="px-4 sm:px-6 pt-3 pb-4 sm:py-4 border-b border-gray-200 flex items-start gap-3 shrink-0">
         <div class="flex-1 min-w-0">
-          <h3 id="judul-detail-kerdus" class="text-lg font-semibold text-gray-900 font-mono">{detailKode}</h3>
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 id="judul-detail-kerdus" class="text-base sm:text-lg font-semibold text-gray-900 font-mono break-all">{detailKode}</h3>
+            {#if detail}
+              <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full {detail.kerdus.status_info.bg} {detail.kerdus.status_info.text}">
+                {detail.kerdus.status_info.label}
+              </span>
+            {/if}
+          </div>
           {#if detail}
-            <p class="text-sm text-gray-500 mt-0.5">
-              {detail.kerdus.jenis_quran} · {detail.kerdus.jumlah_mushaf} mushaf
-              {#if detail.kerdus.gudang}· {detail.kerdus.gudang}{/if}
-              · dikemas {detail.kerdus.user_name}
-              {#if detail.kerdus.sealed_at}· disegel {detail.kerdus.sealed_at}{/if}
-            </p>
+            <dl class="mt-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500">
+              <div><dt class="sr-only">Jenis</dt><dd class="text-gray-900">{detail.kerdus.jenis_quran}</dd></div>
+              <div><dt class="sr-only">Jumlah</dt><dd class="text-gray-900">{detail.kerdus.jumlah_mushaf} mushaf</dd></div>
+              {#if detail.kerdus.gudang}<div><dt class="sr-only">Gudang</dt><dd>{detail.kerdus.gudang}</dd></div>{/if}
+              <div class="min-w-0"><dt class="sr-only">Pengemas</dt><dd class="truncate">Dikemas {detail.kerdus.user_name}</dd></div>
+              {#if detail.kerdus.sealed_at}<div class="col-span-2 sm:col-span-1"><dt class="sr-only">Disegel</dt><dd>Disegel {detail.kerdus.sealed_at}</dd></div>{/if}
+            </dl>
           {/if}
         </div>
-        {#if detail}
-          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {detail.kerdus.status_info.bg} {detail.kerdus.status_info.text}">
-            {detail.kerdus.status_info.label}
-          </span>
-        {/if}
-        <button type="button" on:click={tutupDetail} class="text-gray-400 hover:text-gray-600" aria-label="Tutup">
+        <button type="button" on:click={tutupDetail} class="-mr-2 -mt-1 p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100" aria-label="Tutup">
           <HeroIcon name="x-mark" class="w-5 h-5" />
         </button>
       </div>
 
-      <div class="overflow-y-auto">
+      <div class="overflow-y-auto overscroll-contain min-h-0 flex-1">
         {#if memuatDetail}
-          <div class="p-6 space-y-3" aria-busy="true">
+          <div class="p-4 sm:p-6 space-y-3" aria-busy="true">
             {#each Array(5) as _}
-              <div class="h-4 bg-gray-100 rounded animate-pulse"></div>
+              <div class="h-12 lg:h-4 bg-gray-100 rounded animate-pulse"></div>
             {/each}
           </div>
         {:else if galatDetail}
-          <p class="p-6 text-sm text-red-700">{galatDetail}</p>
+          <p class="p-4 sm:p-6 text-sm text-red-700">{galatDetail}</p>
         {:else if detail}
           {#if detail.mushaf.length === 0}
-            <p class="p-6 text-sm text-gray-500">Kerdus ini belum berisi mushaf.</p>
+            <p class="p-4 sm:p-6 text-sm text-gray-500">Kerdus ini belum berisi mushaf.</p>
           {:else}
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No Resi</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakif</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donatur</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dikemas</th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                  {#each detail.mushaf as m, i (m.no_resi || i)}
-                    <tr class="hover:bg-gray-50">
-                      <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{m.urutan ?? i + 1}</td>
-                      <td class="px-4 py-3 text-sm font-mono whitespace-nowrap">
+            <!-- Ponsel & tablet: kartu per mushaf -->
+            <ul class="lg:hidden divide-y divide-gray-100">
+              {#each detail.mushaf as m, i (m.no_resi || i)}
+                <li class="px-4 sm:px-6 py-3">
+                  <div class="flex items-start gap-3">
+                    <span class="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold flex items-center justify-center">{m.urutan ?? i + 1}</span>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                         {#if m.tracking_url}
-                          <a href={m.tracking_url} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">{m.no_resi}</a>
+                          <a href={m.tracking_url} target="_blank" rel="noopener" class="text-sm font-mono font-medium text-[#eb3434] hover:underline">{m.no_resi}</a>
                         {:else}
-                          {m.no_resi || '—'}
+                          <span class="text-sm font-mono font-medium text-gray-900">{m.no_resi || '—'}</span>
                         {/if}
-                      </td>
-                      <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                        {m.jenis || '—'}{#if m.jumlah > 1}<span class="text-gray-500"> × {m.jumlah}</span>{/if}
-                      </td>
-                      <td class="px-4 py-3 text-sm text-gray-900">{m.wakif || '—'}</td>
-                      <td class="px-4 py-3 text-sm text-gray-700">{m.donatur || '—'}</td>
-                      <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{m.status || '—'}</td>
-                      <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {m.dikemas_oleh || '—'}
-                        {#if m.dikemas_pada}<div class="text-xs text-gray-500">{m.dikemas_pada}</div>{/if}
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+                        <span class="text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5">{m.status || '—'}</span>
+                      </div>
+                      <p class="mt-1 text-sm text-gray-900 break-words">{m.wakif || '—'}</p>
+                      <p class="text-xs text-gray-500 break-words">
+                        {m.jenis || '—'}{m.jumlah > 1 ? ` × ${m.jumlah}` : ''}
+                        {m.donatur && m.donatur !== m.wakif ? ` · Donatur ${m.donatur}` : ''}
+                      </p>
+                      {#if m.dikemas_oleh}
+                        <p class="text-xs text-gray-400 mt-0.5">Dikemas {m.dikemas_oleh}{m.dikemas_pada ? ` · ${m.dikemas_pada}` : ''}</p>
+                      {/if}
+                    </div>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+
+            <!-- Layar lebar: tabel. Tanpa pembungkus overflow-x supaya judul kolom bisa lengket. -->
+            <table class="hidden lg:table min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50 sticky top-0 z-10">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No Resi</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wakif</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Donatur</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dikemas</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {#each detail.mushaf as m, i (m.no_resi || i)}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{m.urutan ?? i + 1}</td>
+                    <td class="px-4 py-3 text-sm font-mono whitespace-nowrap">
+                      {#if m.tracking_url}
+                        <a href={m.tracking_url} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">{m.no_resi}</a>
+                      {:else}
+                        {m.no_resi || '—'}
+                      {/if}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      {m.jenis || '—'}{#if m.jumlah > 1}<span class="text-gray-500"> × {m.jumlah}</span>{/if}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">{m.wakif || '—'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">{m.donatur || '—'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{m.status || '—'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {m.dikemas_oleh || '—'}
+                      {#if m.dikemas_pada}<div class="text-xs text-gray-500">{m.dikemas_pada}</div>{/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           {/if}
 
-          <div class="px-6 py-4 border-t border-gray-200">
+          <div class="px-4 sm:px-6 py-4 border-t border-gray-200 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Riwayat pindai kerdus ini</h4>
             {#if detail.riwayat_pindai.length === 0}
               <p class="text-sm text-gray-500">Belum pernah dipindai distribusi.</p>
             {:else}
               <ul class="divide-y divide-gray-100 text-sm">
                 {#each detail.riwayat_pindai as r}
-                  <li class="py-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <li class="py-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-0.5">
                     <span class="text-gray-900 whitespace-nowrap">{r.waktu}</span>
-                    <span class="text-gray-700">{labelMetode[r.metode] || r.metode}</span>
-                    <span class="text-gray-700">{r.oleh}</span>
-                    <span class="text-gray-500">{r.jumlah_mushaf} eks</span>
-                    {#if r.catatan}<span class="text-gray-500">· {r.catatan}</span>{/if}
+                    <span class="text-gray-700 text-right sm:text-left">{labelMetode[r.metode] || r.metode}</span>
+                    <span class="text-gray-700 truncate">{r.oleh}</span>
+                    <span class="text-gray-500 text-right sm:text-left">{r.jumlah_mushaf} eks</span>
+                    {#if r.catatan}<span class="col-span-2 text-gray-500 break-words">{r.catatan}</span>{/if}
                   </li>
                 {/each}
               </ul>
@@ -807,4 +864,3 @@
     </div>
   </div>
 {/if}
-

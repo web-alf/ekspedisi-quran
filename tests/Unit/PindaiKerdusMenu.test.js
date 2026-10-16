@@ -110,4 +110,13 @@ describe('Janji tampilan panel', () => {
         expect(panel).toContain('{#each detail.mushaf as m');
         expect(panel).toContain('{#each detail.riwayat_pindai as r}');
     });
+
+    it('jendela detail responsif: kartu di ponsel/tablet, tabel di layar lebar', () => {
+        expect(panel).toContain('<ul class="lg:hidden divide-y divide-gray-100">');
+        expect(panel).toContain('<table class="hidden lg:table');
+        expect(panel).toContain('max-h-[92dvh]');
+        // Escape menutup, dan halaman di belakang tidak ikut tergulir.
+        expect(panel).toContain("e.key === 'Escape' && tutupDetail()");
+        expect(panel).toContain("document.body.style.overflow = detailKode ? 'hidden' : ''");
+    });
 });
