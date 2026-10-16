@@ -100,19 +100,28 @@ function verifikasi(User $petugas, PackingBox $box, int $jumlahFisik): TestRespo
 
 // --- Verifikasi isi ---
 
-it('meminta hitungan fisik tanpa membocorkan jumlah di data', function () {
+it('langsung mencatat pindai dari data tanpa meminta ketik ulang jumlah', function () {
     $petugas = petugasDistribusi();
     $box = kerdusSiapVerifikasi(3, 'KB-20261015-001-A5-01');
 
-    $jawaban = $this->actingAs($petugas)
+    $this->actingAs($petugas)
         ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
-        ->assertStatus(422)
-        ->assertJsonPath('perlu_hitung', true)
-        ->assertJsonPath('kode', $box->kode_kerdus);
+        ->assertSuccessful()
+        ->assertJsonMissingPath('perlu_hitung')
+        ->assertJsonPath('hasil', 'cocok')
+        ->assertJsonPath('data.jumlah_mushaf', 3)
+        ->assertJsonPath('data.jumlah_fisik', null)
+        ->assertJsonPath('data.oleh', $petugas->name);
 
-    expect($jawaban->json())->not->toHaveKey('data')
-        ->and($jawaban->json('message'))->not->toContain('3')
-        ->and(PindaiKerdusLog::count())->toBe(0);
+    $baris = PindaiKerdusLog::sole();
+
+    // Isi kerdus sudah pasti dari data packing: yang tercatat adalah angka data, siapa
+    // yang memindai, dan kapan — bukan hitungan ulang.
+    expect($baris->jumlah_mushaf)->toBe(3)
+        ->and($baris->jumlah_fisik)->toBeNull()
+        ->and($baris->hasil)->toBe(PindaiKerdusLog::HASIL_COCOK)
+        ->and($baris->user_id)->toBe($petugas->id)
+        ->and($box->fresh()->alasanBelumBolehDimuat())->toBeNull();
 });
 
 it('mencatat COCOK bila hitungan fisik sama dengan data', function () {

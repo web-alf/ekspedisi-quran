@@ -7,6 +7,7 @@ use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\PindaiKerdusLog;
 use App\Models\User;
+use App\Support\BoxUnits;
 use App\Support\PerPage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -125,143 +126,89 @@ final class PindaiKerdusService
         ];
     }
 
-    /** Status verifikasi yang bisa disaring di daftar kerdus siap. */
-    public const STATUS_VERIFIKASI = ['perlu', 'belum', 'selisih', 'berubah', 'cocok', 'semua'];
-
     /**
-     * Kerdus PENUH / TERSEGEL yang menunggu (atau sudah) diverifikasi sisi distribusi.
+     * Kerdus PENUH / TERSEGEL yang belum dimuat ke kurir, untuk dipindai sisi distribusi.
      *
      * Sebelumnya sisi distribusi hanya tahu sebuah kerdus ada SETELAH memindainya — tidak ada
-     * daftar "kerdus mana saja yang sudah selesai dikemas dan harus saya periksa". Daftar ini
-     * menjawab itu, tetapi tetap memaksa pemeriksaan FISIK:
-     *
-     *   - Jumlah isi TIDAK dikirim (bukan `jumlah_terisi`, bukan `kapasitas`, bukan jumlah
-     *     resi). Verifikasi adalah hitungan buta; kalau angkanya terlihat di daftar, petugas
-     *     cukup menyalin angka dan kerdus yang kurang isinya lolos.
-     *   - Tidak ada tombol "verifikasi dari daftar". Status hanya berubah lewat pindai QR
-     *     di kerdusnya (atau ketik kode bila label rusak — tercatat sebagai `manual`).
-     *
-     * Status verifikasinya memakai aturan yang SAMA dengan syarat muat
-     * (`PackingBox::alasanBelumBolehDimuat()`): pindai TERAKHIR yang menentukan, dan kerdus
-     * yang dulu cocok tetapi isinya berubah sejak itu dianggap belum beres (`berubah`).
+     * daftar "kerdus mana saja yang sudah selesai dikemas". Barisnya sengaja berbentuk sama
+     * dengan Tracking Kerdus gudang (status, jenis, progress, isi, QR, petugas, segel, tanggal)
+     * supaya gudang dan distribusi membaca kerdus yang sama dengan cara yang sama. Isi kerdus
+     * sudah pasti dari data packing, jadi jumlahnya boleh tampil di sini.
      *
      * Kerdus yang seluruh isinya sudah masuk muatan disembunyikan: barangnya sudah berpindah
-     * ke kurir, jadi tidak ada lagi yang bisa diperiksa di gudang.
+     * ke kurir, jadi tidak ada lagi yang bisa dipindai di gudang.
      *
      * @return array<string, mixed>
      */
     public function kerdusSiap(Request $request): array
     {
-        $status = $request->string('siap_status')->toString();
-        $status = in_array($status, self::STATUS_VERIFIKASI, true) ? $status : 'perlu';
         $gudang = $request->string('siap_gudang')->toString();
         $cari = trim($request->string('siap_cari')->toString());
 
-        $dasar = $this->queryKerdusSiap()
-            ->when($gudang !== '', fn ($q) => $gudang === 'belum'
+        $daftar = PackingBox::query()
+            ->with(['jenisQuran', 'gudang:id,kode,nama', 'dailyPackingTask.user:id,name'])
+            ->withCount('packingItems')
+            ->whereIn('status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED])
+            ->where(fn (Builder $q) => $q->doesntHave('packingItems')
+                ->orWhereHas('packingItems', fn (Builder $isi) => $isi->whereNotExists(
+                    fn ($muatan) => $muatan->selectRaw('1')
+                        ->from('muatan_items')
+                        ->whereColumn('muatan_items.pengiriman_id', 'packing_items.pengiriman_id')
+                )))
+            ->when($gudang !== '', fn (Builder $q) => $gudang === 'belum'
                 ? $q->whereNull('gudang_id')
                 : $q->where('gudang_id', (int) $gudang))
-            ->when($cari !== '', fn ($q) => $q->where('kode_kerdus', 'like', '%'.$cari.'%'));
-
-        $hitung = [];
-        foreach (['belum', 'selisih', 'berubah', 'cocok'] as $s) {
-            $hitung[$s] = $this->saringStatusVerifikasi(clone $dasar, $s)->count();
-        }
-        $hitung['perlu'] = $hitung['belum'] + $hitung['selisih'] + $hitung['berubah'];
-        $hitung['semua'] = $hitung['perlu'] + $hitung['cocok'];
-
-        $daftar = $this->saringStatusVerifikasi(clone $dasar, $status)
-            ->with([
-                'jenisQuran:id,kode_jenis,nama_jenis',
-                'gudang:id,kode,nama',
-                'pindaiKerdusTerakhir.user:id,name',
-            ])
-            // Yang paling lama menunggu didahulukan: kerdus tersegel kemarin yang belum
-            // diperiksa lebih mendesak daripada yang baru disegel lima menit lalu.
+            ->when($cari !== '', fn (Builder $q) => $q->where('kode_kerdus', 'like', '%'.$cari.'%'))
+            // Yang paling lama menunggu didahulukan: kerdus tersegel kemarin lebih mendesak
+            // daripada yang baru disegel lima menit lalu.
             ->orderByRaw('sealed_at IS NULL, sealed_at ASC')
             ->orderBy('id')
             ->paginate(10, ['*'], 'siap_page')
             ->withQueryString();
 
-        $daftar->through(fn (PackingBox $box) => [
-            'id' => $box->id,
-            'kode_kerdus' => $box->kode_kerdus,
-            'jenis' => $box->jenisQuran?->nama_jenis ?? 'Tanpa jenis',
-            'jenis_kode' => $box->jenisQuran?->kode_jenis,
-            'gudang' => $box->gudang?->nama,
-            'status_kerdus' => $box->status,
-            'disegel_pada' => $box->sealed_at?->format('d/m/Y H:i'),
-            'verifikasi' => $this->statusVerifikasi($box),
-            'diverifikasi_oleh' => $box->pindaiKerdusTerakhir?->user?->name,
-            'diverifikasi_pada' => $box->pindaiKerdusTerakhir?->created_at?->format('d/m/Y H:i'),
-        ]);
+        $daftar->through(function (PackingBox $box) {
+            // Rumus satuan sama persis dengan BoxTrackingController::index.
+            $pcsPerDoz = (int) ($box->kapasitas ?: ($box->jenisQuran?->getDefaultCapacity() ?? 0));
+
+            return [
+                'id' => $box->id,
+                'kode_kerdus' => $box->kode_kerdus,
+                'status' => $box->status,
+                'status_info' => $box->getStatusInfo(),
+                'jenis_quran' => $box->jenisQuran->nama_jenis ?? 'Belum ditentukan',
+                'gudang' => $box->gudang?->nama,
+                'kapasitas' => $box->kapasitas,
+                'terisi' => $box->jumlah_terisi,
+                'progress_percentage' => $box->progress_percentage,
+                'item_count' => $box->packing_items_count,
+                'satuan' => BoxUnits::breakdown((int) $box->jumlah_terisi, $pcsPerDoz),
+                'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas, $pcsPerDoz),
+                'satuan_keterangan' => BoxUnits::explanation($pcsPerDoz, $box->jenisQuran->kode_jenis ?? null),
+                'qr_code_base64' => $this->qrKerdus($box),
+                'user_name' => $box->dailyPackingTask?->user?->name ?? 'N/A',
+                'seal_code' => $box->seal_code,
+                'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
+                'created_at' => $box->created_at?->format('d/m/Y H:i'),
+            ];
+        });
 
         return [
             'daftar' => $daftar,
-            'hitung' => $hitung,
-            'filters' => ['status' => $status, 'gudang' => $gudang, 'cari' => $cari],
+            'filters' => ['gudang' => $gudang, 'cari' => $cari],
             'gudangList' => Gudang::query()->orderBy('id')->get(['id', 'kode', 'nama']),
         ];
     }
 
-    /**
-     * Kerdus penuh/tersegel beserta tiga angka pembanding verifikasinya, dibungkus sebagai
-     * sub-kueri supaya hasil hitungannya bisa disaring dengan WHERE biasa (dan dipaginasi —
-     * HAVING di atas alias merusak kueri hitung milik paginator).
-     */
-    private function queryKerdusSiap(): Builder
+    /** QR kerdus untuk tampilan; gagal membuat QR tidak boleh menjatuhkan seluruh halaman. */
+    private function qrKerdus(PackingBox $box): ?string
     {
-        $logTerakhir = fn (string $kolom) => PindaiKerdusLog::query()
-            ->select($kolom)
-            ->whereColumn('pindai_kerdus_logs.packing_box_id', 'packing_boxes.id')
-            ->orderByDesc('pindai_kerdus_logs.id')
-            ->limit(1);
+        try {
+            return $box->getBoxQRBase64();
+        } catch (\Throwable $e) {
+            Log::error('Gagal membuat QR kerdus', ['kode_kerdus' => $box->kode_kerdus, 'error' => $e->getMessage()]);
 
-        $dalam = PackingBox::query()
-            ->select('packing_boxes.*')
-            ->addSelect([
-                'hasil_terakhir' => $logTerakhir('hasil'),
-                'jumlah_terakhir' => $logTerakhir('jumlah_mushaf'),
-            ])
-            // Isi menurut data — rumus yang sama dengan PackingBox::jumlahEksIsi():
-            // jumlah eks dari baris isi, cadangannya jumlah_terisi.
-            ->selectRaw('COALESCE(NULLIF((SELECT SUM(pi.quantity) FROM packing_items pi WHERE pi.packing_box_id = packing_boxes.id), 0), packing_boxes.jumlah_terisi) AS isi_sekarang')
-            ->selectRaw('(SELECT COUNT(*) FROM packing_items pi WHERE pi.packing_box_id = packing_boxes.id) AS jumlah_baris_isi')
-            ->selectRaw('(SELECT COUNT(*) FROM packing_items pi WHERE pi.packing_box_id = packing_boxes.id AND NOT EXISTS (SELECT 1 FROM muatan_items mi WHERE mi.pengiriman_id = pi.pengiriman_id)) AS belum_dimuat')
-            ->whereIn('packing_boxes.status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED]);
-
-        return PackingBox::query()
-            ->fromSub($dalam, 'packing_boxes')
-            ->select('packing_boxes.*')
-            // Seluruh isinya sudah di muatan = sudah di tangan kurir.
-            ->where(fn ($q) => $q->where('jumlah_baris_isi', 0)->orWhere('belum_dimuat', '>', 0));
-    }
-
-    private function saringStatusVerifikasi(Builder $query, string $status): Builder
-    {
-        return match ($status) {
-            'belum' => $query->whereNull('hasil_terakhir'),
-            'selisih' => $query->where('hasil_terakhir', PindaiKerdusLog::HASIL_SELISIH),
-            'berubah' => $query->where('hasil_terakhir', PindaiKerdusLog::HASIL_COCOK)
-                ->whereColumn('jumlah_terakhir', '<>', 'isi_sekarang'),
-            'cocok' => $query->where('hasil_terakhir', PindaiKerdusLog::HASIL_COCOK)
-                ->whereColumn('jumlah_terakhir', '=', 'isi_sekarang'),
-            'perlu' => $query->where(fn ($q) => $q->whereNull('hasil_terakhir')
-                ->orWhere('hasil_terakhir', PindaiKerdusLog::HASIL_SELISIH)
-                ->orWhere(fn ($q2) => $q2->where('hasil_terakhir', PindaiKerdusLog::HASIL_COCOK)
-                    ->whereColumn('jumlah_terakhir', '<>', 'isi_sekarang'))),
-            default => $query,
-        };
-    }
-
-    private function statusVerifikasi(PackingBox $box): string
-    {
-        return match (true) {
-            $box->hasil_terakhir === null => 'belum',
-            $box->hasil_terakhir === PindaiKerdusLog::HASIL_SELISIH => 'selisih',
-            (int) $box->jumlah_terakhir !== (int) $box->isi_sekarang => 'berubah',
-            default => 'cocok',
-        };
+            return null;
+        }
     }
 
     /**
@@ -288,25 +235,15 @@ final class PindaiKerdusService
             return $this->catatKerdusLuarSistem($user, $kode, $metode, $validated);
         }
 
-        // Hitungan BUTA: jumlah di data tidak dikirim ke layar sebelum petugas mengetik
-        // hitungannya sendiri. Kalau angkanya terlihat duluan, "verifikasi" berubah jadi
-        // menyalin angka — dan kerdus yang kurang isinya lolos.
-        if (! isset($validated['jumlah_fisik'])) {
-            return [
-                'status' => 422,
-                'data' => [
-                    'success' => false,
-                    'perlu_hitung' => true,
-                    'kode' => $kode,
-                    'jenis' => $box->jenisQuran->nama_jenis ?? null,
-                    'message' => "Hitung isi fisik kerdus {$kode}, lalu ketik jumlah mushafnya.",
-                ],
-            ];
-        }
-
+        // Isi kerdus sudah pasti dari data packing (tiap mushaf dipindai satu per satu saat
+        // masuk kerdus), jadi petugas distribusi TIDAK diminta mengetik ulang jumlahnya:
+        // pindai = tercatat siapa, jam berapa, dan berapa eks per jenis. Jumlah fisik hanya
+        // dibandingkan bila klien sengaja mengirimnya (jalur lama tetap dihormati).
         $jumlah = $box->jumlahEksIsi();
-        $jumlahFisik = (int) $validated['jumlah_fisik'];
-        $hasil = $jumlahFisik === $jumlah ? PindaiKerdusLog::HASIL_COCOK : PindaiKerdusLog::HASIL_SELISIH;
+        $jumlahFisik = isset($validated['jumlah_fisik']) ? (int) $validated['jumlah_fisik'] : null;
+        $hasil = $jumlahFisik === null || $jumlahFisik === $jumlah
+            ? PindaiKerdusLog::HASIL_COCOK
+            : PindaiKerdusLog::HASIL_SELISIH;
 
         $sebelumnya = PindaiKerdusLog::query()
             ->with('user:id,name')
@@ -343,7 +280,7 @@ final class PindaiKerdusService
 
         $namaJenis = $box->jenisQuran->nama_jenis ?? '';
         $pesan = $hasil === PindaiKerdusLog::HASIL_COCOK
-            ? trim("Kerdus {$kode} COCOK: {$jumlah} eks {$namaJenis}").'. Kerdus boleh dimuat.'
+            ? trim("Kerdus {$kode} tercatat: {$jumlah} eks {$namaJenis}").'. Kerdus boleh dimuat.'
             : "Kerdus {$kode} SELISIH: dihitung {$jumlahFisik} eks, data {$jumlah} eks. "
                 .'Kerdus diblokir dari muatan — kembalikan ke gudang untuk dibereskan, lalu pindai ulang.';
 

@@ -17,15 +17,10 @@ use Spatie\Permission\PermissionRegistrar;
 uses(RefreshDatabase::class);
 
 /**
- * Daftar "Kerdus Siap Diverifikasi" di panel Pindai Kerdus (/admin/muatan).
+ * Daftar "Kerdus Siap Dipindai" di panel Pindai Kerdus (/admin/muatan).
  *
- * Kerdus yang sudah penuh/tersegel kini MUNCUL di halaman sisi distribusi, supaya
- * petugas tahu kerdus mana yang harus diperiksa — tanpa merusak verifikasi fisik:
- *   - jumlah isi tidak pernah ikut terkirim (hitungan buta);
- *   - statusnya mengikuti aturan syarat muat (pindai TERAKHIR, dan "berubah" bila isi
- *     bergeser sejak cocok);
- *   - kerdus yang belum selesai diisi dan kerdus yang isinya sudah di tangan kurir tidak
- *     ditampilkan.
+ * Kerdus penuh/tersegel yang belum dimuat ke kurir MUNCUL di halaman sisi distribusi,
+ * dengan baris berbentuk sama seperti Tracking Kerdus gudang (tanpa status verifikasi).
  */
 beforeEach(function () {
     $this->seed(RolePermissionSeeder::class);
@@ -99,72 +94,34 @@ it('menampilkan kerdus penuh dan tersegel, bukan yang masih kosong atau sedang d
         ->not->toContain('KB-20261016-004-A5-01');
 });
 
-it('tidak pernah mengirim jumlah isi kerdus ke layar (hitungan buta)', function () {
-    kerdusDaftar('KB-20261016-010-A5-01', PackingBox::STATUS_SEALED, 17);
+it('mengirim baris berbentuk sama dengan Tracking Kerdus gudang, tanpa status verifikasi', function () {
+    kerdusDaftar('KB-20261016-010-A5-01', PackingBox::STATUS_SEALED, 17, $this->smg->id);
 
-    $baris = propsKerdusSiap()['daftar']['data'][0];
+    $siap = propsKerdusSiap();
+    $baris = $siap['daftar']['data'][0];
 
-    // Daftar-putih kunci: menambah kolom baru ke baris ini harus disengaja dan lewat tes
-    // ini, supaya angka isi tidak ikut terkirim diam-diam lewat kolom yang baru.
-    expect(array_keys($baris))->toEqualCanonicalizing([
-        'id', 'kode_kerdus', 'jenis', 'jenis_kode', 'gudang', 'status_kerdus',
-        'disegel_pada', 'verifikasi', 'diverifikasi_oleh', 'diverifikasi_pada',
-    ]);
+    expect($baris)->toHaveKeys([
+        'kode_kerdus', 'status', 'status_info', 'jenis_quran', 'kapasitas', 'terisi',
+        'progress_percentage', 'item_count', 'satuan', 'satuan_kapasitas', 'qr_code_base64',
+        'user_name', 'seal_code', 'sealed_at', 'created_at', 'gudang',
+    ])
+        ->not->toHaveKeys(['verifikasi', 'diverifikasi_oleh', 'diverifikasi_pada'])
+        ->and($baris['terisi'])->toBe(17)
+        ->and($baris['item_count'])->toBe(17)
+        ->and($baris['status_info']['label'])->toBe('Tersegel')
+        ->and($baris['gudang'])->toBe('Gudang Semarang')
+        ->and($baris['qr_code_base64'])->toStartWith('data:image/png;base64,')
+        ->and($siap)->not->toHaveKey('hitung');
 });
 
-it('menandai status verifikasi dengan aturan yang sama dengan syarat muat', function () {
-    $belum = kerdusDaftar('KB-20261016-020-A5-01');
-    $cocok = kerdusDaftar('KB-20261016-021-A5-01');
-    $selisih = kerdusDaftar('KB-20261016-022-A5-01');
-    $berubah = kerdusDaftar('KB-20261016-023-A5-01');
-
-    foreach ([[$cocok, 3], [$selisih, 2], [$berubah, 3]] as [$box, $fisik]) {
-        $this->actingAs($this->petugas)
-            ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus, 'jumlah_fisik' => $fisik])
-            ->assertSuccessful();
-    }
-
-    // Isi kerdus bertambah SESUDAH dinyatakan cocok: harus diperiksa ulang.
-    PackingItem::factory()->create([
-        'packing_box_id' => $berubah->id,
-        'pengiriman_id' => Pengiriman::factory()->create(['jumlah_quran' => 1])->id,
-        'urutan_dalam_box' => 4,
-        'quantity' => 1,
-    ]);
-
-    $status = collect(propsKerdusSiap(['siap_status' => 'semua'])['daftar']['data'])
-        ->pluck('verifikasi', 'kode_kerdus');
-
-    expect($status['KB-20261016-020-A5-01'])->toBe('belum')
-        ->and($status['KB-20261016-021-A5-01'])->toBe('cocok')
-        ->and($status['KB-20261016-022-A5-01'])->toBe('selisih')
-        ->and($status['KB-20261016-023-A5-01'])->toBe('berubah');
-
-    // Kesepakatan dengan syarat muat: hanya yang "cocok" boleh dimuat.
-    expect($cocok->fresh()->alasanBelumBolehDimuat())->toBeNull()
-        ->and($berubah->fresh()->alasanBelumBolehDimuat())->not->toBeNull()
-        ->and($selisih->fresh()->alasanBelumBolehDimuat())->not->toBeNull()
-        ->and($belum->fresh()->alasanBelumBolehDimuat())->not->toBeNull();
-});
-
-it('menampilkan yang perlu tindakan secara bawaan, dan bisa disaring per status', function () {
-    kerdusDaftar('KB-20261016-030-A5-01');
-    $cocok = kerdusDaftar('KB-20261016-031-A5-01');
+it('tetap menampilkan kerdus yang sudah dipindai selama belum dimuat', function () {
+    $box = kerdusDaftar('KB-20261016-020-A5-01');
 
     $this->actingAs($this->petugas)
-        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $cocok->kode_kerdus, 'jumlah_fisik' => 3])
+        ->postJson(route('admin.pindai-kerdus.store'), ['kode' => $box->kode_kerdus])
         ->assertSuccessful();
 
-    $bawaan = propsKerdusSiap();
-
-    expect($bawaan['filters']['status'])->toBe('perlu')
-        ->and(kodeDiDaftar($bawaan))->toBe(['KB-20261016-030-A5-01'])
-        ->and($bawaan['hitung'])->toMatchArray(['belum' => 1, 'cocok' => 1, 'perlu' => 1, 'semua' => 2]);
-
-    expect(kodeDiDaftar(propsKerdusSiap(['siap_status' => 'cocok'])))->toBe(['KB-20261016-031-A5-01']);
-
-    // Nilai asal-asalan jatuh ke bawaan, bukan galat.
-    expect(propsKerdusSiap(['siap_status' => 'ngawur'])['filters']['status'])->toBe('perlu');
+    expect(kodeDiDaftar(propsKerdusSiap()))->toContain('KB-20261016-020-A5-01');
 });
 
 it('menyembunyikan kerdus yang seluruh isinya sudah dimuat ke kurir', function () {
@@ -180,7 +137,7 @@ it('menyembunyikan kerdus yang seluruh isinya sudah dimuat ke kurir', function (
 
     MuatanItem::create(['muatan_id' => $muatan->id, 'pengiriman_id' => $sebagian->packingItems->first()->pengiriman_id, 'urutan' => $urutan]);
 
-    $kode = kodeDiDaftar(propsKerdusSiap(['siap_status' => 'semua']));
+    $kode = kodeDiDaftar(propsKerdusSiap());
 
     expect($kode)->toContain('KB-20261016-041-A5-01')
         ->not->toContain('KB-20261016-040-A5-01');

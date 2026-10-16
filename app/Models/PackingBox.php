@@ -115,7 +115,7 @@ class PackingBox extends Model
         $verifikasi = $this->pindaiKerdusTerakhir;
 
         if (! $verifikasi || $verifikasi->hasil === null) {
-            return "Kerdus {$this->kode_kerdus} belum diverifikasi isinya oleh distribusi.";
+            return "Kerdus {$this->kode_kerdus} belum dipindai oleh distribusi.";
         }
 
         if ($verifikasi->hasil === PindaiKerdusLog::HASIL_SELISIH) {

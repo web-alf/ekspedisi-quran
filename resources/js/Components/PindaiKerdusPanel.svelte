@@ -2,11 +2,10 @@
   /**
    * Panel Pindai Kerdus — bagian dari halaman kerja Muatan & Distribusi.
    *
-   * Satu pindai kerdus = satu VERIFIKASI ISI: petugas menghitung isi fisik kerdus dan
-   * mengetik jumlahnya, server membandingkan dengan data (cocok / selisih). Angka data
-   * sengaja tidak ditampilkan sebelum petugas mengetik hitungannya (hitungan buta).
-   * Kerdus hanya bisa dimuat ke kurir bila verifikasi terakhirnya cocok. Status
-   * pengiriman TIDAK berubah di sini.
+   * Satu pindai kerdus = satu catatan: siapa yang memindai, jam berapa, dan berapa eks
+   * per jenis. Jumlahnya diambil dari data packing (isi kerdus sudah pasti), jadi petugas
+   * tidak mengetik ulang jumlah. Kerdus baru boleh dimuat ke kurir setelah dipindai di
+   * sini. Status pengiriman TIDAK berubah di sini.
    *
    * Dua jalur masuk, dua-duanya sah dan tetap tercatat:
    *   - kamera (QR)    -> metode 'qr'
@@ -47,12 +46,6 @@
   // yang tercatat.
   let ringkasHariIni = pindai.hariIni || { pindai: 0, kerdus: 0, mushaf: 0, per_jenis: [] };
   let ringkasTotal = pindai.total || { pindai: 0, kerdus: 0, mushaf: 0, per_jenis: [] };
-
-  // Hitung fisik kerdus terdaftar (server menandai `perlu_hitung`).
-  let perluHitung = null; // { kode, jenis, metode }
-  let jumlahFisik = '';
-  let catatanHitung = '';
-  let menyimpanHitung = false;
 
   // Isian kerdus yang belum terdaftar.
   let perluIsian = null; // { kode }
@@ -114,7 +107,6 @@
       ringkasHariIni = data.hari_ini || ringkasHariIni;
       ringkasTotal = data.total || ringkasTotal;
       perluIsian = null;
-      perluHitung = null;
 
       if (data.hasil === 'selisih') {
         toast.error(data.message);
@@ -132,13 +124,7 @@
       const jawaban = err.response?.data || {};
       const pesan = jawaban.message || 'Gagal mencatat pindai.';
 
-      // Kerdus terdaftar: server meminta hitungan fisik petugas.
-      if (jawaban.perlu_hitung) {
-        perluHitung = { kode: jawaban.kode || bersih, jenis: jawaban.jenis, metode };
-        jumlahFisik = '';
-        catatanHitung = '';
-        toast.info(pesan);
-      } else if (jawaban.perlu_isian) {
+      if (jawaban.perlu_isian) {
         perluIsian = { kode: jawaban.kode || bersih };
         isianJenis = jenisList.length > 0 ? jenisList[0].id : '';
         isianJumlah = '';
@@ -191,25 +177,6 @@
     }
   }
 
-  async function simpanHitung() {
-    if (!perluHitung || jumlahFisik === '' || jumlahFisik === null || menyimpanHitung) return;
-
-    menyimpanHitung = true;
-
-    await catat(perluHitung.kode, perluHitung.metode, {
-      jumlah_fisik: Number(jumlahFisik),
-      catatan: catatanHitung || null,
-    });
-
-    menyimpanHitung = false;
-  }
-
-  function batalHitung() {
-    perluHitung = null;
-    jumlahFisik = '';
-    catatanHitung = '';
-  }
-
   function batalIsian() {
     perluIsian = null;
     isianJenis = '';
@@ -259,40 +226,27 @@
     return baris.tanggal === tanggalHariIni ? baris.waktu : baris.waktu_lengkap;
   }
 
-  // --- Kerdus siap diverifikasi ---
-  // Daftar kerdus penuh/tersegel. Jumlah isinya SENGAJA tidak dikirim server (hitungan
-  // buta), dan tidak ada tombol verifikasi di sini: statusnya hanya berubah lewat pindai
-  // QR di kerdusnya — jadi petugas tetap harus memegang kerdusnya secara fisik.
-  $: siap = pindai.siap || { daftar: { data: [], total: 0 }, hitung: {}, filters: {}, gudangList: [] };
+  // --- Kerdus siap dipindai ---
+  // Kerdus penuh/tersegel yang belum dimuat ke kurir. Barisnya sama dengan Tracking
+  // Kerdus gudang, supaya kedua sisi membaca kerdus yang sama dengan cara yang sama.
+  $: siap = pindai.siap || { daftar: { data: [], total: 0 }, filters: {}, gudangList: [] };
   $: daftarSiap = siap.daftar?.data || [];
-  $: hitungSiap = siap.hitung || {};
 
-  let siapStatus = pindai.siap?.filters?.status || 'perlu';
   let siapGudang = pindai.siap?.filters?.gudang || '';
   let siapCari = pindai.siap?.filters?.cari || '';
   let jedaSiap;
   let kartuPemindai;
 
-  const tabSiap = [
-    { nilai: 'perlu', label: 'Perlu diperiksa' },
-    { nilai: 'belum', label: 'Belum' },
-    { nilai: 'selisih', label: 'Selisih' },
-    { nilai: 'berubah', label: 'Isi berubah' },
-    { nilai: 'cocok', label: 'Cocok' },
-    { nilai: 'semua', label: 'Semua' },
-  ];
-
-  const tampilanVerifikasi = {
-    belum: { label: 'Belum diperiksa', titik: 'bg-gray-400' },
-    selisih: { label: 'Selisih', titik: 'bg-red-500' },
-    berubah: { label: 'Isi berubah — periksa ulang', titik: 'bg-amber-500' },
-    cocok: { label: 'Cocok', titik: 'bg-green-500' },
-  };
+  function warnaProgress(persen) {
+    if (persen === 0) return 'bg-gray-200';
+    if (persen < 50) return 'bg-blue-500';
+    if (persen < 100) return 'bg-yellow-500';
+    return 'bg-green-500';
+  }
 
   /** Sama seperti filter riwayat: hanya kunci `siap_*` yang berubah, sisanya dibawa. */
   function terapkanFilterSiap() {
     const params = Object.fromEntries(new URL(window.location.href).searchParams);
-    params.siap_status = siapStatus;
     delete params.siap_page;
 
     for (const [kunci, nilai] of Object.entries({ siap_gudang: siapGudang, siap_cari: siapCari })) {
@@ -304,11 +258,6 @@
     }
 
     router.get(window.location.pathname, params, { preserveState: true, preserveScroll: true, only: ['pindaiKerdus'] });
-  }
-
-  function pilihTabSiap(nilai) {
-    siapStatus = nilai;
-    terapkanFilterSiap();
   }
 
   function cariSiapDitunda() {
@@ -327,9 +276,9 @@
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
     <h2 class="text-lg font-bold text-gray-900 mb-1">Pindai Kerdus</h2>
     <p class="text-sm text-gray-600">
-      Verifikasi isi kerdus sebelum dimuat: pindai kerdus, hitung isi fisiknya, lalu ketik
-      jumlahnya. Hanya kerdus berstatus <span class="font-medium">Cocok</span> yang bisa dimuat
-      ke kurir. Status pengiriman tidak berubah karena pindai di sini.
+      Pindai QR kerdus (atau ketik kodenya) sebelum dimuat. Jumlah dan jenis mushaf diambil
+      dari data packing, lalu tercatat siapa yang memindai dan jam berapa. Kerdus baru bisa
+      dimuat ke kurir setelah dipindai di sini. Status pengiriman tidak berubah karena pindai di sini.
     </p>
   </div>
 
@@ -386,69 +335,6 @@
           </p>
         </div>
       </div>
-
-      <!-- Hitung fisik kerdus terdaftar -->
-      {#if perluHitung}
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div class="flex items-start gap-2.5 mb-4">
-            <HeroIcon name="archive-box" class="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
-            <div>
-              <h3 class="text-sm font-semibold text-gray-900">
-                Hitung isi kerdus <span class="font-mono">{perluHitung.kode}</span>
-              </h3>
-              <p class="text-xs text-gray-500 mt-1">
-                {perluHitung.jenis ? `Jenis ${perluHitung.jenis}. ` : ''}Hitung mushaf di dalam kerdus,
-                lalu ketik jumlahnya. Sistem akan mencocokkan dengan data.
-              </p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label for="hitung-jumlah" class="block text-sm font-medium text-gray-700 mb-2">Jumlah fisik (eks)</label>
-              <input
-                id="hitung-jumlah"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                bind:value={jumlahFisik}
-                on:keydown={(e) => e.key === 'Enter' && simpanHitung()}
-                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
-              />
-            </div>
-
-            <div class="sm:col-span-2">
-              <label for="hitung-catatan" class="block text-sm font-medium text-gray-700 mb-2">
-                Catatan (opsional)
-              </label>
-              <input
-                id="hitung-catatan"
-                type="text"
-                bind:value={catatanHitung}
-                placeholder="Mis. kerdus penyok, 1 mushaf basah"
-                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
-              />
-            </div>
-          </div>
-
-          <div class="flex gap-2 mt-4">
-            <button
-              on:click={simpanHitung}
-              disabled={menyimpanHitung || jumlahFisik === '' || jumlahFisik === null}
-              class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {menyimpanHitung ? 'Mencocokkan...' : 'Cocokkan'}
-            </button>
-            <button
-              on:click={batalHitung}
-              disabled={menyimpanHitung}
-              class="px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              Batal
-            </button>
-          </div>
-        </div>
-      {/if}
 
       <!-- Kerdus belum terdaftar -->
       {#if perluIsian}
@@ -534,7 +420,7 @@
               class="w-5 h-5 {hasilTerakhir.success && hasilTerakhir.hasil !== 'selisih' ? 'text-green-600' : 'text-red-600'}"
             />
             <span class="text-sm font-semibold {hasilTerakhir.success && hasilTerakhir.hasil !== 'selisih' ? 'text-gray-900' : 'text-red-700'}">
-              {#if !hasilTerakhir.success}Gagal{:else if hasilTerakhir.hasil === 'cocok'}Cocok — boleh dimuat{:else if hasilTerakhir.hasil === 'selisih'}Selisih — diblokir dari muatan{:else}Tercatat{/if}
+              {#if !hasilTerakhir.success}Gagal{:else if hasilTerakhir.hasil === 'cocok'}Tercatat — boleh dimuat{:else if hasilTerakhir.hasil === 'selisih'}Selisih — diblokir dari muatan{:else}Tercatat{/if}
             </span>
             <span class="text-xs text-gray-400 ml-auto">{hasilTerakhir.waktu}</span>
           </div>
@@ -673,15 +559,14 @@
     </div>
   </div>
 
-  <!-- Kerdus siap diverifikasi: kerdus penuh/tersegel yang harus diperiksa fisik. -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" data-testid="kerdus-siap">
-    <div class="px-4 sm:px-6 py-4 border-b border-gray-100">
-      <div class="flex flex-col sm:flex-row sm:items-start gap-3">
+  <!-- Kerdus siap dipindai: tabel sengaja meniru Tracking Kerdus gudang (Admin/BoxTracking/Index). -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden" data-testid="kerdus-siap">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
         <div class="flex-1 min-w-0">
-          <h3 class="text-base font-semibold text-gray-900">Kerdus Siap Diverifikasi</h3>
-          <p class="text-sm text-gray-500 mt-1">
-            Kerdus yang sudah penuh atau disegel gudang. Ambil kerdusnya, pindai QR-nya, lalu
-            hitung isinya — jumlah di data sengaja tidak ditampilkan di sini.
+          <h3 class="text-lg font-semibold text-gray-900">Kerdus Siap Dipindai</h3>
+          <p class="text-sm text-gray-500 mt-0.5">
+            Kerdus penuh atau tersegel yang belum dimuat ke kurir ({siap.daftar?.total || 0} kerdus).
           </p>
         </div>
         <button
@@ -694,23 +579,7 @@
         </button>
       </div>
 
-      <div class="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Status verifikasi">
-        {#each tabSiap as tab}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={siapStatus === tab.nilai}
-            on:click={() => pilihTabSiap(tab.nilai)}
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-              {siapStatus === tab.nilai ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}"
-          >
-            {tab.label}
-            <span class="{siapStatus === tab.nilai ? 'text-gray-300' : 'text-gray-400'}">{hitungSiap[tab.nilai] ?? 0}</span>
-          </button>
-        {/each}
-      </div>
-
-      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <select
           bind:value={siapGudang}
           on:change={terapkanFilterSiap}
@@ -739,58 +608,72 @@
       </div>
     </div>
 
-    {#if daftarSiap.length === 0}
-      <div class="p-8 text-center">
-        <HeroIcon name="archive-box" class="w-10 h-10 text-gray-300 mx-auto mb-2" />
-        <p class="text-sm text-gray-500">
-          {siapStatus === 'perlu'
-            ? 'Tidak ada kerdus yang menunggu diperiksa.'
-            : 'Tidak ada kerdus pada pilihan ini.'}
-        </p>
-      </div>
-    {:else}
+    {#if daftarSiap.length > 0}
       <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 sm:px-6 py-3">Kode kerdus</th>
-              <th class="px-4 py-3">Jenis</th>
-              <th class="px-4 py-3">Gudang</th>
-              <th class="px-4 py-3">Disegel</th>
-              <th class="px-4 py-3">Verifikasi</th>
-              <th class="px-4 sm:px-6 py-3">Terakhir diperiksa</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode Kerdus</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis Quran</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Isi (Satuan)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Kerdus</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seal Code</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
-            {#each daftarSiap as k (k.id)}
-              <tr>
-                <td class="px-4 sm:px-6 py-3 font-mono text-gray-900 whitespace-nowrap">{k.kode_kerdus}</td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                  <span
-                    title={k.jenis}
-                    class="inline-flex items-center justify-center min-w-11 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600 border border-gray-200"
-                  >
-                    {k.jenis_kode || '—'}
+          <tbody class="bg-white divide-y divide-gray-200">
+            {#each daftarSiap as box (box.id)}
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">{box.kode_kerdus}</div>
+                  <div class="text-sm text-gray-500">{box.satuan?.label || `${box.item_count} pcs`} mushaf</div>
+                  {#if box.gudang}<div class="text-xs text-gray-400">{box.gudang}</div>{/if}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {box.status_info.bg} {box.status_info.text}">
+                    {box.status_info.label}
                   </span>
                 </td>
-                <td class="px-4 py-3 text-gray-700 whitespace-nowrap">{k.gudang || 'Belum diketahui'}</td>
-                <td class="px-4 py-3 text-gray-600 whitespace-nowrap">
-                  {k.disegel_pada || labelStatus[k.status_kerdus] || '-'}
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{box.jenis_quran}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="w-full bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="h-2 rounded-full {warnaProgress(box.progress_percentage)}" style="width: {box.progress_percentage}%"></div>
+                    </div>
+                    <span class="text-sm text-gray-600">{box.terisi}/{box.kapasitas}</span>
+                  </div>
+                  <div class="text-xs text-gray-500">{box.progress_percentage}%</div>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                  <span class="inline-flex items-center gap-1.5 text-gray-700">
-                    <span class="w-2 h-2 rounded-full {tampilanVerifikasi[k.verifikasi]?.titik || 'bg-gray-400'}"></span>
-                    {tampilanVerifikasi[k.verifikasi]?.label || k.verifikasi}
-                  </span>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">{box.satuan?.label || '-'}</div>
+                  <div class="text-xs text-gray-500">
+                    dari {box.satuan_kapasitas?.label || box.kapasitas} / kerdus
+                    {#if box.satuan_keterangan}<span class="text-gray-400">· {box.satuan_keterangan}</span>{/if}
+                  </div>
                 </td>
-                <td class="px-4 sm:px-6 py-3 text-gray-600 whitespace-nowrap">
-                  {#if k.diverifikasi_oleh}
-                    {k.diverifikasi_oleh}
-                    <div class="text-xs text-gray-400">{k.diverifikasi_pada}</div>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  {#if box.qr_code_base64}
+                    <img
+                      src={box.qr_code_base64}
+                      alt="QR {box.kode_kerdus}"
+                      title="QR kerdus {box.kode_kerdus} — siap dipindai"
+                      class="h-16 w-16 border border-gray-200 rounded bg-white p-1"
+                    />
                   {:else}
-                    <span class="text-gray-400">—</span>
+                    <span class="text-xs text-gray-400">QR belum dibuat</span>
                   {/if}
                 </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{box.user_name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {box.seal_code || '-'}
+                  {#if box.sealed_at}
+                    <div class="text-xs text-gray-500">{box.sealed_at}</div>
+                  {/if}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{box.created_at}</td>
               </tr>
             {/each}
           </tbody>
@@ -798,10 +681,15 @@
       </div>
 
       {#if (siap.daftar?.last_page || 1) > 1}
-        <div class="px-4 sm:px-6 py-3 border-t border-gray-100">
+        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
           <Pagination data={siap.daftar} tanpaPemilihPerHalaman={true} />
         </div>
       {/if}
+    {:else}
+      <div class="p-8 text-center">
+        <HeroIcon name="archive-box" class="w-10 h-10 text-gray-300 mx-auto mb-2" />
+        <p class="text-sm text-gray-500">Tidak ada kerdus penuh/tersegel yang menunggu dimuat.</p>
+      </div>
     {/if}
   </div>
 
@@ -896,9 +784,7 @@
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jam</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Kode Kerdus</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jenis</th>
-              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
-              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Fisik</th>
-              <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Hasil</th>
+              <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Jumlah</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Metode</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dipindai oleh</th>
               <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Catatan</th>
@@ -935,18 +821,6 @@
                 </td>
                 <td class="px-4 py-3 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
                   {baris.jumlah_mushaf} eks
-                </td>
-                <td class="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap {baris.hasil === 'selisih' ? 'text-red-700' : 'text-gray-900'}">
-                  {baris.jumlah_fisik !== null && baris.jumlah_fisik !== undefined ? `${baris.jumlah_fisik} eks` : '—'}
-                </td>
-                <td class="px-4 py-3 text-sm whitespace-nowrap">
-                  {#if baris.hasil === 'cocok'}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">Cocok</span>
-                  {:else if baris.hasil === 'selisih'}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">Selisih</span>
-                  {:else}
-                    <span class="text-gray-400">—</span>
-                  {/if}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                   <span class="inline-flex items-center gap-1.5">

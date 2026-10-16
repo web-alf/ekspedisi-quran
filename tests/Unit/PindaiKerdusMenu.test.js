@@ -68,18 +68,29 @@ describe('Janji tampilan panel', () => {
         expect(panel).toContain('id="isian-jumlah"');
     });
 
-    it('meminta hitungan fisik kerdus terdaftar sebelum mencocokkan', () => {
-        expect(panel).toContain('{#if perluHitung}');
-        expect(panel).toContain('id="hitung-jumlah"');
-        expect(panel).toContain('jumlah_fisik: Number(jumlahFisik)');
+    it('tidak meminta ketik ulang jumlah untuk kerdus terdaftar (isi diambil dari data)', () => {
+        expect(panel).not.toContain('perluHitung');
+        expect(panel).not.toContain('id="hitung-jumlah"');
+        expect(panel).not.toContain('jumlah_fisik:');
     });
 
-    it('riwayat menampilkan jam, jumlah data vs fisik, hasil, metode, dan siapa yang memindai', () => {
-        for (const kolom of ['Jam', 'Kode Kerdus', 'Jenis', 'Data', 'Fisik', 'Hasil', 'Metode', 'Dipindai oleh']) {
+    it('riwayat menampilkan jam, jumlah, metode, dan siapa yang memindai — tanpa kolom verifikasi', () => {
+        for (const kolom of ['Jam', 'Kode Kerdus', 'Jenis', 'Jumlah', 'Metode', 'Dipindai oleh']) {
             expect(panel).toContain(`>${kolom}</th>`);
         }
+        expect(panel).not.toContain('>Fisik</th>');
+        expect(panel).not.toContain('>Hasil</th>');
         expect(panel).toContain('{baris.oleh}');
         expect(panel).toContain('{baris.jumlah_mushaf} eks');
+    });
+
+    it('daftar kerdus siap meniru kolom Tracking Kerdus gudang, tanpa status verifikasi', () => {
+        for (const kolom of ['Kode Kerdus', 'Status', 'Jenis Quran', 'Progress', 'Isi (Satuan)', 'QR Kerdus', 'User', 'Seal Code', 'Tanggal']) {
+            expect(panel).toContain(`>${kolom}</th>`);
+        }
+        expect(panel).toContain('{box.qr_code_base64}');
+        expect(panel).not.toContain('>Verifikasi</th>');
+        expect(panel).not.toContain('siap_status');
     });
 
     it('menyegarkan prop panelnya dari server setelah memindai', () => {
