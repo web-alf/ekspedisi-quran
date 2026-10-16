@@ -672,6 +672,42 @@ class PengirimanController extends Controller
             // bersama. Dulu tanpa transaksi, sehingga kegagalan di tengah
             // meninggalkan alamat terisi tanpa tautan permintaan.
             $updated = \DB::transaction(function () use ($request, $visibleIds) {
+                $mushafRequest = null;
+
+                // Permintaan dikunci LEBIH DULU daripada resinya — urutan yang sama
+                // dengan "Proses ke Pengiriman", supaya keduanya tidak saling mengunci
+                // (deadlock). Dicek ulang: dua set alamat (atau set alamat dan "Proses
+                // ke Pengiriman") untuk permintaan yang sama tidak boleh sama-sama
+                // menautkan kirimannya.
+                if ($request->filled('mushaf_request_id')) {
+                    $mushafRequest = MushafRequest::whereKey($request->mushaf_request_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $mushafRequest || $mushafRequest->status !== 'approved' || $mushafRequest->pengiriman_id) {
+                        throw ValidationException::withMessages([
+                            'mushaf_request_id' => 'Permintaan mushaf ini sudah diproses atau belum disetujui. Muat ulang halaman lalu pilih permintaan lain.',
+                        ]);
+                    }
+                }
+
+                // Resi dikunci lalu diperiksa: resi yang SUDAH tertaut ke permintaan
+                // lain (mis. baru saja diklaim "Proses ke Pengiriman" oleh CS lain
+                // setelah daftar ini dibuka) tidak boleh ditimpa alamat & tautannya.
+                $milikPermintaanLain = Pengiriman::whereIn('id', $visibleIds)
+                    ->lockForUpdate()
+                    ->get(['id', 'no_resi', 'mushaf_request_id'])
+                    ->filter(fn (Pengiriman $p) => $p->mushaf_request_id !== null
+                        && (int) $p->mushaf_request_id !== (int) $request->input('mushaf_request_id'));
+
+                if ($milikPermintaanLain->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'pengiriman_ids' => 'Resi '.$milikPermintaanLain->pluck('no_resi')->take(5)->implode(', ')
+                            .($milikPermintaanLain->count() > 5 ? ', ...' : '')
+                            .' sudah tertaut ke permintaan mushaf lain. Muat ulang halaman lalu pilih resi lain.',
+                    ]);
+                }
+
                 $updated = Pengiriman::whereIn('id', $visibleIds)
                     ->update([
                         'alamat_tujuan' => $request->alamat_tujuan,
@@ -684,20 +720,7 @@ class PengirimanController extends Controller
                 // alamatnya. Tanpa tautan ini, `PengirimanObserver` tidak akan pernah
                 // menemukan permintaannya saat pengiriman berstatus 'diterima', sehingga
                 // permintaan tidak pernah selesai dan tidak muncul di peta distribusi.
-                if ($request->filled('mushaf_request_id')) {
-                    // Dikunci lalu dicek ulang: dua set alamat (atau set alamat dan
-                    // "Proses ke Pengiriman") untuk permintaan yang sama tidak boleh
-                    // sama-sama menautkan kirimannya.
-                    $mushafRequest = MushafRequest::whereKey($request->mushaf_request_id)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if (! $mushafRequest || $mushafRequest->status !== 'approved' || $mushafRequest->pengiriman_id) {
-                        throw ValidationException::withMessages([
-                            'mushaf_request_id' => 'Permintaan mushaf ini sudah diproses atau belum disetujui. Muat ulang halaman lalu pilih permintaan lain.',
-                        ]);
-                    }
-
+                if ($mushafRequest) {
                     $pengirimanId = $visibleIds->sort()->first();
 
                     if ($pengirimanId) {

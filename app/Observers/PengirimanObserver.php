@@ -6,6 +6,7 @@ use App\Models\MushafRequest;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Services\WhatsApp\WhatsAppNotifier;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PengirimanObserver
@@ -71,38 +72,53 @@ class PengirimanObserver
             return;
         }
 
-        $mushafRequest = MushafRequest::query()
+        $idPermintaan = MushafRequest::query()
             ->where(fn ($q) => $q
                 ->where('pengiriman_id', $pengiriman->id)
                 ->orWhereHas('pengirimans', fn ($sub) => $sub->whereKey($pengiriman->id)))
             ->where('status', 'processed')
-            ->first();
+            ->value('id');
 
-        if (! $mushafRequest) {
+        if (! $idPermintaan) {
             return;
         }
 
-        // Sejak permintaan dipecah per mushaf, satu permintaan punya BANYAK kiriman. Selesai
-        // berarti SELURUH kirimannya sudah sampai — bukan hanya yang kebetulan lewat lebih
-        // dulu. Permintaan 80 eks yang baru 1 resi sampai tidak boleh berlabel "Selesai".
-        if (! $mushafRequest->semuaPengirimanDiterima()) {
-            $sisa = $mushafRequest->pengirimans()->count() - 1;
+        $noResi = $pengiriman->no_resi;
 
-            Log::info('Sebagian kiriman permintaan mushaf sudah diterima', [
-                'mushaf_request' => $mushafRequest->no_request,
-                'pengiriman' => $pengiriman->no_resi,
-                'kiriman_belum_sampai' => $sisa,
-            ]);
+        // Diputuskan SETELAH commit, di transaksi baru yang mengunci permintaannya.
+        // Dulu diputuskan di dalam transaksi update status resi: dua resi terakhir
+        // yang diterima bersamaan masing-masing hanya melihat dirinya sendiri sudah
+        // diterima (snapshot REPEATABLE READ), sehingga keduanya melewatkan penyelesaian
+        // dan permintaan macet di 'processed' selamanya. Setelah commit + kunci, siapa
+        // pun yang menghitung terakhir melihat semua resi. (Pola yang sama dengan
+        // WakafBatch::hitungUlangStatusSetelahCommit.)
+        DB::afterCommit(function () use ($idPermintaan, $noResi) {
+            DB::transaction(function () use ($idPermintaan, $noResi) {
+                $mushafRequest = MushafRequest::whereKey($idPermintaan)->lockForUpdate()->first();
 
-            return;
-        }
+                if (! $mushafRequest || $mushafRequest->status !== 'processed') {
+                    return;
+                }
 
-        $mushafRequest->update(['status' => 'completed']);
+                // Sejak permintaan dipecah per mushaf, satu permintaan punya BANYAK
+                // kiriman. Selesai berarti SELURUH kirimannya sudah sampai.
+                if (! $mushafRequest->semuaPengirimanDiterima()) {
+                    Log::info('Sebagian kiriman permintaan mushaf sudah diterima', [
+                        'mushaf_request' => $mushafRequest->no_request,
+                        'pengiriman' => $noResi,
+                    ]);
 
-        Log::info('Permintaan mushaf otomatis diselesaikan', [
-            'mushaf_request' => $mushafRequest->no_request,
-            'pengiriman' => $pengiriman->no_resi,
-        ]);
+                    return;
+                }
+
+                $mushafRequest->update(['status' => 'completed']);
+
+                Log::info('Permintaan mushaf otomatis diselesaikan', [
+                    'mushaf_request' => $mushafRequest->no_request,
+                    'pengiriman' => $noResi,
+                ]);
+            });
+        });
     }
 
     /**

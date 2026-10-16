@@ -118,15 +118,33 @@ class Muatan extends Model
      */
     public function syncTotals(): void
     {
-        $ringkas = MuatanItem::where('muatan_id', $this->id)
-            ->join('pengiriman', 'pengiriman.id', '=', 'muatan_items.pengiriman_id')
-            ->selectRaw('COUNT(*) as jumlah_resi, COALESCE(SUM(pengiriman.jumlah_quran), 0) as jumlah_mushaf')
-            ->first();
+        // SATU pernyataan UPDATE, bukan "hitung lalu tulis": subquery di dalam UPDATE
+        // dibaca sebagai pembacaan berkunci (data terbaru), sedangkan SELECT biasa di
+        // dalam transaksi membaca snapshot. Dulu dua pindai bersamaan ke satu muatan
+        // masing-masing menghitung "1" dan total akhirnya 1 padahal isinya 2 — lalu
+        // daftar muatan menganggapnya selesai saat baru separuh resinya diterima.
+        $tabel = $this->getTable();
 
-        $this->update([
-            'total_resi' => (int) ($ringkas->jumlah_resi ?? 0),
-            'total_mushaf' => (int) ($ringkas->jumlah_mushaf ?? 0),
-        ]);
+        DB::update(
+            "UPDATE {$tabel} SET
+                total_resi = (SELECT COUNT(*) FROM muatan_items WHERE muatan_items.muatan_id = {$tabel}.id),
+                total_mushaf = (
+                    SELECT COALESCE(SUM(pengiriman.jumlah_quran), 0)
+                    FROM muatan_items
+                    JOIN pengiriman ON pengiriman.id = muatan_items.pengiriman_id
+                    WHERE muatan_items.muatan_id = {$tabel}.id
+                ),
+                updated_at = ?
+            WHERE id = ?",
+            [now(), $this->getKey()]
+        );
+
+        $terkini = static::query()->whereKey($this->getKey())->lockForUpdate()->first(['id', 'total_resi', 'total_mushaf', 'updated_at']);
+
+        if ($terkini) {
+            $kolom = ['total_resi', 'total_mushaf', 'updated_at'];
+            $this->forceFill($terkini->only($kolom))->syncOriginalAttributes($kolom);
+        }
     }
 
     /**

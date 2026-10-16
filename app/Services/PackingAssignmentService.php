@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
 use App\Models\JenisQuran;
+use App\Models\PackingItem;
 use App\Models\PackingNotification;
 use App\Models\Pengiriman;
+use App\Models\TransferMushaf;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use Carbon\Carbon;
@@ -669,7 +671,7 @@ class PackingAssignmentService
      */
     public function kandidatKerdus(int $jenisQuranId, int $packingStatusId, int $limit)
     {
-        return Pengiriman::where('status_id', $packingStatusId)
+        $kandidat = Pengiriman::where('status_id', $packingStatusId)
             ->where('jenis_quran_id', $jenisQuranId)
             ->whereDoesntHave('packingItem')
             ->whereNotExists(function ($query) {
@@ -681,6 +683,30 @@ class PackingAssignmentService
             ->limit($limit)
             ->lockForUpdate()
             ->get();
+
+        if ($kandidat->isEmpty()) {
+            return $kandidat;
+        }
+
+        // FOR UPDATE di atas hanya mengunci baris pengiriman; kedua subquery "belum
+        // dikemas" dibaca dari SNAPSHOT transaksi. Resi yang baru saja dikemas transaksi
+        // lain (dua staf mencatat jenis yang sama bersamaan) masih terlihat bebas, lalu
+        // addItemSafe meledak dengan duplicate key. Dicek ulang di sini lewat pembacaan
+        // berkunci, yang membaca data terbaru.
+        $ids = $kandidat->pluck('id');
+        $sudahDipakai = PackingItem::whereIn('pengiriman_id', $ids)->lockForUpdate()->pluck('pengiriman_id')
+            ->merge(DailyPackingTaskItem::whereIn('pengiriman_id', $ids)->lockForUpdate()->pluck('pengiriman_id'))
+            // Resi dalam dokumen perpindahan gudang yang belum diterima juga belum boleh dikemas.
+            ->merge(DB::table('transfer_mushaf_items')
+                ->join('transfer_mushaf', 'transfer_mushaf.id', '=', 'transfer_mushaf_items.transfer_mushaf_id')
+                ->whereIn('transfer_mushaf_items.pengiriman_id', $ids)
+                ->where('transfer_mushaf.status', TransferMushaf::STATUS_DIPROSES)
+                ->lockForUpdate()
+                ->pluck('transfer_mushaf_items.pengiriman_id'))
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return $kandidat->reject(fn (Pengiriman $p) => in_array((int) $p->id, $sudahDipakai, true))->values();
     }
 
     /**
@@ -728,12 +754,19 @@ class PackingAssignmentService
         DB::beginTransaction();
 
         try {
+            // Tugas sumber dikunci dulu: klik ganda "Redistribusi" (atau dua supervisor)
+            // tidak boleh sama-sama membaca item yang sama lalu menggeser target dua kali.
+            $sourceTask = DailyPackingTask::whereKey($sourceTask->id)->lockForUpdate()->first() ?? $sourceTask;
+
             // Get unfinished items
             $unfinishedItems = $sourceTask->taskItems()
                 ->where('is_packed', false)
+                ->lockForUpdate()
                 ->get();
 
             if ($unfinishedItems->isEmpty()) {
+                DB::rollBack();
+
                 return ['redistributed' => 0, 'message' => 'No items to redistribute'];
             }
 
@@ -747,6 +780,8 @@ class PackingAssignmentService
             }
 
             if (empty($targetUserIds)) {
+                DB::rollBack();
+
                 return ['redistributed' => 0, 'message' => 'No available users for redistribution'];
             }
 
@@ -770,14 +805,22 @@ class PackingAssignmentService
                 // Take items for this user
                 $itemsToMove = $unfinishedItems->slice($index * $itemsPerUser, $itemsPerUser);
 
-                foreach ($itemsToMove as $item) {
-                    // Move item to new task
-                    $item->update(['daily_packing_task_id' => $targetTask->id]);
-                    $redistributed++;
+                // Pindah hanya bila item MASIH milik tugas sumber dan belum dipacking, dan
+                // angka target digeser sebanyak baris yang benar-benar pindah — bukan
+                // sebanyak daftar yang dibaca di awal, yang bisa sudah basi.
+                $dipindah = $itemsToMove->isEmpty() ? 0 : DailyPackingTaskItem::whereIn('id', $itemsToMove->pluck('id'))
+                    ->where('daily_packing_task_id', $sourceTask->id)
+                    ->where('is_packed', false)
+                    ->update(['daily_packing_task_id' => $targetTask->id]);
+
+                $redistributed += $dipindah;
+
+                if ($dipindah === 0) {
+                    continue;
                 }
 
                 // Update target task total
-                $targetTask->increment('total_target', $itemsToMove->count());
+                $targetTask->increment('total_target', $dipindah);
 
                 // Send notification
                 PackingNotification::create([
@@ -786,9 +829,9 @@ class PackingAssignmentService
                     'type' => 'alert',
                     'level' => 'warning',
                     'title' => 'Tugas Tambahan',
-                    'message' => "Anda mendapat tambahan {$itemsToMove->count()} mushaf untuk dipacking.",
+                    'message' => "Anda mendapat tambahan {$dipindah} mushaf untuk dipacking.",
                     'meta_data' => [
-                        'additional_items' => $itemsToMove->count(),
+                        'additional_items' => $dipindah,
                         'source_user_id' => $sourceTask->user_id,
                     ],
                 ]);

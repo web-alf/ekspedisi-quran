@@ -598,69 +598,76 @@ class BoxScannerController extends Controller
             'mushaf_request_id' => 'required|integer|exists:mushaf_requests,id',
         ]);
 
-        DB::beginTransaction();
+        $box = PackingBox::findOrFail($request->box_id);
+
+        // Authorization check for this specific box
+        Gate::authorize('updateBoxStatus', $box);
+
+        Log::info('Mushaf request address update initiated', [
+            'user_id' => auth()->id(),
+            'box_id' => $box->id,
+            'box_code' => $box->kode_kerdus,
+            'mushaf_request_id' => (int) $request->mushaf_request_id,
+            'ip_address' => $request->ip(),
+        ]);
+
         try {
-            $box = PackingBox::with('packingItems')->find($request->box_id);
+            // Urutan kunci: permintaan → kerdus → resi, sama dengan "Proses ke Pengiriman"
+            // dan set alamat massal. Semua penjaga dicek pada baris yang DIKUNCI: dulu
+            // permintaan dibaca tanpa kunci, sehingga permintaan yang baru saja diproses
+            // CS lain (atau di-set ke kerdus lain) tetap ditautkan lagi — satu permintaan
+            // terpenuhi dua kali.
+            $hasil = DB::transaction(function () use ($request, $box) {
+                $mushafRequest = MushafRequest::whereKey($request->mushaf_request_id)->lockForUpdate()->first();
 
-            // Authorization check for this specific box
-            Gate::authorize('updateBoxStatus', $box);
+                if (! $mushafRequest || $mushafRequest->status !== 'approved' || $mushafRequest->pengiriman_id) {
+                    return ['gagal' => 'Mushaf Request belum disetujui atau sudah diproses. Muat ulang lalu pilih permintaan lain.'];
+                }
 
-            $mushafRequest = MushafRequest::find($request->mushaf_request_id);
+                // Kerdus dikunci supaya resi yang masuk di sela-sela tidak tertinggal tanpa alamat.
+                $kerdus = PackingBox::whereKey($box->id)->lockForUpdate()->first();
+                $pengirimanIds = $kerdus->packingItems()->pluck('pengiriman_id')->all();
 
-            // Log mushaf address update attempt
-            Log::info('Mushaf request address update initiated', [
-                'user_id' => auth()->id(),
-                'box_id' => $box->id,
-                'box_code' => $box->kode_kerdus,
-                'mushaf_request_id' => $mushafRequest->id,
-                'ip_address' => $request->ip(),
-            ]);
+                if ($pengirimanIds === []) {
+                    return ['gagal' => 'Kerdus ini belum berisi resi.'];
+                }
 
-            // Validate mushaf request is approved
-            if ($mushafRequest->status !== 'approved') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Mushaf Request belum disetujui',
-                ], 400);
-            }
+                $milikPermintaanLain = Pengiriman::whereIn('id', $pengirimanIds)
+                    ->lockForUpdate()
+                    ->get(['id', 'no_resi', 'mushaf_request_id'])
+                    ->filter(fn (Pengiriman $p) => $p->mushaf_request_id !== null
+                        && (int) $p->mushaf_request_id !== (int) $mushafRequest->id);
 
-            // Get all pengiriman IDs
-            $pengirimanIds = $box->packingItems->pluck('pengiriman_id')->toArray();
+                if ($milikPermintaanLain->isNotEmpty()) {
+                    return ['gagal' => 'Resi '.$milikPermintaanLain->pluck('no_resi')->take(5)->implode(', ')
+                        .' di kerdus ini sudah tertaut ke permintaan mushaf lain.'];
+                }
 
-            // Update all pengiriman with mushaf request address
-            $updated = Pengiriman::whereIn('id', $pengirimanIds)
-                ->update([
-                    'nama_penerima' => $mushafRequest->nama_lembaga,
-                    'alamat_tujuan' => $mushafRequest->alamat_lengkap,
-                    'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
-                    'nama_lembaga' => $mushafRequest->nama_lembaga,
-                    'mushaf_request_id' => $mushafRequest->id,
+                $updated = Pengiriman::whereIn('id', $pengirimanIds)
+                    ->update([
+                        'nama_penerima' => $mushafRequest->nama_lembaga,
+                        'alamat_tujuan' => $mushafRequest->alamat_lengkap,
+                        'no_hp_penerima' => $mushafRequest->whatsapp_pengurus_1,
+                        'nama_lembaga' => $mushafRequest->nama_lembaga,
+                        'mushaf_request_id' => $mushafRequest->id,
+                    ]);
+
+                // Sama dengan set alamat massal: permintaan yang sudah ditautkan ke resi
+                // ditandai diproses, supaya tidak bisa diproses/ditautkan sekali lagi.
+                $mushafRequest->markAsProcessed(min($pengirimanIds), auth()->id());
+
+                BulkOperationLog::logOperation([
+                    'operation_type' => 'address_update',
+                    'box_code' => $kerdus->kode_kerdus,
+                    'box_seal_code' => $kerdus->seal_code,
+                    'pengiriman_ids' => $pengirimanIds,
+                    'new_address' => $mushafRequest->alamat_lengkap,
+                    'notes' => "Set alamat dari Mushaf Request: {$mushafRequest->nama_lembaga}",
                 ]);
 
-            // Log bulk operation
-            BulkOperationLog::logOperation([
-                'operation_type' => 'address_update',
-                'box_code' => $box->kode_kerdus,
-                'box_seal_code' => $box->seal_code,
-                'pengiriman_ids' => $pengirimanIds,
-                'new_address' => $mushafRequest->alamat_lengkap,
-                'notes' => "Set alamat dari Mushaf Request: {$mushafRequest->nama_lembaga}",
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Berhasil set alamat {$updated} pengiriman ke {$mushafRequest->nama_lembaga}",
-                'data' => [
-                    'updated_count' => $updated,
-                    'nama_lembaga' => $mushafRequest->nama_lembaga,
-                    'alamat' => $mushafRequest->alamat_lengkap,
-                ],
-            ]);
-
+                return ['updated' => $updated, 'permintaan' => $mushafRequest];
+            });
         } catch (\Exception $e) {
-            DB::rollback();
             Log::error('Set mushaf address error: '.$e->getMessage());
 
             return response()->json([
@@ -668,6 +675,23 @@ class BoxScannerController extends Controller
                 'message' => 'Gagal set alamat: '.$e->getMessage(),
             ], 500);
         }
+
+        if (isset($hasil['gagal'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $hasil['gagal'],
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil set alamat {$hasil['updated']} pengiriman ke {$hasil['permintaan']->nama_lembaga}",
+            'data' => [
+                'updated_count' => $hasil['updated'],
+                'nama_lembaga' => $hasil['permintaan']->nama_lembaga,
+                'alamat' => $hasil['permintaan']->alamat_lengkap,
+            ],
+        ]);
     }
 
     /**

@@ -267,6 +267,24 @@ class Pengiriman extends Model
      * dimasukkan ke dokumen kedua — kalau boleh, dua gudang bisa menerimanya dan lokasinya
      * menjadi tidak bisa ditentukan.
      */
+    /**
+     * Kode dokumen perpindahan TERBUKA yang memuat resi ini, dibaca lewat pembacaan
+     * BERKUNCI (bukan snapshot transaksi).
+     *
+     * Dipakai jalur yang menulis lokasi/isi kerdus resi (addItemSafe, kolam packing
+     * kardus): dokumen yang baru saja dibuat transaksi lain harus terlihat, kalau tidak
+     * resi yang sedang dipindah gudang tetap bisa dikemas di gudang asal.
+     */
+    public function kodeTransferMushafTerbukaTerkunci(): ?string
+    {
+        return DB::table('transfer_mushaf_items')
+            ->join('transfer_mushaf', 'transfer_mushaf.id', '=', 'transfer_mushaf_items.transfer_mushaf_id')
+            ->where('transfer_mushaf_items.pengiriman_id', $this->id)
+            ->where('transfer_mushaf.status', TransferMushaf::STATUS_DIPROSES)
+            ->lockForUpdate()
+            ->value('transfer_mushaf.kode');
+    }
+
     public function transferMushafTerbuka(): ?TransferMushaf
     {
         return TransferMushaf::query()
@@ -431,6 +449,44 @@ class Pengiriman extends Model
      * Dibungkus transaksi + row lock untuk mencegah race condition
      * (dua update bersamaan → history ganda / status saling timpa)
      */
+    /**
+     * Ubah status HANYA bila boleh: bukan dari status final, dan tidak mundur (kecuali
+     * ke "batal"). Aturannya dicek pada baris yang DIKUNCI — bukan pada instance yang
+     * dibaca sebelumnya — supaya dua perubahan bersamaan (mis. distribusi menyelesaikan
+     * muatan sementara kurir memindahkan status perjalanan) tidak bisa mengeluarkan resi
+     * dari "diterima" hanya karena keduanya membaca status lama.
+     *
+     * @return 'sama'|'berhasil'|'ditolak'
+     */
+    public function ubahStatusBilaBoleh(StatusPengiriman $statusBaru, ?string $catatan = null, ?int $userId = null): string
+    {
+        return \DB::transaction(function () use ($statusBaru, $catatan, $userId) {
+            $terkunci = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $terkunci) {
+                return 'ditolak';
+            }
+
+            if ((int) $terkunci->status_id === (int) $statusBaru->id) {
+                return 'sama';
+            }
+
+            $statusSekarang = StatusPengiriman::find($terkunci->status_id);
+
+            if ($statusSekarang?->is_final) {
+                return 'ditolak';
+            }
+
+            if ($statusBaru->slug !== 'batal' && $statusSekarang && $statusBaru->urutan < $statusSekarang->urutan) {
+                return 'ditolak';
+            }
+
+            $terkunci->updateStatus($statusBaru->id, $catatan, $userId);
+
+            return 'berhasil';
+        });
+    }
+
     public function updateStatus($newStatusId, ?string $catatan = null, ?int $userId = null)
     {
         return \DB::transaction(function () use ($newStatusId, $catatan, $userId) {

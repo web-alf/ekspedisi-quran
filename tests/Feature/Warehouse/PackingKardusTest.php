@@ -11,6 +11,7 @@ use App\Models\StatusPengiriman;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -360,4 +361,48 @@ it('memvalidasi jenis dan jumlah kerdus yang diminta', function () {
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrors('jumlah_kerdus');
+});
+
+it('melewati resi yang dikemas staf lain di sela pemilihan FIFO, bukan gagal duplicate key', function () {
+    // Race condition: subquery "belum dikemas" pada kolam FIFO dibaca dari snapshot
+    // transaksi. Resi yang baru saja dikemas staf lain (commit di sela-sela) masih tampak
+    // bebas, lalu addItemSafe gagal dengan duplicate key dan SELURUH catatan kerdus batal.
+    // Staf lain ditiru dengan menyisipkan baris kerdusnya tepat setelah kolam dibaca.
+    $petugas = kardusPetugas();
+    $jenis = kardusJenisA5();
+    $resi = kardusResi($jenis, 3);
+
+    $kerdusLain = PackingBox::factory()->create([
+        'daily_packing_task_id' => DailyPackingTask::factory()->create()->id,
+        'jenis_quran_id' => $jenis->id,
+    ]);
+
+    $sudah = false;
+    DB::listen(function ($query) use (&$sudah, $resi, $kerdusLain, $petugas) {
+        $sql = strtolower($query->sql);
+
+        if ($sudah || ! str_contains($sql, 'daily_packing_task_items') || ! str_contains($sql, 'not exists')) {
+            return;
+        }
+
+        $sudah = true;
+        DB::table('packing_items')->insert([
+            'packing_box_id' => $kerdusLain->id,
+            'pengiriman_id' => $resi[0]->id,
+            'packed_by' => $petugas->id,
+            'packed_at' => now(),
+            'urutan_dalam_box' => 1,
+            'quantity' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+
+    $this->actingAs($petugas)
+        ->postJson('/admin/warehouse/packing/catat-kerdus', ['jenis_quran_id' => $jenis->id, 'jumlah_kerdus' => 1])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('data.total_mushaf', 2);
+
+    expect(PackingItem::where('pengiriman_id', $resi[0]->id)->value('packing_box_id'))->toBe($kerdusLain->id);
 });

@@ -235,6 +235,15 @@ class PackingBox extends Model
                 throw new \Exception('Kerdus sudah disegel');
             }
 
+            // Resi yang sedang dalam dokumen perpindahan gudang belum boleh dikemas: saat
+            // dokumennya diterima, lokasi resi pindah ke gudang tujuan sementara kerdusnya
+            // tetap di gudang asal.
+            $kodeTransfer = $pengiriman->kodeTransferMushafTerbukaTerkunci();
+
+            if ($kodeTransfer) {
+                throw new \Exception("Resi {$pengiriman->no_resi} sedang dalam dokumen perpindahan {$kodeTransfer} yang belum diterima. Terima atau batalkan dokumennya dulu.");
+            }
+
             // Validasi jenis Quran - 1 kerdus hanya 1 jenis
             if ($this->jenis_quran_id && $this->jenis_quran_id != $pengiriman->jenis_quran_id) {
                 $jenisKerdus = $this->jenisQuran->nama_jenis ?? 'Unknown';

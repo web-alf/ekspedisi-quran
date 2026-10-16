@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CegahKirimGanda;
 use App\Http\Middleware\EncryptCookies;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -47,6 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'warehouse' => WarehouseAccess::class,
             'rate-limit-handler' => RateLimitHandler::class,
             'performance' => PerformanceMonitoring::class,
+            'cegah-kirim-ganda' => CegahKirimGanda::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

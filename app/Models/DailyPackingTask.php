@@ -198,13 +198,29 @@ class DailyPackingTask extends Model
     {
         $this->increment('total_selesai', $count);
 
+        // increment() hanya menambah angka DI MEMORI instance ini. Instance yang dimuat
+        // sebelum baris tugasnya dikunci (lewat relasi, atau snapshot transaksi) membawa
+        // angka basi: dua pindai bersamaan di 79/80 menulis 80 di DB tetapi 80 tidak
+        // pernah terlihat di sini, sehingga tugas tidak pernah ditandai selesai. Angka
+        // pembanding diambil ulang lewat pembacaan BERKUNCI, yang selalu membaca nilai
+        // terbaru.
+        $terkini = static::whereKey($this->getKey())
+            ->lockForUpdate()
+            ->first(['id', 'total_selesai', 'total_target', 'status']);
+
+        if ($terkini) {
+            $kolom = ['total_selesai', 'total_target', 'status'];
+            $this->forceFill($terkini->only($kolom))->syncOriginalAttributes($kolom);
+        }
+
         // Start task if not started
         if ($this->status === self::STATUS_ASSIGNED) {
             $this->startTask();
         }
 
-        // Complete task if target reached
-        if ($this->total_selesai >= $this->total_target) {
+        // Complete task if target reached — sekali saja: completeTask() juga menambah
+        // statistik performa harian, yang tidak boleh terhitung dua kali.
+        if ($this->status !== self::STATUS_COMPLETED && $this->total_selesai >= $this->total_target) {
             $this->completeTask();
         }
     }

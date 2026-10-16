@@ -9,6 +9,7 @@ use App\Models\Gudang;
 use App\Models\Pengiriman;
 use App\Models\TransferMushaf;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -178,6 +179,11 @@ class TransferMushafController extends Controller
 
                 return $transfer;
             });
+        } catch (QueryException $e) {
+            // Galat basis data (mis. dua dokumen dibuat bersamaan) tidak ditampilkan mentah.
+            Log::warning('Gagal membuat dokumen perpindahan mushaf', ['pesan' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'Dokumen gagal dibuat karena data berubah pada saat yang sama. Muat ulang lalu coba lagi.'], 409);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -210,24 +216,44 @@ class TransferMushafController extends Controller
             return response()->json(['success' => false, 'message' => 'Dokumen ini sudah tidak menunggu penerimaan (status: '.$transfer->status.').'], 422);
         }
 
-        DB::transaction(function () use ($transfer, $user) {
-            $terkunci = TransferMushaf::whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
+        try {
+            DB::transaction(function () use ($transfer, $user) {
+                $terkunci = TransferMushaf::whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
 
-            if ($terkunci->status !== TransferMushaf::STATUS_DIPROSES) {
-                throw new \Exception('Dokumen sudah diproses pihak lain.');
-            }
+                if ($terkunci->status !== TransferMushaf::STATUS_DIPROSES) {
+                    throw new \RuntimeException('Dokumen sudah diproses pihak lain.');
+                }
 
-            // LOKASI MUSHAF berpindah DI SINI — bukan saat dokumen dibuat.
-            foreach ($terkunci->items()->pluck('pengiriman_id') as $pengirimanId) {
-                Pengiriman::whereKey($pengirimanId)->update(['gudang_id' => $terkunci->gudang_tujuan_id]);
-            }
+                $idResi = $terkunci->items()->pluck('pengiriman_id')->all();
 
-            $terkunci->update([
-                'status' => TransferMushaf::STATUS_DITERIMA,
-                'received_by' => $user->id,
-                'received_at' => now(),
-            ]);
-        });
+                // Resi dikunci, lalu syarat "tidak di dalam kerdus" dicek ULANG: syarat itu dulu
+                // hanya diperiksa saat dokumen dibuat. Resi yang dikemas di gudang asal di antara
+                // pembuatan dan penerimaan dokumen akan berbeda gudang dengan kerdusnya.
+                Pengiriman::whereIn('id', $idResi)->lockForUpdate()->get(['id']);
+
+                $dalamKerdus = DB::table('packing_items')
+                    ->join('pengiriman', 'pengiriman.id', '=', 'packing_items.pengiriman_id')
+                    ->whereIn('packing_items.pengiriman_id', $idResi)
+                    ->lockForUpdate()
+                    ->pluck('pengiriman.no_resi');
+
+                if ($dalamKerdus->isNotEmpty()) {
+                    throw new \RuntimeException('Resi '.$dalamKerdus->take(5)->implode(', ')
+                        .' sudah dikemas ke kerdus setelah dokumen ini dibuat. Batalkan dokumen ini lalu pindahkan kerdusnya.');
+                }
+
+                // LOKASI MUSHAF berpindah DI SINI — bukan saat dokumen dibuat.
+                Pengiriman::whereIn('id', $idResi)->update(['gudang_id' => $terkunci->gudang_tujuan_id]);
+
+                $terkunci->update([
+                    'status' => TransferMushaf::STATUS_DITERIMA,
+                    'received_by' => $user->id,
+                    'received_at' => now(),
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -250,17 +276,21 @@ class TransferMushafController extends Controller
             return response()->json(['success' => false, 'message' => 'Dokumen ini sudah selesai — hanya yang masih menunggu penerimaan yang bisa dibatalkan.'], 422);
         }
 
-        DB::transaction(function () use ($transfer) {
-            $terkunci = TransferMushaf::whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
+        try {
+            DB::transaction(function () use ($transfer) {
+                $terkunci = TransferMushaf::whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
 
-            if ($terkunci->status !== TransferMushaf::STATUS_DIPROSES) {
-                throw new \Exception('Dokumen sudah diproses pihak lain.');
-            }
+                if ($terkunci->status !== TransferMushaf::STATUS_DIPROSES) {
+                    throw new \RuntimeException('Dokumen sudah diproses pihak lain.');
+                }
 
-            // Lokasi mushaf TIDAK disentuh: dokumen batal berarti barangnya tidak pindah.
-            $terkunci->items()->delete();
-            $terkunci->update(['status' => TransferMushaf::STATUS_DIBATALKAN, 'jumlah_resi' => 0, 'jumlah_eks' => 0]);
-        });
+                // Lokasi mushaf TIDAK disentuh: dokumen batal berarti barangnya tidak pindah.
+                $terkunci->items()->delete();
+                $terkunci->update(['status' => TransferMushaf::STATUS_DIBATALKAN, 'jumlah_resi' => 0, 'jumlah_eks' => 0]);
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['success' => true, 'message' => 'Dokumen '.$transfer->kode.' dibatalkan. Lokasi mushaf tidak berubah.']);
     }
@@ -289,6 +319,17 @@ class TransferMushafController extends Controller
 
         if ($terbuka) {
             return "Resi {$pengiriman->no_resi} sedang dalam dokumen perpindahan {$terbuka->kode} yang belum diterima.";
+        }
+
+        // `transfer_mushaf_items.pengiriman_id` unik: resi yang pernah tercatat di dokumen
+        // yang sudah DITERIMA tidak bisa masuk dokumen lain. Dinyatakan di sini supaya
+        // petugas mendapat alasan yang jelas, bukan galat duplicate key.
+        $pernah = TransferMushaf::query()
+            ->whereHas('items', fn ($q) => $q->where('pengiriman_id', $pengiriman->id))
+            ->value('kode');
+
+        if ($pernah) {
+            return "Resi {$pengiriman->no_resi} sudah pernah dipindahkan lewat dokumen {$pernah}; satu resi hanya bisa dipindahkan sekali.";
         }
 
         $kerdus = $pengiriman->packingItem?->packingBox;

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\TransferMushafController;
 use App\Models\DailyPackingTask;
 use App\Models\Gudang;
 use App\Models\JenisQuran;
@@ -11,6 +12,8 @@ use App\Models\User;
 use Database\Seeders\JenisQuranSeeder;
 use Database\Seeders\StatusPengirimanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -400,4 +403,85 @@ it('mencari resi untuk dipindahkan lewat pencarian, bukan seluruh tabel', functi
         ->json('data');
 
     expect($akhir)->toBeEmpty();
+})->group('lokasi-mushaf');
+
+it('menolak mengemas resi yang sedang dalam dokumen perpindahan', function () {
+    $resi = resiPacking(['gudang_id' => $this->smg->id]);
+
+    $this->actingAs($this->spvSmg)
+        ->post('/admin/transfer-mushaf', ['gudang_tujuan_id' => $this->btl->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertSuccessful();
+
+    $kerdus = tugasPacking($this->pekerja, $this->smg->id)->getOrActivateBoxForJenis($this->jenisA5);
+
+    expect(fn () => $kerdus->addItemSafe($resi->fresh(), $this->pekerja->id))
+        ->toThrow(Exception::class, 'sedang dalam dokumen perpindahan');
+
+    expect($resi->fresh()->packingItem)->toBeNull();
+})->group('lokasi-mushaf');
+
+it('menolak menerima dokumen bila resinya dikemas setelah dokumen dibuat', function () {
+    // Race condition: syarat "tidak di dalam kerdus" dulu hanya dicek saat dokumen dibuat.
+    // Resi yang masuk kerdus di gudang asal sebelum dokumen diterima akan pindah gudang
+    // sendirian, sementara kerdusnya tetap di gudang asal.
+    $resi = resiPacking(['gudang_id' => $this->smg->id]);
+
+    $this->actingAs($this->spvSmg)
+        ->post('/admin/transfer-mushaf', ['gudang_tujuan_id' => $this->btl->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertSuccessful();
+
+    $dokumen = TransferMushaf::firstOrFail();
+    $kerdus = tugasPacking($this->pekerja, $this->smg->id)->getOrActivateBoxForJenis($this->jenisA5);
+
+    // Dikemas lewat jalur yang tidak memeriksa dokumen (data lama / sebelum perbaikan).
+    DB::table('packing_items')->insert([
+        'packing_box_id' => $kerdus->id, 'pengiriman_id' => $resi->id, 'packed_by' => $this->pekerja->id,
+        'packed_at' => now(), 'urutan_dalam_box' => 1, 'quantity' => 1, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    $this->actingAs($this->spvBtl)
+        ->postJson("/admin/transfer-mushaf/{$dokumen->id}/terima")
+        ->assertStatus(422)
+        ->assertJsonPath('success', false);
+
+    expect($dokumen->fresh()->status)->toBe(TransferMushaf::STATUS_DIPROSES)
+        ->and($resi->fresh()->gudang_id)->toBe($this->smg->id);
+})->group('lokasi-mushaf');
+
+it('memberi alasan yang bisa dibaca untuk resi yang sudah pernah dipindahkan', function () {
+    $resi = resiPacking(['gudang_id' => $this->smg->id]);
+
+    $this->actingAs($this->spvSmg)
+        ->post('/admin/transfer-mushaf', ['gudang_tujuan_id' => $this->btl->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertSuccessful();
+
+    $this->actingAs($this->spvBtl)
+        ->post('/admin/transfer-mushaf/'.TransferMushaf::firstOrFail()->id.'/terima')
+        ->assertSuccessful();
+
+    $respons = $this->actingAs($this->spvBtl)
+        ->postJson('/admin/transfer-mushaf', ['gudang_tujuan_id' => $this->smg->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertStatus(422);
+
+    expect($respons->json('message'))->toContain('sudah pernah dipindahkan')
+        ->and($respons->json('message'))->not->toContain('SQLSTATE');
+})->group('lokasi-mushaf');
+
+it('membalas 422, bukan 500, saat dokumen diterima dua kali', function () {
+    $resi = resiPacking(['gudang_id' => $this->smg->id]);
+
+    $this->actingAs($this->spvSmg)
+        ->post('/admin/transfer-mushaf', ['gudang_tujuan_id' => $this->btl->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertSuccessful();
+
+    $dokumen = TransferMushaf::firstOrFail();
+    $basi = TransferMushaf::find($dokumen->id);
+
+    $this->actingAs($this->spvBtl)->postJson("/admin/transfer-mushaf/{$dokumen->id}/terima")->assertSuccessful();
+
+    // Klik kedua: instance basi masih "diproses", penjaga di dalam kunci yang menolak.
+    $respons = app(TransferMushafController::class)
+        ->terima(Request::create('/', 'POST')->setUserResolver(fn () => $this->spvBtl), $basi);
+
+    expect($respons->getStatusCode())->toBe(422);
 })->group('lokasi-mushaf');

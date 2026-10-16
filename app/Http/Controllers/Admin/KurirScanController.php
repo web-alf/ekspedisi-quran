@@ -8,8 +8,10 @@ use App\Models\MuatanItem;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -235,30 +237,47 @@ class KurirScanController extends Controller
         $dilewati = [];
         $belumSiap = [];
 
-        foreach ($resiDalamBox as $pengiriman) {
-            $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
+        // Satu kerdus dimuat utuh atau tidak sama sekali. Tanpa transaksi, dua pemindai
+        // yang memuat kerdus yang sama ke dua muatan bisa memecah isinya: sebagian resi
+        // di muatan ini, sebagian di muatan lain, dan pemindai pertama mendapat galat 500
+        // padahal separuh kerdusnya sudah tercatat.
+        try {
+            DB::transaction(function () use ($resiDalamBox, $muatan, $request, &$dimuat, &$dilewati, &$belumSiap): void {
+                $urutan = (int) MuatanItem::where('muatan_id', $muatan->id)->max('urutan');
 
-            if ($sudahAda) {
-                $dilewati[] = $pengiriman->no_resi;
+                foreach ($resiDalamBox as $pengiriman) {
+                    $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
 
-                continue;
-            }
+                    if ($sudahAda) {
+                        $dilewati[] = $pengiriman->no_resi;
 
-            if (! in_array($pengiriman->status?->slug, Pengiriman::SLUG_SIAP_DIMUAT, true)) {
-                $belumSiap[] = $pengiriman->no_resi;
+                        continue;
+                    }
 
-                continue;
-            }
+                    if (! in_array($pengiriman->status?->slug, Pengiriman::SLUG_SIAP_DIMUAT, true)) {
+                        $belumSiap[] = $pengiriman->no_resi;
 
-            MuatanItem::create([
-                'muatan_id' => $muatan->id,
-                'pengiriman_id' => $pengiriman->id,
-                'urutan' => (int) MuatanItem::where('muatan_id', $muatan->id)->max('urutan') + 1,
-                'dimuat_at' => now(),
-                'dimuat_by' => $request->user()->id,
-            ]);
+                        continue;
+                    }
 
-            $dimuat++;
+                    MuatanItem::create([
+                        'muatan_id' => $muatan->id,
+                        'pengiriman_id' => $pengiriman->id,
+                        'urutan' => ++$urutan,
+                        'dimuat_at' => now(),
+                        'dimuat_by' => $request->user()->id,
+                    ]);
+
+                    $dimuat++;
+                }
+            });
+        } catch (UniqueConstraintViolationException) {
+            return response()->json([
+                'success' => false,
+                'jenis' => 'box',
+                'tercatat' => false,
+                'message' => "Kerdus {$kodeKerdus} sedang dimuat di tempat lain pada saat yang sama. Tidak ada resi yang dimuat; pindai ulang untuk melihat keadaan terbarunya.",
+            ], 409);
         }
 
         $muatan->syncTotals();

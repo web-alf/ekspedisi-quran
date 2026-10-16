@@ -186,7 +186,7 @@ Route::middleware(['throttle:tracking-public', 'rate-limit-handler'])->group(fun
 // 📖 Public Mushaf Request Routes (enhanced rate limiting)
 Route::middleware(['throttle:mushaf-request', 'rate-limit-handler'])->group(function () {
     Route::get('/mushaf-request', [MushafRequestController::class, 'index'])->name('mushaf-request');
-    Route::post('/mushaf-request', [MushafRequestController::class, 'store'])->name('mushaf-request.store');
+    Route::post('/mushaf-request', [MushafRequestController::class, 'store'])->middleware('cegah-kirim-ganda')->name('mushaf-request.store');
     Route::get('/mushaf-request/success/{no_request}', [MushafRequestController::class, 'success'])->name('mushaf-request.success');
     Route::post('/mushaf-request/check-status', [MushafRequestController::class, 'checkStatus'])->name('mushaf-request.check-status');
 });
@@ -286,6 +286,8 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('permission:donatur.read')->group(function () {
             Route::resource('donatur', DonaturController::class)
                 ->middlewareFor(['create', 'store'], 'permission:donatur.create')
+                // Klik ganda "Simpan" tidak boleh menggandakan donasi, item, dan resi.
+                ->middlewareFor('store', 'cegah-kirim-ganda')
                 ->middlewareFor(['edit', 'update'], 'permission:donatur.update')
                 ->middlewareFor('destroy', 'permission:donatur.delete');
 
@@ -293,7 +295,7 @@ Route::middleware(['auth'])->group(function () {
                 ->name('api.donatur.search-kode');
 
             Route::post('donatur/{donatur}/add-quran', [DonaturController::class, 'addQuran'])
-                ->middleware('permission:donatur.update')
+                ->middleware(['permission:donatur.update', 'cegah-kirim-ganda'])
                 ->name('donatur.add-quran');
             Route::patch('donatur/{donatur}/update-wakif-names', [DonaturController::class, 'updateWakifNames'])
                 ->middleware('permission:donatur.update')
@@ -303,7 +305,7 @@ Route::middleware(['auth'])->group(function () {
                 ->middleware('permission:donatur.export')
                 ->name('donatur.export');
             Route::post('donatur-import', [DonaturController::class, 'import'])
-                ->middleware('permission:donatur.import')
+                ->middleware(['permission:donatur.import', 'cegah-kirim-ganda:60'])
                 ->name('donatur.import');
             Route::post('donatur-import-pratinjau', [DonaturController::class, 'previewImport'])
                 ->middleware('permission:donatur.import')
@@ -317,7 +319,7 @@ Route::middleware(['auth'])->group(function () {
                 ->name('donatur.wakaf-items.index');
             Route::post('donatur/{donatur}/wakaf-items', [WakafItemsController::class, 'store'])
                 ->name('donatur.wakaf-items.store')
-                ->middleware('permission:donatur.update');
+                ->middleware(['permission:donatur.update', 'cegah-kirim-ganda']);
             // Bulk operations must come BEFORE {wakafItem} routes to avoid conflicts
             Route::delete('donatur/{donatur}/wakaf-items/bulk-destroy', [WakafItemsController::class, 'bulkDestroy'])
                 ->name('donatur.wakaf-items.bulk-destroy')
@@ -769,7 +771,7 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('permission:mushaf-requests.read')
             ->name('mushaf-requests.export');
         Route::post('mushaf-requests-import', [App\Http\Controllers\Admin\MushafRequestController::class, 'import'])
-            ->middleware('permission:mushaf-requests.create')
+            ->middleware(['permission:mushaf-requests.create', 'cegah-kirim-ganda:60'])
             ->name('mushaf-requests.import');
         Route::get('mushaf-requests-template', [App\Http\Controllers\Admin\MushafRequestController::class, 'downloadTemplate'])
             ->middleware('permission:mushaf-requests.read')

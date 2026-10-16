@@ -15,6 +15,7 @@ use App\Services\PindaiKerdusService;
 use App\Support\PengirimanStageVisibility;
 use App\Support\PerPage;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -631,37 +632,46 @@ class MuatanController extends Controller
         $diMuatanLain = [];
         $belumSiap = [];
 
-        DB::transaction(function () use ($muatan, $resinya, $request, &$dimuat, &$sudahDiMuatanIni, &$diMuatanLain, &$belumSiap): void {
-            $urutan = (int) MuatanItem::where('muatan_id', $muatan->id)->max('urutan');
+        try {
+            DB::transaction(function () use ($muatan, $resinya, $request, &$dimuat, &$sudahDiMuatanIni, &$diMuatanLain, &$belumSiap): void {
+                $urutan = (int) MuatanItem::where('muatan_id', $muatan->id)->max('urutan');
 
-            foreach ($resinya as $pengiriman) {
-                $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
+                foreach ($resinya as $pengiriman) {
+                    $sudahAda = MuatanItem::where('pengiriman_id', $pengiriman->id)->first();
 
-                if ($sudahAda) {
-                    if ((int) $sudahAda->muatan_id === (int) $muatan->id) {
-                        $sudahDiMuatanIni++;
+                    if ($sudahAda) {
+                        if ((int) $sudahAda->muatan_id === (int) $muatan->id) {
+                            $sudahDiMuatanIni++;
+
+                            continue;
+                        }
+
+                        $diMuatanLain[] = $pengiriman->no_resi;
 
                         continue;
                     }
 
-                    $diMuatanLain[] = $pengiriman->no_resi;
+                    // Satu kerdus bisa memuat resi dari beberapa tahap sekaligus.
+                    // Resi yang belum siap DILEWATI dan dilaporkan, bukan menggagalkan
+                    // seluruh kerdus — sisanya tetap harus bisa dimuat.
+                    if (! $this->siapDimuat($pengiriman)) {
+                        $belumSiap[] = $pengiriman->no_resi.'.'.($pengiriman->status->slug ?? '-');
 
-                    continue;
+                        continue;
+                    }
+
+                    $this->lampirkanResi($muatan, $pengiriman->id, $request->user()->id, ++$urutan);
+                    $dimuat++;
                 }
-
-                // Satu kerdus bisa memuat resi dari beberapa tahap sekaligus.
-                // Resi yang belum siap DILEWATI dan dilaporkan, bukan menggagalkan
-                // seluruh kerdus — sisanya tetap harus bisa dimuat.
-                if (! $this->siapDimuat($pengiriman)) {
-                    $belumSiap[] = $pengiriman->no_resi.'.'.($pengiriman->status->slug ?? '-');
-
-                    continue;
-                }
-
-                $this->lampirkanResi($muatan, $pengiriman->id, $request->user()->id, ++$urutan);
-                $dimuat++;
-            }
-        });
+            });
+        } catch (UniqueConstraintViolationException) {
+            // Kerdus yang sama sedang dimuat di tempat lain: seluruh pemuatan ini
+            // dibatalkan oleh transaksi, jadi isinya tidak terpecah.
+            return response()->json([
+                'success' => false,
+                'message' => "Kerdus {$kodeKerdus} sedang dimuat di tempat lain pada saat yang sama. Tidak ada resi yang dimuat; pindai ulang untuk melihat keadaan terbarunya.",
+            ], 409);
+        }
 
         $muatan->syncTotals();
         $muatan->refresh();
@@ -782,32 +792,16 @@ class MuatanController extends Controller
 
         $idResi = MuatanItem::where('muatan_id', $muatan->id)->pluck('pengiriman_id')->all();
 
+        // Aturan final & tidak-mundur dicek pada baris terkunci di model, bukan pada
+        // pembacaan di sini — pembacaan tanpa kunci bisa sudah basi saat ditulis.
         foreach (Pengiriman::whereIn('id', $idResi)->get() as $pengiriman) {
-            $statusSekarang = $pengiriman->status;
+            $hasil = $pengiriman->ubahStatusBilaBoleh($status, $catatan, $userId);
 
-            // Sudah di status ini — hitung sebagai berhasil, jangan diubah ulang.
-            if ((int) $pengiriman->status_id === (int) $status->id) {
+            if ($hasil === 'ditolak') {
+                $gagal++;
+            } else {
                 $berhasil++;
-
-                continue;
             }
-
-            // Diterima bersifat final: tidak boleh dipindah lagi.
-            if ($statusSekarang && $statusSekarang->is_final) {
-                $gagal++;
-
-                continue;
-            }
-
-            // Status mundur tidak diizinkan, kecuali ke "batal".
-            if ($status->slug !== 'batal' && $statusSekarang && $status->urutan < $statusSekarang->urutan) {
-                $gagal++;
-
-                continue;
-            }
-
-            $pengiriman->updateStatus($status->id, $catatan, $userId);
-            $berhasil++;
         }
 
         return ['berhasil' => $berhasil, 'gagal' => $gagal];
