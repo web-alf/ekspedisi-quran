@@ -4,6 +4,7 @@
   import TabNavigation from '@/Components/TabNavigation.svelte';
   import DokumentasiUpload from '@/Components/DokumentasiUpload.svelte';
   import HeroIcon from '@/Components/UI/HeroIcon.svelte';
+  import PilihGambarQR from '@/Components/PilihGambarQR.svelte';
   import { page } from '@inertiajs/svelte';
   import { createScanner } from '@/utils/scanner-core.js';
 
@@ -74,6 +75,15 @@
   function onScanSuccess(decodedText, decodedResult) {
     if (loading) return;
     processQRResult(decodedText);
+  }
+
+  /**
+   * QR dari gambar galeri/berkas. Kamera dimatikan lebih dulu supaya tidak
+   * tetap menyala di belakang formulir status.
+   */
+  function onGambarQrTerbaca(event) {
+    scannerStore.cleanup();
+    onScanSuccess(event.detail.text, null);
   }
 
   function onScanFailure(scanError) {
@@ -500,7 +510,7 @@
   <TabNavigation {currentMode} />
   
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-      {#if !$scannerStore.permissionGranted}
+      {#if !$scannerStore.permissionGranted && !showStatusForm && !successData}
         <!-- Permission Request -->
         <div class="p-6 sm:p-8 text-center">
           <div class="w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -514,6 +524,14 @@
           >
             Berikan Izin Kamera
           </button>
+
+          <div class="mt-6 pt-6 border-t border-gray-100 max-w-xs mx-auto">
+            <p class="text-sm text-gray-600 mb-2">Kamera bermasalah?</p>
+            <PilihGambarQR on:scanSuccess={onGambarQrTerbaca} />
+            {#if error}
+              <p class="mt-2 text-sm text-red-600 break-words">{error}</p>
+            {/if}
+          </div>
         </div>
     {:else}
         <!-- Scanner Active -->
@@ -557,6 +575,10 @@
                 >
                   <HeroIcon name="map-pin" class="w-4 h-4" /> Get Location
                 </button>
+              </div>
+
+              <div class="mt-4 max-w-xs mx-auto">
+                <PilihGambarQR on:scanSuccess={onGambarQrTerbaca} />
               </div>
               
               <!-- Manual Input -->

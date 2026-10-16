@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import HeroIcon from './UI/HeroIcon.svelte';
+  import PilihGambarQR from './PilihGambarQR.svelte';
   
   export let width = 300;
   export let height = 300;
@@ -10,6 +11,8 @@
   export let aspectRatio = 1.0;
   export let loadingText = 'Menyalakan kamera...';
   export let showToggleCamera = true;
+  /** Cadangan bila kamera bermasalah: baca QR dari gambar galeri/berkas. */
+  export let showPilihGambar = true;
 
   const ELEMENT_ID = 'qr-scanner-container';
 
@@ -324,6 +327,16 @@
           Hentikan
         </button>
       </div>
+    </div>
+  {/if}
+
+  <!--
+    Di luar semua cabang if: tombol ini harus tetap ada saat kamera masih
+    menyala, gagal, atau ditolak izinnya — justru di situ ia paling dibutuhkan.
+  -->
+  {#if showPilihGambar}
+    <div class="mt-3 px-3 pb-3">
+      <PilihGambarQR on:scanSuccess={(e) => onScanSuccess(e.detail.text, e.detail.result)} />
     </div>
   {/if}
 </div>

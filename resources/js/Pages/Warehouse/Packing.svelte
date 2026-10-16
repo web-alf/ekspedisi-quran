@@ -7,6 +7,7 @@
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
   import FileQRScanner from '../../Components/FileQRScanner.svelte';
+  import PilihGambarQR from '../../Components/PilihGambarQR.svelte';
   import { createScanner } from '../../utils/scanner-core.js';
   import { ringkasHasilKardus, labelKerdus } from '../../utils/kardusPacking.js';
 
@@ -870,6 +871,22 @@
   }
 
   /**
+   * QR dari gambar galeri/berkas — cadangan bila kamera bermasalah.
+   *
+   * Langsung ke processScannedItem (seperti FileQRScanner), tidak lewat
+   * onScanSuccess: pemeriksaan "kode sama dengan pindaian terakhir" di sana
+   * gunanya meredam frame kamera berulang, dan akan diam-diam mengabaikan
+   * gambar yang sengaja dipilih ulang setelah gagal.
+   */
+  function onGambarQrTerbaca(event) {
+    const teks = event.detail.text;
+    if (isProcessing || !teks?.trim()) return;
+
+    scanResult = teks;
+    processScannedItem(teks);
+  }
+
+  /**
    * Catat kerdus pada alur packing kardus.
    *
    * Dipakai saat mushaf datang sudah dalam kardus/dos dari produksi: gudang
@@ -1197,6 +1214,9 @@
                     <div class="bg-gray-900 rounded-xl overflow-hidden mb-4 {!isScanning ? 'hidden' : ''}">
                       <div id="qr-reader" class="min-h-[250px] sm:min-h-[300px]"></div>
                     </div>
+
+                    <!-- Tetap tampil saat kamera mati, gagal, atau izinnya ditolak. -->
+                    <PilihGambarQR on:scanSuccess={onGambarQrTerbaca} />
                   {/if}
                   
                   <!-- Processing Indicator -->

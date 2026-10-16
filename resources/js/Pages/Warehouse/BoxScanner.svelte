@@ -3,6 +3,7 @@
   import AdminLayout from '@/Layouts/AdminLayout.svelte';
   import { toast, dialog } from '@/utils/notifications.js';
   import FileQRScanner from '@/Components/FileQRScanner.svelte';
+  import PilihGambarQR from '@/Components/PilihGambarQR.svelte';
   import DokumentasiUpload from '@/Components/DokumentasiUpload.svelte';
   import HeroIcon from '@/Components/UI/HeroIcon.svelte';
   import axios from 'axios';
@@ -54,6 +55,15 @@
   function onScanSuccess(decodedText, decodedResult) {
     if (loading || !decodedText?.trim()) return;
     handleScanSuccess(decodedText);
+  }
+
+  /**
+   * QR dari gambar galeri/berkas. Kamera dimatikan lebih dulu, sama seperti
+   * pemindai kamera yang berhenti setelah membaca satu kode.
+   */
+  function onGambarQrTerbaca(event) {
+    scannerStore.cleanup();
+    onScanSuccess(event.detail.text, null);
   }
 
   function onScanFailure(scanError) {
@@ -122,7 +132,7 @@
 
   // File scanner handling
   function handleFileScanned(event) {
-    const qrCode = event.detail;
+    const qrCode = event.detail?.decodedText;
     if (qrCode) {
       handleScanSuccess(qrCode);
     }
@@ -469,6 +479,11 @@
                   Gunakan File Scanner
                 </button>
               </div>
+
+              <div class="mt-6 pt-6 border-t border-gray-100 max-w-xs mx-auto">
+                <p class="text-sm text-gray-600 mb-2">Kamera bermasalah?</p>
+                <PilihGambarQR on:scanSuccess={onGambarQrTerbaca} />
+              </div>
             </div>
           {:else}
             <div
@@ -476,6 +491,10 @@
               class="mx-auto w-full max-w-sm sm:max-w-md lg:max-w-lg rounded-lg overflow-hidden bg-gray-900"
               style="min-height: 300px;"
             ></div>
+
+            <div class="mt-4 max-w-xs mx-auto">
+              <PilihGambarQR on:scanSuccess={onGambarQrTerbaca} />
+            </div>
           {/if}
 
           <!-- Scanner Status -->
