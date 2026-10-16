@@ -258,6 +258,69 @@
   function waktuTampil(baris) {
     return baris.tanggal === tanggalHariIni ? baris.waktu : baris.waktu_lengkap;
   }
+
+  // --- Kerdus siap diverifikasi ---
+  // Daftar kerdus penuh/tersegel. Jumlah isinya SENGAJA tidak dikirim server (hitungan
+  // buta), dan tidak ada tombol verifikasi di sini: statusnya hanya berubah lewat pindai
+  // QR di kerdusnya — jadi petugas tetap harus memegang kerdusnya secara fisik.
+  $: siap = pindai.siap || { daftar: { data: [], total: 0 }, hitung: {}, filters: {}, gudangList: [] };
+  $: daftarSiap = siap.daftar?.data || [];
+  $: hitungSiap = siap.hitung || {};
+
+  let siapStatus = pindai.siap?.filters?.status || 'perlu';
+  let siapGudang = pindai.siap?.filters?.gudang || '';
+  let siapCari = pindai.siap?.filters?.cari || '';
+  let jedaSiap;
+  let kartuPemindai;
+
+  const tabSiap = [
+    { nilai: 'perlu', label: 'Perlu diperiksa' },
+    { nilai: 'belum', label: 'Belum' },
+    { nilai: 'selisih', label: 'Selisih' },
+    { nilai: 'berubah', label: 'Isi berubah' },
+    { nilai: 'cocok', label: 'Cocok' },
+    { nilai: 'semua', label: 'Semua' },
+  ];
+
+  const tampilanVerifikasi = {
+    belum: { label: 'Belum diperiksa', titik: 'bg-gray-400' },
+    selisih: { label: 'Selisih', titik: 'bg-red-500' },
+    berubah: { label: 'Isi berubah — periksa ulang', titik: 'bg-amber-500' },
+    cocok: { label: 'Cocok', titik: 'bg-green-500' },
+  };
+
+  /** Sama seperti filter riwayat: hanya kunci `siap_*` yang berubah, sisanya dibawa. */
+  function terapkanFilterSiap() {
+    const params = Object.fromEntries(new URL(window.location.href).searchParams);
+    params.siap_status = siapStatus;
+    delete params.siap_page;
+
+    for (const [kunci, nilai] of Object.entries({ siap_gudang: siapGudang, siap_cari: siapCari })) {
+      if (nilai) {
+        params[kunci] = nilai;
+      } else {
+        delete params[kunci];
+      }
+    }
+
+    router.get(window.location.pathname, params, { preserveState: true, preserveScroll: true, only: ['pindaiKerdus'] });
+  }
+
+  function pilihTabSiap(nilai) {
+    siapStatus = nilai;
+    terapkanFilterSiap();
+  }
+
+  function cariSiapDitunda() {
+    clearTimeout(jedaSiap);
+    jedaSiap = setTimeout(terapkanFilterSiap, 350);
+  }
+
+  /** Bawa petugas ke pemindai: verifikasi tetap harus lewat QR di kerdus fisiknya. */
+  function mulaiPindai() {
+    kameraAktif = true;
+    kartuPemindai?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 </script>
 
 <section class="space-y-6">
@@ -273,7 +336,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Kiri: pemindai & isian -->
     <div class="lg:col-span-2 space-y-6">
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+      <div bind:this={kartuPemindai} class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 scroll-mt-20">
         <h3 class="text-sm font-semibold text-gray-900 mb-3">Pindai QR Kerdus</h3>
 
         <button
@@ -608,6 +671,138 @@
         {/if}
       </div>
     </div>
+  </div>
+
+  <!-- Kerdus siap diverifikasi: kerdus penuh/tersegel yang harus diperiksa fisik. -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" data-testid="kerdus-siap">
+    <div class="px-4 sm:px-6 py-4 border-b border-gray-100">
+      <div class="flex flex-col sm:flex-row sm:items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <h3 class="text-base font-semibold text-gray-900">Kerdus Siap Diverifikasi</h3>
+          <p class="text-sm text-gray-500 mt-1">
+            Kerdus yang sudah penuh atau disegel gudang. Ambil kerdusnya, pindai QR-nya, lalu
+            hitung isinya — jumlah di data sengaja tidak ditampilkan di sini.
+          </p>
+        </div>
+        <button
+          type="button"
+          on:click={mulaiPindai}
+          class="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#eb3434] hover:bg-red-600 transition-colors whitespace-nowrap"
+        >
+          <HeroIcon name="camera" class="w-4 h-4" />
+          Pindai kerdus
+        </button>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Status verifikasi">
+        {#each tabSiap as tab}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={siapStatus === tab.nilai}
+            on:click={() => pilihTabSiap(tab.nilai)}
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+              {siapStatus === tab.nilai ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}"
+          >
+            {tab.label}
+            <span class="{siapStatus === tab.nilai ? 'text-gray-300' : 'text-gray-400'}">{hitungSiap[tab.nilai] ?? 0}</span>
+          </button>
+        {/each}
+      </div>
+
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <select
+          bind:value={siapGudang}
+          on:change={terapkanFilterSiap}
+          aria-label="Saring gudang"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm"
+        >
+          <option value="">Semua gudang</option>
+          {#each siap.gudangList || [] as g}
+            <option value={String(g.id)}>{g.nama}</option>
+          {/each}
+          <option value="belum">Gudang belum diketahui</option>
+        </select>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+            <HeroIcon name="magnifying-glass" class="h-4 w-4" />
+          </div>
+          <input
+            type="text"
+            bind:value={siapCari}
+            on:input={cariSiapDitunda}
+            placeholder="Cari kode kerdus"
+            aria-label="Cari kode kerdus siap"
+            class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm font-mono"
+          />
+        </div>
+      </div>
+    </div>
+
+    {#if daftarSiap.length === 0}
+      <div class="p-8 text-center">
+        <HeroIcon name="archive-box" class="w-10 h-10 text-gray-300 mx-auto mb-2" />
+        <p class="text-sm text-gray-500">
+          {siapStatus === 'perlu'
+            ? 'Tidak ada kerdus yang menunggu diperiksa.'
+            : 'Tidak ada kerdus pada pilihan ini.'}
+        </p>
+      </div>
+    {:else}
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+            <tr>
+              <th class="px-4 sm:px-6 py-3">Kode kerdus</th>
+              <th class="px-4 py-3">Jenis</th>
+              <th class="px-4 py-3">Gudang</th>
+              <th class="px-4 py-3">Disegel</th>
+              <th class="px-4 py-3">Verifikasi</th>
+              <th class="px-4 sm:px-6 py-3">Terakhir diperiksa</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {#each daftarSiap as k (k.id)}
+              <tr>
+                <td class="px-4 sm:px-6 py-3 font-mono text-gray-900 whitespace-nowrap">{k.kode_kerdus}</td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <span
+                    title={k.jenis}
+                    class="inline-flex items-center justify-center min-w-11 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600 border border-gray-200"
+                  >
+                    {k.jenis_kode || '—'}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-gray-700 whitespace-nowrap">{k.gudang || 'Belum diketahui'}</td>
+                <td class="px-4 py-3 text-gray-600 whitespace-nowrap">
+                  {k.disegel_pada || labelStatus[k.status_kerdus] || '-'}
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <span class="inline-flex items-center gap-1.5 text-gray-700">
+                    <span class="w-2 h-2 rounded-full {tampilanVerifikasi[k.verifikasi]?.titik || 'bg-gray-400'}"></span>
+                    {tampilanVerifikasi[k.verifikasi]?.label || k.verifikasi}
+                  </span>
+                </td>
+                <td class="px-4 sm:px-6 py-3 text-gray-600 whitespace-nowrap">
+                  {#if k.diverifikasi_oleh}
+                    {k.diverifikasi_oleh}
+                    <div class="text-xs text-gray-400">{k.diverifikasi_pada}</div>
+                  {:else}
+                    <span class="text-gray-400">—</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      {#if (siap.daftar?.last_page || 1) > 1}
+        <div class="px-4 sm:px-6 py-3 border-t border-gray-100">
+          <Pagination data={siap.daftar} tanpaPemilihPerHalaman={true} />
+        </div>
+      {/if}
+    {/if}
   </div>
 
   <!-- Riwayat tersimpan -->
