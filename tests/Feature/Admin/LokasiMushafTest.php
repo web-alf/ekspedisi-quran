@@ -340,7 +340,10 @@ it('menolak peran tanpa izin memindahkan mushaf', function () {
 })->group('lokasi-mushaf');
 
 it('menyodorkan pilihan gudang di halaman packing untuk tugas yang belum bertagih', function () {
+    // Tugas LAMA (lahir sebelum 16/10/2026, saat tugas belum otomatis membawa gudang
+    // pekerjanya) — sejak itu DailyPackingTask::booted mengisinya, jadi disimulasikan.
     $tugas = tugasPacking($this->pekerja, null);
+    DB::table('daily_packing_tasks')->where('id', $tugas->id)->update(['gudang_id' => null]);
 
     // Props: panel pilihan muncul karena gudangTugas masih kosong.
     $props = $this->actingAs($this->pekerja)
@@ -369,7 +372,9 @@ it('menyodorkan pilihan gudang di halaman packing untuk tugas yang belum bertagi
 })->group('lokasi-mushaf');
 
 it('menolak pekerja ber-gudang memilih gudang lain lewat panel packing', function () {
-    tugasPacking($this->pekerja, null);
+    // Tugas lama tanpa gudang (lihat tes di atas).
+    $tugas = tugasPacking($this->pekerja, null);
+    DB::table('daily_packing_tasks')->where('id', $tugas->id)->update(['gudang_id' => null]);
 
     $this->actingAs($this->pekerja)
         ->postJson('/admin/warehouse/packing/gudang', ['gudang_id' => $this->btl->id])

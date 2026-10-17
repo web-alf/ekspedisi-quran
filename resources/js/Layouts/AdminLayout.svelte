@@ -43,7 +43,9 @@
   
   
   // Navigation items based on permissions
-  $: navigationItems = getNavigationItems(userPermissions);
+  // peranNama ikut sebagai argumen supaya Svelte menghitung ulang menu saat peran berubah
+  // (filter `excludeRoles` membacanya).
+  $: navigationItems = getNavigationItems(userPermissions, peranNama);
   
   // Track if user has manually interacted with dropdowns
   let userInteracted = false;
@@ -107,6 +109,14 @@
           requiredPermissions: ['mushaf.transfer']
         },
         {
+          // Penempatan Gudang (16/10/2026): akun SPV/staf → Semarang/Boyolali. SPV ikut
+          // memegang izinnya lewat role manager-repacking, tapi bukan wewenangnya.
+          label: 'Penempatan Gudang',
+          route: '/admin/penempatan-gudang',
+          requiredPermissions: ['gudang.penempatan'],
+          excludeRoles: ['spv-gudang']
+        },
+        {
           label: 'Daftar Kerdus',
           route: '/admin/box-tracking',
           requiredPermissions: ['warehouse.boxes.view']
@@ -158,6 +168,12 @@
         label: 'Perpindahan Mushaf',
         route: '/admin/transfer-mushaf',
         requiredPermissions: ['mushaf.transfer']
+      },
+      {
+        label: 'Penempatan Gudang',
+        route: '/admin/penempatan-gudang',
+        requiredPermissions: ['gudang.penempatan'],
+        excludeRoles: ['spv-gudang']
       },
       { 
         label: 'Sertifikat', 
@@ -363,6 +379,12 @@
     }
     
     const filtered = allItems.filter(item => {
+      // Menu yang wewenangnya bukan milik peran tertentu walau izinnya ikut terbawa role lain
+      // (mis. SPV memegang role manager-repacking). Super-admin tidak pernah dikecualikan.
+      if (item.excludeRoles && !peranNama.includes('super-admin') && item.excludeRoles.some(r => peranNama.includes(r))) {
+        return false;
+      }
+
       // Permission-based access control
       if (!item.requiredPermissions || item.requiredPermissions.length === 0) {
         return false; // No permissions defined = no access

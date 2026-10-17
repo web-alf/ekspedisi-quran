@@ -112,6 +112,24 @@ class User extends Authenticatable
     }
 
     /**
+     * Boleh memindahkan akun SPV/staf gudang ke Semarang/Boyolali?
+     *
+     * Keputusan pemilik sistem (16/10/2026): super-admin dan manager gudang (PJ,
+     * role `manager-repacking`). SPV di produksi IKUT memegang role manager-repacking,
+     * jadi pemegang `spv-gudang` dikecualikan — SPV tidak boleh memindahkan dirinya
+     * sendiri atau SPV gudang lain.
+     */
+    public function bolehAturPenempatanGudang(): bool
+    {
+        if ($this->hasRole(RoleEnum::SUPER_ADMIN->value)) {
+            return true;
+        }
+
+        return $this->hasRole(RoleEnum::MANAGER_REPACKING->value)
+            && ! $this->hasRole(RoleEnum::SPV_GUDANG->value);
+    }
+
+    /**
      * Apakah pengguna ini manager distribusi.
      */
     public function adalahManager(): bool

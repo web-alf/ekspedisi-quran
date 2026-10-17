@@ -335,7 +335,10 @@ class RolePermissionSeeder extends Seeder
             ['name' => RoleEnum::MANAGER_REPACKING->value],
             ['display_name' => 'Manager Repacking (PJ Gudang)', 'guard_name' => 'web']
         );
-        $managerRepacking->syncPermissions($izinOperasionalGudang);
+        // Penempatan gudang akun hanya untuk PJ (bukan SPV): SPV yang juga memegang role
+        // ini tetap ditolak di User::bolehAturPenempatanGudang(). Di produksi dipasang oleh
+        // migrasi 2026_10_16_230000_beri_izin_penempatan_gudang.
+        $managerRepacking->syncPermissions([...$izinOperasionalGudang, PermissionEnum::GUDANG_PENEMPATAN->value]);
 
         $spvGudang = Role::firstOrCreate(
             ['name' => RoleEnum::SPV_GUDANG->value],

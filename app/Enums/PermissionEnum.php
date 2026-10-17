@@ -137,6 +137,8 @@ enum PermissionEnum: string
 
     // Lokasi mushaf (gudang) — mushaf wakaf/ber-resi, bukan stok tanpa muwakif
     case MUSHAF_TRANSFER = 'mushaf.transfer';
+    // Menempatkan akun SPV/staf gudang di Semarang atau Boyolali (16/10/2026).
+    case GUDANG_PENEMPATAN = 'gudang.penempatan';
     case WAKAF_BATCH_UPDATE = 'wakaf-batch.update';
     case WAKAF_BATCH_DELETE = 'wakaf-batch.delete';
 

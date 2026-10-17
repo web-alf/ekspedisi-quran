@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\LandingContent\SeoSettingsController;
 use App\Http\Controllers\Admin\LandingContent\SocialSettingsController;
 use App\Http\Controllers\Admin\MonitoringDashboardController;
 use App\Http\Controllers\Admin\MuatanController;
+use App\Http\Controllers\Admin\PenempatanGudangController;
 use App\Http\Controllers\Admin\PengirimanController;
 use App\Http\Controllers\Admin\PengirimanTrackingController;
 use App\Http\Controllers\Admin\PermissionController;
@@ -657,6 +658,14 @@ Route::middleware(['auth'])->group(function () {
         //
         // Bedanya dari /admin/warehouse/stok: yang ini satuannya RESI (mushaf wakaf yang
         // sudah punya wujud & tujuan kirim), bukan stok tanpa muwakif dalam satuan eks.
+        // Penempatan Gudang (16/10/2026): akun SPV/staf → Semarang/Boyolali. Di luar grup
+        // `warehouse` karena manager gudang tidak memegang warehouse.dashboard; SPV yang ikut
+        // memegang izin ini ditolak di User::bolehAturPenempatanGudang().
+        Route::middleware('permission:gudang.penempatan')->prefix('penempatan-gudang')->name('penempatan-gudang.')->group(function () {
+            Route::get('/', [PenempatanGudangController::class, 'index'])->name('index');
+            Route::patch('/{user}', [PenempatanGudangController::class, 'update'])->name('update');
+        });
+
         Route::prefix('transfer-mushaf')->name('transfer-mushaf.')->group(function () {
             Route::get('/', [TransferMushafController::class, 'index'])
                 ->middleware('permission:mushaf.transfer|stok.read')
