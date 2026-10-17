@@ -178,8 +178,8 @@
   }
 
   // --- Kerdus siap dipindai ---
-  // Kerdus penuh/tersegel yang belum dimuat ke kurir. Barisnya sama dengan Tracking
-  // Kerdus gudang, supaya kedua sisi membaca kerdus yang sama dengan cara yang sama.
+  // Kerdus penuh/tersegel yang belum dimuat ke kurir. Kolomnya mengikuti Tracking Kerdus
+  // gudang, minus Progress & User (kerdus di sini selalu penuh; pengemas ada di detail).
   $: siap = pindai.siap || { daftar: { data: [], total: 0 }, filters: {}, gudangList: [] };
   $: daftarSiap = siap.daftar?.data || [];
 
@@ -229,13 +229,6 @@
   }
 
   const labelMetode = { qr: 'Pindai QR', manual: 'Ketik manual' };
-
-  function warnaProgress(persen) {
-    if (persen === 0) return 'bg-gray-200';
-    if (persen < 50) return 'bg-blue-500';
-    if (persen < 100) return 'bg-yellow-500';
-    return 'bg-green-500';
-  }
 
   /** Sama seperti filter riwayat: hanya kunci `siap_*` yang berubah, sisanya dibawa. */
   function terapkanFilterSiap() {
@@ -609,10 +602,8 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode Kerdus</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis Quran</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Isi (Satuan)</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Kerdus</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seal Code</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipindai</th>
@@ -642,15 +633,6 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{box.jenis_quran}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center">
-                    <div class="w-full bg-gray-200 rounded-full h-2 mr-2">
-                      <div class="h-2 rounded-full {warnaProgress(box.progress_percentage)}" style="width: {box.progress_percentage}%"></div>
-                    </div>
-                    <span class="text-sm text-gray-600">{box.terisi}/{box.kapasitas}</span>
-                  </div>
-                  <div class="text-xs text-gray-500">{box.progress_percentage}%</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-medium text-gray-900">{box.satuan?.label || '-'}</div>
                   <div class="text-xs text-gray-500">
                     dari {box.satuan_kapasitas?.label || box.kapasitas} / kerdus
@@ -669,7 +651,6 @@
                     <span class="text-xs text-gray-400">QR belum dibuat</span>
                   {/if}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{box.user_name}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {box.seal_code || '-'}
                   {#if box.sealed_at}

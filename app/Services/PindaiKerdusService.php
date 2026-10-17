@@ -146,7 +146,7 @@ final class PindaiKerdusService
         $cari = trim($request->string('siap_cari')->toString());
 
         $daftar = PackingBox::query()
-            ->with(['jenisQuran', 'gudang:id,kode,nama', 'dailyPackingTask.user:id,name', 'pindaiKerdusTerakhir.user:id,name'])
+            ->with(['jenisQuran', 'gudang:id,kode,nama', 'pindaiKerdusTerakhir.user:id,name'])
             ->withCount('packingItems')
             ->whereIn('status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED])
             ->where(fn (Builder $q) => $q->doesntHave('packingItems')
@@ -178,14 +178,11 @@ final class PindaiKerdusService
                 'jenis_quran' => $box->jenisQuran->nama_jenis ?? 'Belum ditentukan',
                 'gudang' => $box->gudang?->nama,
                 'kapasitas' => $box->kapasitas,
-                'terisi' => $box->jumlah_terisi,
-                'progress_percentage' => $box->progress_percentage,
                 'item_count' => $box->packing_items_count,
                 'satuan' => BoxUnits::breakdown((int) $box->jumlah_terisi, $pcsPerDoz),
                 'satuan_kapasitas' => BoxUnits::breakdown((int) $box->kapasitas, $pcsPerDoz),
                 'satuan_keterangan' => BoxUnits::explanation($pcsPerDoz, $box->jenisQuran->kode_jenis ?? null),
                 'qr_code_base64' => $this->qrKerdus($box),
-                'user_name' => $box->dailyPackingTask?->user?->name ?? 'N/A',
                 'seal_code' => $box->seal_code,
                 'sealed_at' => $box->sealed_at?->format('d/m/Y H:i'),
                 'created_at' => $box->created_at?->format('d/m/Y H:i'),

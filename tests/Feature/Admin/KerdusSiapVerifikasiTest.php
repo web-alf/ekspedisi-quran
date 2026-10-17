@@ -101,14 +101,15 @@ it('mengirim baris berbentuk sama dengan Tracking Kerdus gudang, tanpa status ve
     $baris = $siap['daftar']['data'][0];
 
     expect($baris)->toHaveKeys([
-        'kode_kerdus', 'status', 'status_info', 'jenis_quran', 'kapasitas', 'terisi',
-        'progress_percentage', 'item_count', 'satuan', 'satuan_kapasitas', 'qr_code_base64',
-        'user_name', 'seal_code', 'sealed_at', 'created_at', 'gudang',
+        'kode_kerdus', 'status', 'status_info', 'jenis_quran', 'kapasitas',
+        'item_count', 'satuan', 'satuan_kapasitas', 'qr_code_base64',
+        'seal_code', 'sealed_at', 'created_at', 'gudang',
     ])
+        // Kolom Progress & User sengaja dibuang dari daftar distribusi.
+        ->not->toHaveKeys(['progress_percentage', 'user_name', 'terisi'])
         ->not->toHaveKeys(['verifikasi', 'diverifikasi_oleh', 'diverifikasi_pada'])
         ->and($baris['dipindai_pada'])->toBeNull()
         ->and($baris['dipindai_oleh'])->toBeNull()
-        ->and($baris['terisi'])->toBe(17)
         ->and($baris['item_count'])->toBe(17)
         ->and($baris['status_info']['label'])->toBe('Tersegel')
         ->and($baris['gudang'])->toBe('Gudang Semarang')

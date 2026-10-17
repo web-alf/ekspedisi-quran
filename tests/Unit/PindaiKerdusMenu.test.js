@@ -80,7 +80,7 @@ describe('Janji tampilan panel', () => {
     });
 
     it('daftar kerdus siap meniru kolom Tracking Kerdus gudang, tanpa status verifikasi', () => {
-        for (const kolom of ['Kode Kerdus', 'Status', 'Jenis Quran', 'Progress', 'Isi (Satuan)', 'QR Kerdus', 'User', 'Seal Code', 'Tanggal']) {
+        for (const kolom of ['Kode Kerdus', 'Status', 'Jenis Quran', 'Isi (Satuan)', 'QR Kerdus', 'Seal Code', 'Tanggal']) {
             expect(panel).toContain(`>${kolom}</th>`);
         }
         // Pindai terakhir diadopsi dari tabel riwayat lama.
@@ -89,6 +89,9 @@ describe('Janji tampilan panel', () => {
         }
         expect(panel).toContain('{box.qr_code_base64}');
         expect(panel).not.toContain('>Verifikasi</th>');
+        expect(panel).not.toContain('>Progress</th>');
+        expect(panel).not.toContain('>User</th>');
+        expect(panel).not.toContain('{box.user_name}');
         expect(panel).not.toContain('siap_status');
     });
 
