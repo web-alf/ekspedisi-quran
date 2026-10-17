@@ -27,6 +27,7 @@
   export let dapatMemindai = false;
   export let dapatMenyelesaikan = false;
   export let alasanTidakBolehSelesai = null;
+  export let tengahJalan = [];
   export const flash = {};
 
   let noResi = '';
@@ -39,7 +40,9 @@
   let showSelesaikan = false;
   let memprosesSelesai = false;
 
-  $: bolehMenyelesaikan = dapatMenyelesaikan && muatan.total_resi > 0 && !muatan.selesai;
+  // "Diterima" hanya untuk resi yang sudah "Tiba di Tujuan" (kurir sudah memindai serah
+  // terima di lokasi) — aturan yang sama ditegakkan di server.
+  $: bolehMenyelesaikan = dapatMenyelesaikan && (muatan.jumlah_tiba || 0) > 0 && !muatan.selesai;
   $: slugSelesai = statusSelesai?.slug || 'diterima';
 
   async function pindaiResi() {
@@ -165,6 +168,7 @@
       yellow: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       blue: 'bg-blue-100 text-blue-800 border-blue-200',
       green: 'bg-green-100 text-green-800 border-green-200',
+      indigo: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       red: 'bg-red-100 text-red-800 border-red-200',
       purple: 'bg-purple-100 text-purple-800 border-purple-200',
       gray: 'bg-gray-100 text-gray-700 border-gray-200',
@@ -292,8 +296,10 @@
           </p>
         {:else if dapatMenyelesaikan}
           <p class="text-sm text-gray-600 mb-4">
-            Tekan tombol di bawah bila seluruh resi sudah benar-benar diterima penerima. Status SEMUA resi
-            akan berubah menjadi "{statusSelesai?.nama || 'Diterima'}" dan tidak dapat dikembalikan.
+            Kurir memindai serah terima di lokasi; resinya menjadi "Tiba di Tujuan". Periksa penerima dan
+            fotonya di daftar di bawah, lalu tekan tombol ini untuk menyatakan resi yang sudah tiba
+            ({muatan.jumlah_tiba || 0} dari {muatan.total_resi}) menjadi "{statusSelesai?.nama || 'Diterima'}".
+            Resi yang belum tiba dilewati.
           </p>
           <button
             on:click={() => (showSelesaikan = true)}
@@ -305,6 +311,8 @@
           </button>
           {#if muatan.total_resi === 0}
             <p class="text-xs text-gray-500 mt-2">Muatan masih kosong — belum ada resi yang bisa diselesaikan.</p>
+          {:else if !muatan.jumlah_tiba}
+            <p class="text-xs text-gray-500 mt-2">Belum ada resi yang Tiba di Tujuan — kurir belum memindai serah terima.</p>
           {/if}
         {:else}
           <!-- Kurir: dijelaskan, bukan sekadar tombolnya hilang tanpa alasan -->
@@ -435,6 +443,7 @@
                   <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Alamat</th>
                   <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
                   <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Serah Terima</th>
                   {#if dapatMenghapus}
                     <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</th>
                   {/if}
@@ -472,6 +481,27 @@
                         <span class="text-xs text-gray-400">—</span>
                       {/if}
                     </td>
+                    <td class="px-4 py-3 text-sm">
+                      {#if item.serah_terima}
+                        <div class="text-gray-900">{item.serah_terima.nama_penerima}</div>
+                        <div class="text-xs text-gray-500">
+                          {item.serah_terima.waktu}{item.serah_terima.oleh ? ` · ${item.serah_terima.oleh}` : ''}
+                        </div>
+                        {#if item.serah_terima.jenis === 'tengah_jalan'}
+                          <div class="text-xs text-gray-500">Di tengah jalan · awal: {item.serah_terima.tujuan_asal || '—'}</div>
+                        {/if}
+                        <div class="flex flex-wrap gap-x-3 text-xs">
+                          {#each item.serah_terima.foto as url, i}
+                            <a href={url} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">Foto {i + 1}</a>
+                          {/each}
+                          {#if item.serah_terima.peta}
+                            <a href={item.serah_terima.peta} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">Lokasi</a>
+                          {/if}
+                        </div>
+                      {:else}
+                        <span class="text-xs text-gray-400">Belum</span>
+                      {/if}
+                    </td>
                     {#if dapatMenghapus}
                       <td class="px-4 py-3 text-right">
                         <button
@@ -490,6 +520,57 @@
           </div>
         {/if}
       </div>
+
+      <!-- Penyerahan di tengah jalan: kurir boleh langsung, manager wajib bisa melihat. -->
+      {#if tengahJalan.length > 0}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6" data-testid="tengah-jalan">
+          <div class="px-4 sm:px-6 py-4 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-900">Diserahkan di Tengah Jalan ({tengahJalan.length})</h3>
+            <p class="text-sm text-gray-500 mt-0.5">
+              Mushaf yang diminta orang lain dalam perjalanan. Resinya sudah dialihkan ke penerima ini
+              dan dilepas dari tujuan awalnya.
+            </p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">No. Resi</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Penerima Baru</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Alamat</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tujuan Awal</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Waktu & Kurir</th>
+                  <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bukti</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-100">
+                {#each tengahJalan as t (t.no_resi)}
+                  <tr>
+                    <td class="px-4 py-3 text-sm font-mono text-gray-900 whitespace-nowrap">{t.no_resi || '—'}</td>
+                    <td class="px-4 py-3 text-sm">
+                      <div class="text-gray-900">{t.nama_penerima}</div>
+                      {#if t.no_hp_penerima}<div class="text-xs text-gray-500">{t.no_hp_penerima}</div>{/if}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 max-w-xs"><div class="line-clamp-2">{t.alamat_penerima || '—'}</div></td>
+                    <td class="px-4 py-3 text-sm text-gray-600">{t.tujuan_asal || '—'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {t.waktu}
+                      {#if t.oleh}<div class="text-xs text-gray-500">{t.oleh}</div>{/if}
+                    </td>
+                    <td class="px-4 py-3 text-xs whitespace-nowrap">
+                      {#each t.foto as url, i}
+                        <a href={url} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline mr-2">Foto {i + 1}</a>
+                      {/each}
+                      {#if t.peta}<a href={t.peta} target="_blank" rel="noopener" class="text-[#eb3434] hover:underline">Lokasi</a>{/if}
+                      {#if !t.foto.length && !t.peta}<span class="text-gray-400">—</span>{/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 </AdminLayout>
@@ -497,7 +578,7 @@
 <ConfirmDialog
   bind:show={showSelesaikan}
   title="Selesaikan Distribusi"
-  message="Semua resi dalam muatan ini akan ditandai &quot;Diterima&quot;. Tindakan ini tidak dapat dibatalkan."
+  message="Resi yang sudah &quot;Tiba di Tujuan&quot; akan ditandai &quot;Diterima&quot;. Resi yang belum tiba dilewati. Tindakan ini tidak dapat dibatalkan."
   type="warning"
   confirmText={memprosesSelesai ? 'Memproses...' : 'Ya, Selesaikan'}
   cancelText="Batal"

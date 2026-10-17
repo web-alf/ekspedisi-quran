@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\GalleryController;
 use App\Http\Controllers\Admin\KurirPermintaanController;
 // use App\Http\Controllers\Admin\SettingController; // Removed - All settings now under Landing Content
 use App\Http\Controllers\Admin\KurirScanController;
+use App\Http\Controllers\Admin\KurirSerahTerimaController;
 use App\Http\Controllers\Admin\LandingContent\ContactSettingsController;
 use App\Http\Controllers\Admin\LandingContent\GeneralSettingsController;
 use App\Http\Controllers\Admin\LandingContent\LandingSettingsController;
@@ -1214,6 +1215,16 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/pindai/box', [KurirScanController::class, 'scanBox'])
                 ->middleware('permission:muatan.scan')
                 ->name('pindai.box');
+
+            // Serah terima: pindai TERAKHIR di lokasi tujuan (→ "Tiba di Tujuan"), atau
+            // penyerahan di tengah jalan (resi dialihkan ke penerima baru). "Diterima"
+            // tetap dinyatakan distribusi lewat muatan.selesaikan.
+            Route::post('/serah-terima/periksa', [KurirSerahTerimaController::class, 'periksa'])
+                ->middleware('permission:muatan.scan')
+                ->name('serah-terima.periksa');
+            Route::post('/serah-terima', [KurirSerahTerimaController::class, 'simpan'])
+                ->middleware('permission:muatan.scan')
+                ->name('serah-terima.simpan');
 
             // Calon permintaan mushaf yang sudah disetujui
             Route::get('/permintaan-disetujui', [KurirPermintaanController::class, 'index'])

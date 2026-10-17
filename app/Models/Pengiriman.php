@@ -76,6 +76,43 @@ class Pengiriman extends Model
 
             $model->tautkanKeBatchDonatur();
         });
+
+        // "Diterima" hanya dari "Tiba di Tujuan" (keputusan pemilik sistem, 16/10/2026):
+        // kurir menyerahkan di lokasi dulu (nama penerima, foto, GPS), baru manager/
+        // distribusi menyatakan diterima. Dijaga di model — bukan di tiap controller —
+        // karena ada setidaknya tujuh jalur yang bisa mengubah status (form edit, ubah
+        // massal, pindai status, tracking, muatan, kerdus massal, perintah artisan);
+        // menjaganya satu per satu berarti satu jalur yang terlewat membuka aturannya.
+        static::updating(function (Pengiriman $model) {
+            if ($alasan = $model->alasanTidakBolehMenjadiDiterima()) {
+                throw new \DomainException($alasan);
+            }
+        });
+    }
+
+    /**
+     * Alasan perubahan status yang sedang disimpan TIDAK boleh menjadi "Diterima", atau
+     * null bila boleh (atau statusnya memang tidak sedang berubah ke "Diterima").
+     */
+    public function alasanTidakBolehMenjadiDiterima(): ?string
+    {
+        if (! $this->isDirty('status_id')) {
+            return null;
+        }
+
+        $slugBaru = StatusPengiriman::query()->whereKey($this->status_id)->value('slug');
+
+        if ($slugBaru !== 'diterima') {
+            return null;
+        }
+
+        $slugLama = StatusPengiriman::query()->whereKey($this->getOriginal('status_id'))->value('slug');
+
+        if ($slugLama === self::SLUG_TIBA) {
+            return null;
+        }
+
+        return "Resi {$this->no_resi} belum \"Tiba di Tujuan\". Kurir harus memindai serah terima di lokasi dulu sebelum resi bisa dinyatakan Diterima.";
     }
 
     /**
@@ -241,6 +278,18 @@ class Pengiriman extends Model
 
     /** Status yang boleh dimuat ke kurir: sudah selesai packing atau sedang diantar. */
     public const SLUG_SIAP_DIMUAT = ['selesai-packing', 'pengiriman'];
+
+    /** Kurir sudah menyerahkan di lokasi; menunggu konfirmasi "Diterima". */
+    public const SLUG_TIBA = 'tiba';
+
+    /** Status yang boleh diserahterimakan kurir: barangnya sedang dibawa. */
+    public const SLUG_BOLEH_DISERAHKAN = ['selesai-packing', 'pengiriman'];
+
+    /** Jejak serah terima kurir untuk resi ini (terbaru di atas). */
+    public function serahTerimaKurir(): HasMany
+    {
+        return $this->hasMany(SerahTerimaKurir::class)->latest('id');
+    }
 
     /**
      * Gudang tempat mushaf ini berada (LOKASI MUSHAF, 2026-10-15).
@@ -478,6 +527,12 @@ class Pengiriman extends Model
             }
 
             if ($statusBaru->slug !== 'batal' && $statusSekarang && $statusBaru->urutan < $statusSekarang->urutan) {
+                return 'ditolak';
+            }
+
+            // Lihat boot(): "Diterima" hanya dari "Tiba di Tujuan". Ditolak di sini lebih
+            // dulu supaya penyelesaian muatan melewati resi yang belum tiba, bukan gagal.
+            if ($statusBaru->slug === 'diterima' && $statusSekarang?->slug !== self::SLUG_TIBA) {
                 return 'ditolak';
             }
 

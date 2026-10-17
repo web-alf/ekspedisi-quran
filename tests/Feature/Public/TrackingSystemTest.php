@@ -105,22 +105,16 @@ class TrackingSystemTest extends TestCase
     /** @test */
     public function it_displays_status_history_when_available()
     {
-        $status1 = StatusPengiriman::factory()->create(['nama' => 'Pending']);
-        $status2 = StatusPengiriman::factory()->create(['nama' => 'Processing']);
-
-        // Create status history
-        StatusHistory::factory()->create([
-            'pengiriman_id' => $this->pengiriman->id,
-            'status_from' => null,
-            'status_to' => $status1->id,
-            'catatan' => 'Pengiriman dibuat',
-            'created_at' => now()->subDays(2),
-        ]);
+        // Riwayat publik memakai tahap baku, bukan catatan petugas (16/10/2026):
+        // tahapnya tampil, catatan internalnya tidak.
+        $pemesanan = StatusPengiriman::firstOrCreate(['slug' => 'pemesanan'], ['nama' => 'Proses Pemesanan', 'urutan' => 1, 'is_active' => true]);
+        $produksi = StatusPengiriman::firstOrCreate(['slug' => 'produksi'], ['nama' => 'Proses Produksi', 'urutan' => 2, 'is_active' => true]);
+        $this->pengiriman->update(['status_id' => $produksi->id]);
 
         StatusHistory::factory()->create([
             'pengiriman_id' => $this->pengiriman->id,
-            'status_from' => $status1->id,
-            'status_to' => $status2->id,
+            'status_from' => $pemesanan->id,
+            'status_to' => $produksi->id,
             'catatan' => 'Status diupdate ke processing',
             'created_at' => now()->subDay(),
         ]);
@@ -128,8 +122,9 @@ class TrackingSystemTest extends TestCase
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
         $response->assertStatus(200);
-        $response->assertSee('Pengiriman dibuat');
-        $response->assertSee('Status diupdate ke processing');
+        $response->assertSee('Proses Produksi');
+        $response->assertSee('Proses Pemesanan');
+        $response->assertDontSee('Status diupdate ke processing');
     }
 
     /** @test */
@@ -261,15 +256,20 @@ class TrackingSystemTest extends TestCase
     /** @test */
     public function it_displays_delivery_photos_when_available()
     {
+        $pengirimanStatus = StatusPengiriman::firstOrCreate(['slug' => 'pengiriman'], ['nama' => 'Proses Pengiriman', 'urutan' => 6, 'is_active' => true]);
+        $this->pengiriman->update(['status_id' => $pengirimanStatus->id]);
+
         TrackingHistory::factory()->withPhoto()->create([
             'pengiriman_id' => $this->pengiriman->id,
+            'status_id' => $pengirimanStatus->id,
         ]);
 
         $response = $this->get("/tracking/{$this->pengiriman->no_resi}");
 
         $response->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Public/TrackingResult')
-            ->has('trackingHistory', 1));
+            ->where('riwayat.0.slug', 'pengiriman')
+            ->has('riwayat.0.foto', 1));
     }
 
     /** @test */

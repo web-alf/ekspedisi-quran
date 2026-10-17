@@ -393,7 +393,7 @@ it('tidak mengubah batas kurir maupun manager', function () {
     expect(collect(PengirimanStageVisibility::visibleProgressStatuses($kurir))->pluck('slug')->sort()->values()->all())
         ->toBe(['batal', 'pengiriman'])
         ->and(collect(PengirimanStageVisibility::visibleProgressStatuses($manager))->pluck('slug')->all())
-        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'diterima', 'batal']);
+        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'tiba', 'diterima', 'batal']);
 });
 
 it('menolak kurir memakai izinnya untuk tahap gudang', function () {

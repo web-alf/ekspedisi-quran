@@ -276,6 +276,7 @@ it('MENGIZINKAN role distribusi menyelesaikan distribusi', function () {
     foreach ($resi as $r) {
         MuatanItem::factory()->create(['muatan_id' => $muatan->id, 'pengiriman_id' => $r->id]);
     }
+    tibakan($resi);
 
     $this->actingAs($distribusi)
         ->postJson(route('admin.muatan.selesaikan', $muatan))
@@ -295,6 +296,7 @@ it('mencatat siapa dan kapan penerima saat distribusi diselesaikan', function ()
     $muatan = Muatan::factory()->create();
     $resi = resiSiapDiantar('pengiriman');
     MuatanItem::factory()->create(['muatan_id' => $muatan->id, 'pengiriman_id' => $resi->id]);
+    tibakan($resi);
 
     $this->actingAs($distribusi)
         ->postJson(route('admin.muatan.selesaikan', $muatan), ['receiver_contact' => '08123456789'])
@@ -333,6 +335,7 @@ it('MENGIZINKAN manager distribusi menyelesaikan distribusi', function () {
     foreach ($resi as $r) {
         MuatanItem::factory()->create(['muatan_id' => $muatan->id, 'pengiriman_id' => $r->id]);
     }
+    tibakan($resi);
 
     $this->actingAs($manager)
         ->postJson(route('admin.muatan.selesaikan', $muatan))

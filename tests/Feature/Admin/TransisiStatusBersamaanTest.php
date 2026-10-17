@@ -79,6 +79,7 @@ it('menghitung ulang status batch setelah transaksi update resi commit', functio
     ]);
 
     DB::transaction(function () use ($resi, $diterima, $batch) {
+        tibakan($resi);
         $resi->each->update(['status_id' => $diterima->id]);
 
         // Belum dihitung selama transaksi masih terbuka.

@@ -64,6 +64,7 @@ it('mengabari donatur saat resinya masuk ke diterima', function () {
         'status_id' => waAlurStatusId('pemesanan'),
     ]);
 
+    tibakan($resi);
     $resi->updateStatus(waAlurStatusId('diterima'));
 
     $notifikasi = WhatsAppNotification::query()->where('event_key', 'resi_diterima')->first();
@@ -86,6 +87,7 @@ it('tidak mengabari donatur lagi saat resi diterima disimpan ulang', function ()
         'status_id' => waAlurStatusId('pemesanan'),
     ]);
 
+    tibakan($resi);
     $resi->updateStatus(waAlurStatusId('diterima'));
     // Simpan ulang tanpa mengubah status: ini yang memicu pengiriman ganda
     // kalau kabarnya tidak dibatasi pada perubahan status.
@@ -123,6 +125,7 @@ it('tetap menyelesaikan perubahan status walau penyusunan pesan gagal', function
         'status_id' => waAlurStatusId('pemesanan'),
     ]);
 
+    tibakan($resi);
     $resi->updateStatus(waAlurStatusId('diterima'));
 
     // Perubahan statusnya tetap berhasil...

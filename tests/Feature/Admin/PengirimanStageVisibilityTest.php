@@ -72,7 +72,7 @@ function pengirimanDenganStatus(string $slug): Pengiriman
 
 it('membatasi hanya tiga tahap yang diminta untuk manager', function () {
     expect(PengirimanStageVisibility::allowedSlugs())
-        ->toBe(['selesai-packing', 'pengiriman', 'diterima']);
+        ->toBe(['selesai-packing', 'pengiriman', 'tiba', 'diterima']);
 });
 
 it('hanya memberlakukan batas pada role manager', function () {
@@ -155,7 +155,7 @@ it('hanya menawarkan tiga status pada dropdown filter manager', function () {
         ->viewData('page')['props'];
 
     expect(collect($props['statusList'])->pluck('slug')->all())
-        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'diterima', 'batal']);
+        ->toEqualCanonicalizing(['selesai-packing', 'pengiriman', 'tiba', 'diterima', 'batal']);
 });
 
 it('menolak manager membuka detail pengiriman tahap awal lewat URL langsung', function () {
@@ -236,7 +236,7 @@ it('menandai konteks pembatasan untuk frontend', function () {
         ->viewData('page')['props'];
 
     expect($props['stageVisibility']['restricted'])->toBeTrue()
-        ->and($props['stageVisibility']['slugs'])->toBe(['selesai-packing', 'pengiriman', 'diterima']);
+        ->and($props['stageVisibility']['slugs'])->toBe(['selesai-packing', 'pengiriman', 'tiba', 'diterima']);
 });
 
 it('menutup rapat bila daftar tahap dikosongkan', function () {

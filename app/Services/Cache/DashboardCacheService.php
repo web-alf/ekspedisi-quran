@@ -356,7 +356,7 @@ class DashboardCacheService extends BaseCacheService
             ->selectRaw('
                 DATE(pengiriman.updated_at) as date,
                 COUNT(CASE WHEN status_pengiriman.slug = "pengiriman" THEN 1 END) as shipments_count,
-                SUM(CASE WHEN status_pengiriman.slug IN ("pengiriman", "diterima") THEN pengiriman.jumlah_quran ELSE 0 END) as mushaf_sent_count,
+                SUM(CASE WHEN status_pengiriman.slug IN ("pengiriman", "tiba", "diterima") THEN pengiriman.jumlah_quran ELSE 0 END) as mushaf_sent_count,
                 COUNT(CASE WHEN status_pengiriman.slug = "diterima" THEN 1 END) as completed_count
             ')
             ->groupBy(DB::raw('DATE(pengiriman.updated_at)'))

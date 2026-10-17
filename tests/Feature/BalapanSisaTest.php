@@ -159,8 +159,8 @@ it('H1: menolak perubahan dari instance basi lewat ubahStatusBilaBoleh', functio
     // Status mundur juga ditolak, sedangkan maju tetap boleh.
     $lain = resiBerstatus('pengiriman');
     expect($lain->ubahStatusBilaBoleh(statusSlug('selesai-packing')))->toBe('ditolak')
-        ->and($lain->ubahStatusBilaBoleh(statusSlug('diterima')))->toBe('berhasil')
-        ->and($lain->fresh()->status->slug)->toBe('diterima');
+        ->and($lain->ubahStatusBilaBoleh(statusSlug('tiba')))->toBe('berhasil')
+        ->and($lain->fresh()->status->slug)->toBe('tiba');
 });
 
 // --- M1: total muatan dihitung dalam satu pernyataan ------------------------------------
@@ -230,7 +230,9 @@ it('M3: memutuskan "selesai" setelah commit, bukan di tengah transaksi resi', fu
     $diterima = statusSlug('diterima')->id;
 
     DB::transaction(function () use ($a, $b, $diterima, $permintaan) {
+        tibakan($a);
         $a->updateStatus($diterima);
+        tibakan($b);
         $b->updateStatus($diterima);
 
         // Selama transaksi belum commit, keputusan belum diambil: di dunia nyata
@@ -248,6 +250,7 @@ it('M3: tidak menyelesaikan permintaan yang baru sebagian resinya diterima', fun
     resiBerstatus('pengiriman', ['mushaf_request_id' => $permintaan->id]);
     $permintaan->update(['pengiriman_id' => $a->id]);
 
+    tibakan($a);
     $a->updateStatus(statusSlug('diterima')->id);
 
     expect($permintaan->fresh()->status)->toBe('processed');

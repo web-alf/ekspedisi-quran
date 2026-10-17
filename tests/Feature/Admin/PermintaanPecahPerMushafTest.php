@@ -188,12 +188,15 @@ it('menyelesaikan permintaan hanya setelah SELURUH kirimannya diterima', functio
 
     expect($resi)->toHaveCount(3);
 
+    tibakan($resi[0]);
     $resi[0]->update(['status_id' => $diterima]);
+    tibakan($resi[1]);
     $resi[1]->update(['status_id' => $diterima]);
 
     // Dua dari tiga kiriman sampai: permintaan BELUM selesai.
     expect($mushafRequest->fresh()->status)->toBe('processed');
 
+    tibakan($resi[2]);
     $resi[2]->update(['status_id' => $diterima]);
 
     expect($mushafRequest->fresh()->status)->toBe('completed');
@@ -217,6 +220,7 @@ it('menampilkan tahap pengiriman dari kiriman yang paling belakang', function ()
     $resi = Pengiriman::where('mushaf_request_id', $mushafRequest->id)->orderBy('id')->get();
 
     $resi[0]->update(['status_id' => $packing]);
+    tibakan($resi[1]);
     $resi[1]->update(['status_id' => $diterima]);
 
     $props = $this->get(route('mushaf-tracking.show', $mushafRequest->no_request))

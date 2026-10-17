@@ -11,10 +11,16 @@
    *
    * Kurir boleh memuat barang ke muatannya sendiri. Menyelesaikan distribusi
    * BUKAN di sini — itu wewenang role distribusi (lihat halaman detail muatan).
+   *
+   * Dua mode serah terima (SerahTerimaPanel): pindai TERAKHIR di lokasi tujuan
+   * (resi → "Tiba di Tujuan"), dan penyerahan di tengah jalan (resi dialihkan ke
+   * penerima baru). Keduanya tidak memakai muatan tujuan — resinya harus sudah
+   * ada di muatan kurir ini.
    */
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import LazyQRScanner from '../../../Components/LazyQRScanner.svelte';
+  import SerahTerimaPanel from '../../../Components/SerahTerimaPanel.svelte';
   import { toast } from '../../../utils/notifications.js';
   import axios from 'axios';
 
@@ -22,7 +28,9 @@
   export let muatanLain = [];
 
   let muatanTerpilih = muatanHariIni.length > 0 ? muatanHariIni[0].id : '';
-  let mode = 'pcs'; // 'pcs' | 'box' | 'status'
+  let mode = 'pcs'; // 'pcs' | 'box' | 'status' | 'tujuan' | 'tengah_jalan'
+  let panelSerahTerima;
+  $: modeSerahTerima = mode === 'tujuan' || mode === 'tengah_jalan';
   let memindai = false; // mengunci agar satu QR tidak terkirim berkali-kali
   let inputManual = '';
   let kameraAktif = false;
@@ -208,6 +216,11 @@
     const teks = e.detail?.text || '';
     if (!teks.trim()) return;
 
+    if (modeSerahTerima) {
+      panelSerahTerima?.tambahKode(teks);
+      return;
+    }
+
     if (mode === 'status') {
       const noResi = ambilNoResi(teks);
       if (!noResi) {
@@ -229,6 +242,12 @@
   function kirimManual() {
     const kode = inputManual.trim();
     if (!kode) return;
+
+    if (modeSerahTerima) {
+      inputManual = '';
+      panelSerahTerima?.tambahKode(kode);
+      return;
+    }
 
     if (mode === 'status') {
       const noResi = ambilNoResi(kode);
@@ -271,8 +290,8 @@
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Kiri: scanner -->
         <div class="lg:col-span-2 space-y-6">
-          <!-- Pilih muatan tujuan — tidak relevan saat mengubah status -->
-          {#if mode !== 'status'}
+          <!-- Pilih muatan tujuan — tidak relevan saat mengubah status / serah terima -->
+          {#if mode !== 'status' && !modeSerahTerima}
           <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
             <label for="muatan-tujuan" class="block text-sm font-medium text-gray-700 mb-2">Muatan Tujuan</label>
             {#if muatanHariIni.length === 0 && muatanLain.length === 0}
@@ -316,7 +335,7 @@
 
           <!-- Mode -->
           <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
               <button
                 on:click={() => gantiMode('pcs')}
                 class="flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 transition-colors
@@ -346,6 +365,26 @@
                 <span class="text-sm font-medium {mode === 'status' ? 'text-[#eb3434]' : 'text-gray-700'}">Ubah Status</span>
                 <span class="text-xs text-gray-500">Perjalanan resi</span>
               </button>
+
+              <button
+                on:click={() => gantiMode('tujuan')}
+                class="flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 transition-colors
+                  {mode === 'tujuan' ? 'border-[#eb3434] bg-red-50' : 'border-gray-200 hover:border-gray-300'}"
+              >
+                <HeroIcon name="map-pin" class="w-6 h-6 {mode === 'tujuan' ? 'text-[#eb3434]' : 'text-gray-400'}" />
+                <span class="text-sm font-medium {mode === 'tujuan' ? 'text-[#eb3434]' : 'text-gray-700'}">Tiba di Tujuan</span>
+                <span class="text-xs text-gray-500">Serah terima</span>
+              </button>
+
+              <button
+                on:click={() => gantiMode('tengah_jalan')}
+                class="flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 transition-colors
+                  {mode === 'tengah_jalan' ? 'border-[#eb3434] bg-red-50' : 'border-gray-200 hover:border-gray-300'}"
+              >
+                <HeroIcon name="user" class="w-6 h-6 {mode === 'tengah_jalan' ? 'text-[#eb3434]' : 'text-gray-400'}" />
+                <span class="text-sm font-medium {mode === 'tengah_jalan' ? 'text-[#eb3434]' : 'text-gray-700'}">Tengah Jalan</span>
+                <span class="text-xs text-gray-500">Diminta orang lain</span>
+              </button>
             </div>
 
             <!--
@@ -357,6 +396,12 @@
               {#if mode === 'status'}
                 Satu pindai = satu perubahan status perjalanan resi. Status yang tersedia mengikuti
                 aturan perjalanan dan wewenang Anda.
+              {:else if mode === 'tujuan'}
+                Pindai terakhir di lokasi penerima. Pindai kerdus (seluruh isinya) atau per mushaf,
+                lalu isi nama yang menerima. Status resi menjadi "Tiba di Tujuan".
+              {:else if mode === 'tengah_jalan'}
+                Ada yang meminta mushaf dalam perjalanan? Pindai QR tiap mushaf, isi data penerimanya.
+                Resi dialihkan ke penerima itu.
               {:else}
                 Satu pindai = barang dimuat ke muatan untuk dibawa. Status resi tidak berubah.
               {/if}
@@ -386,7 +431,7 @@
             <!-- Input manual -->
             <div class="mt-4 pt-4 border-t border-gray-100">
               <label for="input-manual" class="block text-sm font-medium text-gray-700 mb-2">
-                {mode === 'status' ? 'Atau ketik nomor resi' : 'Atau ketik kode manual'}
+                {mode === 'status' || mode === 'tengah_jalan' ? 'Atau ketik nomor resi' : 'Atau ketik kode manual'}
               </label>
               <div class="flex gap-2">
                 <input
@@ -394,7 +439,7 @@
                   type="text"
                   bind:value={inputManual}
                   on:keydown={(e) => e.key === 'Enter' && kirimManual()}
-                  placeholder={mode === 'box' ? 'KB-20261005-...' : 'EQ-2026-00001'}
+                  placeholder={mode === 'box' ? 'KB-20261005-...' : mode === 'tujuan' ? 'KB-20261005-... atau EQ-2026-00001' : 'EQ-2026-00001'}
                   class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#eb3434] focus:border-[#eb3434] text-sm font-mono"
                 />
                 <button
@@ -402,11 +447,17 @@
                   disabled={(mode === 'status' ? memuatInfo : memindai) || !inputManual.trim()}
                   class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 >
-                  {mode === 'status' ? (memuatInfo ? '...' : 'Cari') : (memindai ? '...' : 'Pindai')}
+                  {mode === 'status' ? (memuatInfo ? '...' : 'Cari') : modeSerahTerima ? 'Tambah' : (memindai ? '...' : 'Pindai')}
                 </button>
               </div>
             </div>
           </div>
+
+          {#if modeSerahTerima}
+            {#key mode}
+              <SerahTerimaPanel bind:this={panelSerahTerima} {mode} />
+            {/key}
+          {/if}
 
           <!-- Panel Ubah Status — hanya di mode 'status' -->
           {#if mode === 'status' && memuatInfo}

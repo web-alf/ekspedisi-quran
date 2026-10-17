@@ -26,7 +26,32 @@ return [
     'manager_visible_stages' => [
         'selesai-packing',
         'pengiriman',
+        // Kurir sudah menyerahkan di lokasi; manager yang mengonfirmasi "Diterima",
+        // jadi tahap ini wajib terlihat olehnya.
+        'tiba',
         'diterima',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tahap yang tampil di riwayat PUBLIK (halaman lacak resi & API lacak)
+    |--------------------------------------------------------------------------
+    |
+    | Riwayat publik hanya memuat tahap penting, satu entri per tahap, tanpa catatan
+    | petugas dan nama petugas (lihat App\Services\RiwayatPublikService). Tahap kerja
+    | internal — Kedatangan/Penurunan dan Antrian — sengaja tidak dimasukkan.
+    |
+    */
+
+    'riwayat_publik_tahap' => [
+        'pemesanan',
+        'produksi',
+        'packing',
+        'selesai-packing',
+        'pengiriman',
+        'tiba',
+        'diterima',
+        'batal',
     ],
 
     /*

@@ -305,7 +305,7 @@ class DashboardController extends Controller
 
             $mushafSent = Pengiriman::whereDate('updated_at', $dateString)
                 ->whereHas('status', function ($query) {
-                    $query->whereIn('slug', ['pengiriman', 'diterima']);
+                    $query->whereIn('slug', ['pengiriman', 'tiba', 'diterima']);
                 })
                 ->sum('jumlah_quran');
 

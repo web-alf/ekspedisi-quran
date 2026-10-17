@@ -239,6 +239,7 @@ describe('Paket B — tahap selesai packing sampai diterima penerima', function 
 
         $request->update(['pengiriman_id' => $pengiriman->id]);
 
+        tibakan($pengiriman);
         $pengiriman->update(['status_id' => $receivedId]);
 
         expect($request->fresh()->status)->toBe('completed');

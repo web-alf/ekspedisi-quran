@@ -249,6 +249,50 @@ class MushafRequest extends Model
     }
 
     /**
+     * Mushaf jatah permintaan ini yang diserahkan kurir kepada orang lain di tengah jalan.
+     * Resinya sudah DILEPAS dari permintaan (bukan lagi bagian `pengirimans()`), jadi
+     * inilah satu-satunya sumber catatan "N diserahkan di jalan".
+     */
+    public function serahTerimaTengahJalan(): HasMany
+    {
+        return $this->hasMany(SerahTerimaKurir::class, 'mushaf_request_id_asal')
+            ->where('jenis', SerahTerimaKurir::JENIS_TENGAH_JALAN);
+    }
+
+    /**
+     * Selesaikan permintaan bila seluruh kiriman yang TERSISA sudah diterima.
+     *
+     * Dipanggil setelah resi dialihkan di tengah jalan: resi yang tersisa mungkin sudah
+     * diterima semua, dan tidak ada lagi perubahan status yang akan memicu penyelesaian
+     * dari PengirimanObserver. Bila SELURUH resinya dialihkan, permintaan juga selesai —
+     * tidak ada lagi yang ditunggu lembaga itu.
+     */
+    public function selesaikanBilaSemuaDiterima(): bool
+    {
+        return DB::transaction(function () {
+            $terkunci = static::whereKey($this->id)->lockForUpdate()->first();
+
+            if (! $terkunci || $terkunci->status !== 'processed') {
+                return false;
+            }
+
+            $tersisa = $terkunci->pengirimans()->count();
+            $selesai = $tersisa === 0
+                ? $terkunci->serahTerimaTengahJalan()->exists()
+                : $terkunci->semuaPengirimanDiterima();
+
+            if (! $selesai) {
+                return false;
+            }
+
+            $terkunci->update(['status' => 'completed']);
+            $this->setRawAttributes($terkunci->getAttributes(), true);
+
+            return true;
+        });
+    }
+
+    /**
      * Accessors untuk status
      */
     public function getStatusLabelAttribute()

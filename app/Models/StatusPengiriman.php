@@ -96,7 +96,7 @@ class StatusPengiriman extends Model
     {
         return match ($this->slug) {
             'pemesanan', 'produksi' => 'pending',
-            'antrian', 'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
+            'antrian', 'packing', 'selesai-packing', 'pengiriman', 'tiba' => 'in_transit',
             'diterima' => 'completed',
             'batal' => 'cancelled',
             default => 'unknown'
@@ -110,7 +110,7 @@ class StatusPengiriman extends Model
     {
         return match ($this->slug) {
             'pemesanan', 'produksi' => 'Pending/Diproses',
-            'antrian', 'packing', 'selesai-packing', 'pengiriman' => 'Dalam Perjalanan',
+            'antrian', 'packing', 'selesai-packing', 'pengiriman', 'tiba' => 'Dalam Perjalanan',
             'diterima' => 'Selesai',
             'batal' => 'Dibatalkan',
             default => $this->nama
@@ -133,6 +133,7 @@ class StatusPengiriman extends Model
             'pemesanan' => '📝',
             'produksi' => '🏭',
             'antrian' => '📋',
+            'tiba' => '📍',
             'packing' => '🎁',
             'selesai-packing' => '✅',
             'pengiriman' => '🚚',
@@ -232,12 +233,24 @@ class StatusPengiriman extends Model
                 'is_final' => false,
             ],
             [
+                // Kurir sudah menyerahkan di lokasi; manager/distribusi yang menyatakan
+                // "Diterima" (migrasi 2026_10_16_162207).
+                'nama' => 'Tiba di Tujuan',
+                'slug' => 'tiba',
+                'deskripsi' => 'Kurir sudah menyerahkan Quran di lokasi penerima; menunggu konfirmasi distribusi',
+                'warna' => 'indigo',
+                'icon' => '📍',
+                'urutan' => 7,
+                'is_active' => true,
+                'is_final' => false,
+            ],
+            [
                 'nama' => 'Diterima Penerima',
                 'slug' => 'diterima',
                 'deskripsi' => 'Quran telah sampai di tangan penerima manfaat',
                 'warna' => 'green',
                 'icon' => '✅',
-                'urutan' => 7,
+                'urutan' => 8,
                 'is_active' => true,
                 'is_final' => true,
             ],

@@ -22,7 +22,9 @@ class PackingItemFactory extends Factory
             'pengiriman_id' => Pengiriman::factory(),
             'packed_by' => User::factory(),
             'packed_at' => now(),
-            'urutan_dalam_box' => $this->faker->numberBetween(1, 25),
+            // Unik per proses, bukan acak 1–25: kunci unik (packing_box_id, urutan_dalam_box)
+            // membuat dua item acak di kerdus yang sama sesekali bentrok — tes jadi kadang gagal.
+            'urutan_dalam_box' => $this->faker->unique()->numberBetween(1, 1000000),
             'scan_method' => $this->faker->randomElement(['qr_scan', 'manual', 'bulk']),
             'quantity' => 1,
         ];

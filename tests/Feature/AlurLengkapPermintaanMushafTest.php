@@ -146,7 +146,8 @@ function jalankanAlurPermintaanMushaf($test, ?Donatur $donatur = null): array
     // Satu mushaf = satu resi (15/10/2026): satu permintaan punya BANYAK kiriman, dan
     // permintaan baru menutup setelah SELURUH kirimannya diterima. Karena itu SEMUA kiriman
     // ditempuh sampai selesai di sini — persis seperti operator yang memindai satu per satu.
-    $tahapan = ['produksi', 'kedatangan', 'packing', 'selesai-packing', 'pengiriman', 'diterima'];
+    // 'tiba' (Tiba di Tujuan, 16/10/2026) wajib dilewati sebelum 'diterima'.
+    $tahapan = ['produksi', 'kedatangan', 'packing', 'selesai-packing', 'pengiriman', 'tiba', 'diterima'];
     $idTahapan = StatusPengiriman::whereIn('slug', $tahapan)->pluck('id', 'slug');
     $semuaResi = Pengiriman::where('mushaf_request_id', $permintaan->id)->orderBy('id')->get();
 

@@ -155,7 +155,7 @@ class MushafTrackingController extends Controller
         }
 
         $steps = StatusPengiriman::query()
-            ->whereIn('slug', ['packing', 'selesai-packing', 'pengiriman', 'diterima'])
+            ->whereIn('slug', ['packing', 'selesai-packing', 'pengiriman', 'tiba', 'diterima'])
             ->orderBy('urutan')
             ->get();
 

@@ -304,7 +304,7 @@ it('tidak menyentuh pembatasan tahap milik manager', function () {
 
     expect(PengirimanStageVisibility::restricts($manager))->toBeTrue()
         ->and(PengirimanStageVisibility::allowedSlugs())
-        ->toBe(['selesai-packing', 'pengiriman', 'diterima']);
+        ->toBe(['selesai-packing', 'pengiriman', 'tiba', 'diterima']);
 });
 
 it('menggabungkan batas manager dan batas kurir, bukan saling menggantikan', function () {

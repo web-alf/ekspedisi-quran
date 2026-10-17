@@ -130,6 +130,7 @@ describe('waktu terima resi', function () {
 
         expect($resi->fresh()->received_at)->toBeNull();
 
+        tibakan($resi);
         $resi->updateStatus(statusTahapAkhir('diterima'));
 
         expect($resi->fresh()->received_at)->not->toBeNull();
@@ -143,6 +144,7 @@ describe('waktu terima resi', function () {
             'received_at' => $sebelumnya,
         ]);
 
+        tibakan($resi);
         $resi->updateStatus(statusTahapAkhir('diterima'));
 
         expect($resi->fresh()->received_at->toDateTimeString())->toBe($sebelumnya->toDateTimeString());
@@ -397,6 +399,7 @@ describe('perintah penutup tahap akhir', function () {
         ]);
 
         // Jalur resmi, supaya observer ikut jalan dan menutup batchnya lebih dulu.
+        tibakan($resi);
         $resi->updateStatus(statusTahapAkhir('diterima'));
 
         expect($batch->fresh()->status)->toBe('completed')

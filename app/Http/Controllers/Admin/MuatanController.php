@@ -9,6 +9,7 @@ use App\Models\Muatan;
 use App\Models\MuatanItem;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
+use App\Models\SerahTerimaKurir;
 use App\Models\StatusPengiriman;
 use App\Models\User;
 use App\Services\PindaiKerdusService;
@@ -20,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -240,6 +242,17 @@ class MuatanController extends Controller
             ->orderBy('id')
             ->get();
 
+        // Serah terima kurir terakhir per resi (di tujuan / di tengah jalan) — dasar
+        // manager memutuskan "Diterima", jadi siapa penerimanya, kapan, dan fotonya
+        // harus terlihat di sini.
+        $serahTerima = SerahTerimaKurir::query()
+            ->with('user:id,name')
+            ->whereIn('pengiriman_id', $items->pluck('pengiriman_id'))
+            ->orderByDesc('id')
+            ->get()
+            ->unique('pengiriman_id')
+            ->keyBy('pengiriman_id');
+
         $user = $request->user();
 
         return Inertia::render('Admin/Muatan/Show', [
@@ -256,6 +269,7 @@ class MuatanController extends Controller
                 'total_mushaf' => $muatan->total_mushaf,
                 'sebaran_status' => $muatan->sebaranStatus(),
                 'selesai' => $muatan->selesai,
+                'jumlah_tiba' => $items->filter(fn (MuatanItem $i) => $i->pengiriman?->status?->slug === Pengiriman::SLUG_TIBA)->count(),
             ],
             'items' => $items->map(fn (MuatanItem $item) => [
                 'id' => $item->id,
@@ -279,7 +293,16 @@ class MuatanController extends Controller
                         'warna' => $item->pengiriman->status->warna,
                     ] : null,
                 ] : null,
+                'serah_terima' => ($st = $serahTerima->get($item->pengiriman_id)) ? $this->ringkasSerahTerima($st) : null,
             ]),
+            // Daftar khusus mushaf yang diserahkan kepada orang lain di tengah jalan —
+            // keputusan pemilik sistem: kurir boleh langsung, manager wajib bisa melihat.
+            'tengahJalan' => $serahTerima
+                ->where('jenis', SerahTerimaKurir::JENIS_TENGAH_JALAN)
+                ->values()
+                ->map(fn (SerahTerimaKurir $st) => $this->ringkasSerahTerima($st) + [
+                    'no_resi' => $items->firstWhere('pengiriman_id', $st->pengiriman_id)?->pengiriman?->no_resi,
+                ]),
             'statusPerjalanan' => $this->statusPerjalanan(),
             'statusSelesai' => $this->statusDiterima(),
             'dapatMengubah' => $user->can(PermissionEnum::MUATAN_UPDATE->value),
@@ -534,23 +557,38 @@ class MuatanController extends Controller
         }
 
         $hasil = DB::transaction(function () use ($muatan, $statusDiterima, $validated, $request) {
-            $hasil = $this->terapkanStatusKeSemuaResi(
-                $muatan,
-                $statusDiterima,
-                $validated['catatan'] ?? 'Distribusi diselesaikan',
-                $request->user()->id
-            );
-
-            // Catat siapa & kapan menerima, di resinya masing-masing.
+            // Hanya resi yang sudah "Tiba di Tujuan" — artinya kurir sudah memindai serah
+            // terima di lokasi — yang boleh dinyatakan diterima (keputusan pemilik sistem,
+            // 16/10/2026). Sisanya dilewati dan dilaporkan, bukan digagalkan semua.
             $idResi = MuatanItem::where('muatan_id', $muatan->id)->pluck('pengiriman_id')->all();
+            $idTiba = Pengiriman::whereIn('id', $idResi)
+                ->whereHas('status', fn ($q) => $q->where('slug', Pengiriman::SLUG_TIBA))
+                ->pluck('id')
+                ->all();
+            $sudahDiterima = Pengiriman::whereIn('id', $idResi)->where('status_id', $statusDiterima->id)->count();
 
-            Pengiriman::whereIn('id', $idResi)->update([
-                'received_at' => now(),
-                'received_by' => $request->user()->name,
-                'receiver_contact' => $validated['receiver_contact'] ?? null,
-            ]);
+            $berhasil = [];
 
-            return $hasil;
+            foreach (Pengiriman::whereIn('id', $idTiba)->get() as $pengiriman) {
+                if ($pengiriman->ubahStatusBilaBoleh($statusDiterima, $validated['catatan'] ?? 'Distribusi diselesaikan', $request->user()->id) === 'berhasil') {
+                    $berhasil[] = $pengiriman->id;
+                }
+            }
+
+            // Nama penerima diisi kurir saat serah terima (`received_by`). Yang
+            // mengonfirmasi hanya mengisinya bila kosong — dulu kolom ini ditimpa nama
+            // manager, sehingga siapa yang benar-benar menerima mushaf hilang.
+            if ($berhasil !== []) {
+                Pengiriman::whereIn('id', $berhasil)->whereNull('received_by')->update(['received_by' => $request->user()->name]);
+                Pengiriman::whereIn('id', $berhasil)->whereNull('receiver_contact')->update(['receiver_contact' => $validated['receiver_contact'] ?? null]);
+                Pengiriman::whereIn('id', $berhasil)->whereNull('received_at')->update(['received_at' => now()]);
+            }
+
+            return [
+                'berhasil' => count($berhasil),
+                'gagal' => count($idResi) - count($berhasil) - $sudahDiterima,
+                'belum_tiba' => count($idResi) - count($idTiba) - $sudahDiterima,
+            ];
         });
 
         Log::info('Distribusi diselesaikan', [
@@ -562,10 +600,11 @@ class MuatanController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Distribusi muatan {$muatan->kode_muatan} diselesaikan: {$hasil['berhasil']} resi diterima."
-                .($hasil['gagal'] > 0 ? " {$hasil['gagal']} resi dilewati." : ''),
+            'message' => "Distribusi muatan {$muatan->kode_muatan}: {$hasil['berhasil']} resi diterima."
+                .($hasil['belum_tiba'] > 0 ? " {$hasil['belum_tiba']} resi belum Tiba di Tujuan (kurir belum memindai serah terima), jadi dilewati." : ''),
             'berhasil' => $hasil['berhasil'],
             'gagal' => $hasil['gagal'],
+            'belum_tiba' => $hasil['belum_tiba'],
         ]);
     }
 
@@ -805,6 +844,28 @@ class MuatanController extends Controller
         }
 
         return ['berhasil' => $berhasil, 'gagal' => $gagal];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function ringkasSerahTerima(SerahTerimaKurir $st): array
+    {
+        return [
+            'jenis' => $st->jenis,
+            'nama_penerima' => $st->nama_penerima,
+            'no_hp_penerima' => $st->no_hp_penerima,
+            'alamat_penerima' => $st->alamat_penerima,
+            'catatan' => $st->catatan,
+            'waktu' => $st->created_at?->format('d/m/Y H:i'),
+            'oleh' => $st->user?->name,
+            'kode_kerdus' => $st->kode_kerdus,
+            'foto' => collect($st->foto ?? [])->map(fn (string $path) => Storage::disk('public')->url($path))->values()->all(),
+            'peta' => $st->latitude && $st->longitude
+                ? 'https://www.openstreetmap.org/?mlat='.$st->latitude.'&mlon='.$st->longitude.'#map=18/'.$st->latitude.'/'.$st->longitude
+                : null,
+            'tujuan_asal' => $st->nama_lembaga_asal ?: $st->nama_penerima_asal,
+        ];
     }
 
     /**

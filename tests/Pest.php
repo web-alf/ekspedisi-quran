@@ -1,5 +1,11 @@
 <?php
 
+use App\Models\Pengiriman;
+use App\Models\StatusPengiriman;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +17,8 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
-    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -46,6 +52,32 @@ function csrfToken(): string
     test()->startSession();
 
     return app('session.store')->token();
+}
+
+/**
+ * Bawa resi ke "Tiba di Tujuan" — prasyarat wajib sebelum resi boleh menjadi "Diterima"
+ * (Pengiriman::boot(), keputusan pemilik sistem 16/10/2026). Uji yang tentang alur LAIN
+ * (notifikasi, penyelesaian permintaan, balapan) memanggil ini dulu, alih-alih menyetel
+ * "Diterima" langsung dari "Proses Pengiriman" yang kini ditolak.
+ *
+ * Ditulis lewat query builder: uji-uji itu tidak sedang menguji serah terima kurir, jadi
+ * riwayat/observer langkah perantara ini tidak boleh ikut memengaruhi asersinya.
+ *
+ * @param  Pengiriman|iterable<Pengiriman>  $resi
+ */
+function tibakan($resi): void
+{
+    $tiba = StatusPengiriman::firstOrCreate(
+        ['slug' => Pengiriman::SLUG_TIBA],
+        ['nama' => 'Tiba di Tujuan', 'warna' => 'indigo', 'urutan' => 7, 'is_active' => true, 'is_final' => false]
+    );
+
+    StatusPengiriman::where('slug', 'diterima')->where('urutan', '<=', 7)->update(['urutan' => 8]);
+
+    foreach ($resi instanceof Pengiriman ? [$resi] : $resi as $p) {
+        DB::table('pengiriman')->where('id', $p->id)->update(['status_id' => $tiba->id]);
+        $p->refresh();
+    }
 }
 
 function something()

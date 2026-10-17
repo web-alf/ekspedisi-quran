@@ -7,6 +7,7 @@ use App\Models\Pengiriman;
 use App\Models\Setting;
 use App\Models\StatusPengiriman;
 use App\Services\OnDemandCertificateService;
+use App\Services\RiwayatPublikService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -14,8 +15,10 @@ class TrackingController extends Controller
 {
     protected $onDemandCertificateService;
 
-    public function __construct(OnDemandCertificateService $onDemandCertificateService)
-    {
+    public function __construct(
+        OnDemandCertificateService $onDemandCertificateService,
+        protected RiwayatPublikService $riwayatPublik,
+    ) {
         $this->onDemandCertificateService = $onDemandCertificateService;
     }
 
@@ -32,7 +35,6 @@ class TrackingController extends Controller
 
         return Inertia::render('Public/TrackingPage', [
             'pengiriman' => null,
-            'statusHistory' => [],
             'searchQuery' => '',
             'error' => null,
             'settings' => $settings,
@@ -49,19 +51,14 @@ class TrackingController extends Controller
 
         // Find pengiriman with detailed relationships
         $pengiriman = Pengiriman::with([
-            'donatur:id,nama_donatur,kode_donatur,no_hp',
+            'donatur:id,nama_donatur,kode_donatur',
             'donatur.wakafBatches.sertifikat',
-            'wakafItem:id,pengiriman_id,wakif_name,doa_request',
+            'wakafItem:id,pengiriman_id,wakif_name',
             'jenisQuran:id,nama_jenis,kode_jenis',
             'status:id,nama,slug,warna,icon',
-            'statusHistory' => function ($query) {
-                $query->with(['statusFrom:id,nama,slug', 'statusTo:id,nama,slug', 'creator:id,name'])
-                    ->orderBy('created_at', 'desc');
-            },
-            'trackingHistory' => function ($query) {
-                $query->with(['status:id,nama,slug,warna,icon', 'user:id,name'])
-                    ->orderBy('tanggal_update', 'desc');
-            },
+            'statusHistory',
+            'trackingHistory',
+            'serahTerimaKurir',
         ])->where('no_resi', $noResi)->first();
 
         if (! $pengiriman) {
@@ -85,17 +82,19 @@ class TrackingController extends Controller
             'alamat_tujuan' => $pengiriman->alamat_tujuan,
             'nama_penerima' => $pengiriman->nama_penerima,
             'no_hp_penerima' => $pengiriman->no_hp_penerima,
-            'catatan' => $pengiriman->catatan,
+            // `catatan` dan doa wakaf sengaja TIDAK dikirim (keputusan pemilik sistem,
+            // 16/10/2026): catatan resi berisi "Donatur: … | Doa: …" dari impor, dan doa hanya
+            // untuk lembar cetak resi — bukan untuk siapa pun yang tahu nomor resinya.
             'qr_code_url' => $pengiriman->qr_code_path ? \Storage::url($pengiriman->qr_code_path) : null,
             'donatur' => $pengiriman->donatur ? [
                 'id' => $pengiriman->donatur->id,
                 'kode_donatur' => $pengiriman->donatur->kode_donatur,
                 'nama_donatur' => $pengiriman->donatur->nama_donatur,
-                'no_hp' => $pengiriman->donatur->no_hp,
+                // no_hp donatur sengaja TIDAK dikirim: halaman ini publik (cukup tahu no
+                // resi) dan nomor itu tidak pernah ditampilkan — dulu tetap ikut di JSON halaman.
             ] : null,
             'wakaf_item' => $pengiriman->wakafItem ? [
                 'wakif_name' => $pengiriman->wakafItem->wakif_name,
-                'doa_request' => $pengiriman->wakafItem->doa_request,
             ] : null,
             'jenis_quran' => $pengiriman->jenisQuran ? [
                 'id' => $pengiriman->jenisQuran->id,
@@ -177,78 +176,9 @@ class TrackingController extends Controller
             }
         }
 
-        // Format status history
-        $statusHistoryData = $pengiriman->statusHistory->map(function ($history) {
-            // Manual decode dokumentasi to avoid accessor issues
-            $photos = [];
-            $rawDok = $history->getRawOriginal('dokumentasi');
-            if ($rawDok) {
-                $decoded = json_decode($rawDok, true);
-                // Handle double encoding
-                if (is_string($decoded)) {
-                    $decoded = json_decode($decoded, true);
-                }
-                if (is_array($decoded)) {
-                    foreach ($decoded as $item) {
-                        if (is_string($item)) {
-                            $photos[] = asset('storage/'.$item);
-                        } elseif (is_array($item) && isset($item['path'])) {
-                            $photos[] = isset($item['url']) ? $item['url'] : asset('storage/'.$item['path']);
-                        }
-                    }
-                }
-            }
-
-            return [
-                'id' => $history->id,
-                'pengiriman_id' => $history->pengiriman_id,
-                'status_from_id' => $history->status_from,
-                'status_to_id' => $history->status_to,
-                'catatan' => $history->catatan,
-                'lokasi' => $history->lokasi,
-                'created_at' => $history->created_at,
-                'formatted_date' => $history->created_at->format('d/m/Y H:i'),
-                'foto_dokumentasi' => $photos, // Manual decode
-                'has_location' => $history->has_location,
-                'status_from' => $history->statusFrom ? [
-                    'id' => $history->statusFrom->id,
-                    'nama' => $history->statusFrom->nama,
-                    'slug' => $history->statusFrom->slug,
-                ] : null,
-                'status_to' => $history->statusTo ? [
-                    'id' => $history->statusTo->id,
-                    'nama' => $history->statusTo->nama,
-                    'slug' => $history->statusTo->slug,
-                ] : null,
-                'creator' => $history->creator ? [
-                    'id' => $history->creator->id,
-                    'name' => $history->creator->name,
-                ] : null,
-            ];
-        });
-
-        // Format tracking history for documentation
-        $trackingHistoryData = $pengiriman->trackingHistory->map(function ($history) {
-            return [
-                'id' => $history->id,
-                'status' => $history->status ? [
-                    'id' => $history->status->id,
-                    'nama' => $history->status->nama,
-                    'slug' => $history->status->slug,
-                    'warna' => $history->status->warna,
-                    'icon' => $history->status->icon,
-                ] : null,
-                'tanggal_update' => $history->tanggal_update->format('d/m/Y H:i'),
-                'lokasi' => $history->lokasi,
-                'keterangan' => $history->keterangan,
-                'foto_dokumentasi' => $history->photo_urls, // Uses the accessor method
-                'foto_dokumentasi_raw' => $history->foto_dokumentasi, // Raw data for debugging
-                'user' => $history->user ? [
-                    'id' => $history->user->id,
-                    'name' => $history->user->name,
-                ] : null,
-            ];
-        });
+        // Riwayat publik: hanya tahap penting, tanpa catatan & nama petugas
+        // (lihat RiwayatPublikService). Riwayat mentah tidak pernah dikirim ke sini.
+        $riwayat = $this->riwayatPublik->susun($pengiriman);
 
         // Get settings for consistent layout
         $settings = Setting::where('is_public', true)
@@ -258,8 +188,7 @@ class TrackingController extends Controller
 
         return Inertia::render('Public/TrackingResult', [
             'pengiriman' => $pengirimanData,
-            'statusHistory' => $statusHistoryData,
-            'trackingHistory' => $trackingHistoryData,
+            'riwayat' => $riwayat,
             'certificateUrls' => $certificateUrls,
             'allStatuses' => $allStatuses->map(function ($status) {
                 return [
@@ -301,20 +230,13 @@ class TrackingController extends Controller
         $noResi = strtoupper(trim($noResi));
 
         $pengiriman = Pengiriman::with([
-            'donatur:id,kode_donatur,nama_donatur,no_hp',
+            'donatur:id,kode_donatur,nama_donatur',
             'wakafItem:id,pengiriman_id,wakif_name',
             'jenisQuran:id,nama_jenis,kode_jenis',
             'status:id,nama,slug,warna,icon',
-            'statusHistory' => function ($query) {
-                $query->with(['statusTo:id,nama,slug', 'creator:id,name'])
-                    ->orderBy('created_at', 'desc')
-                    ->limit(10);
-            },
-            'trackingHistory' => function ($query) {
-                $query->with(['status:id,nama,slug,warna,icon', 'user:id,name'])
-                    ->orderBy('tanggal_update', 'desc')
-                    ->limit(10);
-            },
+            'statusHistory',
+            'trackingHistory',
+            'serahTerimaKurir',
         ])->where('no_resi', $noResi)->first();
 
         if (! $pengiriman) {
@@ -346,28 +268,7 @@ class TrackingController extends Controller
                     'wakif_nama' => $pengiriman->wakafItem?->wakif_name ?? $pengiriman->donatur?->nama_donatur,
                     'jenis_quran' => $pengiriman->jenisQuran?->nama_jenis,
                 ],
-                'status_history' => $pengiriman->statusHistory->map(function ($history) {
-                    return [
-                        'status' => $history->statusTo?->nama,
-                        'slug' => $history->statusTo?->slug,
-                        'catatan' => $history->catatan,
-                        'tanggal' => $history->created_at->format('d/m/Y H:i'),
-                        'petugas' => $history->creator?->name,
-                    ];
-                }),
-                'tracking_history' => $pengiriman->trackingHistory->map(function ($history) {
-                    return [
-                        'status' => $history->status?->nama,
-                        'slug' => $history->status?->slug,
-                        'warna' => $history->status?->warna,
-                        'icon' => $history->status?->icon,
-                        'tanggal' => $history->tanggal_update->format('d/m/Y H:i'),
-                        'lokasi' => $history->lokasi,
-                        'keterangan' => $history->keterangan,
-                        'foto_dokumentasi' => $history->photo_urls,
-                        'petugas' => $history->user?->name,
-                    ];
-                }),
+                'riwayat' => $this->riwayatPublik->susun($pengiriman),
                 'all_statuses' => $allStatuses->map(function ($status) {
                     return [
                         'id' => $status->id,

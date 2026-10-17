@@ -29,6 +29,7 @@ it('menyelesaikan permintaan mushaf ketika pengiriman berstatus diterima', funct
         'pengiriman_id' => $pengiriman->id,
     ]);
 
+    tibakan($pengiriman);
     $pengiriman->update(['status_id' => autoCompleteStatusId('diterima')]);
 
     expect($permintaan->fresh()->status)->toBe('completed');
@@ -44,6 +45,7 @@ it('tidak menyelesaikan permintaan yang belum diproses', function () {
             'pengiriman_id' => $pengiriman->id,
         ]);
 
+        tibakan($pengiriman);
         $pengiriman->update(['status_id' => autoCompleteStatusId('diterima')]);
 
         expect($permintaan->fresh()->status)->toBe($status);
@@ -75,6 +77,7 @@ it('hanya menyelesaikan permintaan yang tertaut ke pengiriman itu', function () 
         'pengiriman_id' => $lain->id,
     ]);
 
+    tibakan($diterima);
     $diterima->update(['status_id' => autoCompleteStatusId('diterima')]);
 
     expect($tertaut->fresh()->status)->toBe('completed');
@@ -84,6 +87,7 @@ it('hanya menyelesaikan permintaan yang tertaut ke pengiriman itu', function () 
 it('tidak melakukan apa-apa ketika tidak ada permintaan tertaut', function () {
     $pengiriman = Pengiriman::factory()->create();
 
+    tibakan($pengiriman);
     $pengiriman->update(['status_id' => autoCompleteStatusId('diterima')]);
 
     expect(MushafRequest::where('pengiriman_id', $pengiriman->id)->count())->toBe(0);
@@ -100,6 +104,7 @@ it('mengisi peta sebaran: permintaan selesai muncul dengan koordinat', function 
         'longitude' => 110.3695,
     ]);
 
+    tibakan($pengiriman);
     $pengiriman->update(['status_id' => autoCompleteStatusId('diterima')]);
 
     // Inilah query yang dipakai peta sebaran

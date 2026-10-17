@@ -3,8 +3,9 @@
     import { toast } from '../../utils/notifications.js';
     export let settings = {};
     export let pengiriman;
-    export let trackingHistory = [];
-    export let statusHistory = [];
+    // Riwayat publik yang sudah disaring server (RiwayatPublikService): satu entri per
+    // tahap penting, tanpa catatan & nama petugas, terbaru di atas.
+    export let riwayat = [];
 
     // Helper function to format phone number for WhatsApp
     function formatPhoneForWhatsApp(phone) {
@@ -182,31 +183,13 @@
     
     let showShareModal = false;
 
-    // Combine and sort status history and tracking history by date
-    $: combinedHistory = [
-        // Map statusHistory to common format
-        ...statusHistory.map(item => ({
-            type: 'status_history',
-            status: item.status_to,
-            tanggal_update: item.formatted_date,
-            lokasi: item.lokasi,
-            keterangan: item.catatan,
-            foto_dokumentasi: item.foto_dokumentasi || [],
-            user: item.creator,
-            raw_date: new Date(item.created_at)
-        })),
-        // Map trackingHistory to common format
-        ...trackingHistory.map(item => ({
-            type: 'tracking_history',
-            status: item.status,
-            tanggal_update: item.tanggal_update,
-            lokasi: item.lokasi,
-            keterangan: item.keterangan,
-            foto_dokumentasi: item.foto_dokumentasi || [],
-            user: item.user,
-            raw_date: new Date(item.tanggal_update.split(' ')[0].split('/').reverse().join('-') + ' ' + item.tanggal_update.split(' ')[1])
-        }))
-    ].sort((a, b) => b.raw_date - a.raw_date);
+    $: combinedHistory = riwayat.map(item => ({
+        status: { nama: item.nama, slug: item.slug, icon: item.icon },
+        tanggal_update: item.waktu,
+        lokasi: item.lokasi,
+        keterangan: item.keterangan,
+        foto_dokumentasi: item.foto || [],
+    }));
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -270,16 +253,12 @@
                                                     <span class="text-gray-600 font-medium text-sm lg:text-base">Jumlah:</span>
                                                     <span class="font-semibold text-gray-900 text-sm lg:text-base">{pengiriman.jumlah_quran} mushaf</span>
                                                 </div>
-                                                <div class="flex justify-between items-center py-2 lg:py-3 {pengiriman.catatan ? 'border-b border-gray-100' : ''}">
+                                                <div class="flex justify-between items-center py-2 lg:py-3">
                                                     <span class="text-gray-600 font-medium text-sm lg:text-base">Tanggal Wakaf:</span>
                                                     <span class="font-semibold text-gray-900 text-sm lg:text-base">{pengiriman.formatted_tanggal_wakaf || 'Unknown'}</span>
                                                 </div>
-                                                {#if pengiriman.catatan}
-                                                <div class="flex justify-between items-center py-2 lg:py-3">
-                                                    <span class="text-gray-600 font-medium text-sm lg:text-base">Catatan:</span>
-                                                    <span class="font-semibold text-gray-900 text-sm lg:text-base">{pengiriman.catatan}</span>
-                                                </div>
-                                                {/if}
+                                                <!-- Catatan resi (berisi nama donatur + isi doa dari impor) sengaja tidak
+                                                     ditampilkan di halaman publik — hanya tercetak di lembar resi. -->
                                             </div>
                                         </div>
                                     </div>
@@ -430,7 +409,6 @@
                                                                             <div class="flex items-start">
                                                                                 <span class="text-blue-500 mr-2 mt-0.5 flex-shrink-0">💬</span>
                                                                                 <div class="flex-1">
-                                                                                    <p class="text-sm font-medium text-blue-900 mb-1">Keterangan:</p>
                                                                                     <p class="text-sm text-blue-800 leading-relaxed">{tracking.keterangan}</p>
                                                                                 </div>
                                                                             </div>
@@ -470,12 +448,6 @@
                                                                     </div>
                                                                 {/if}
 
-                                                                <!-- Petugas -->
-                                                                {#if tracking.user}
-                                                                    <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                                                        Diupdate oleh: <strong class="text-gray-700">{tracking.user.name}</strong>
-                                                                    </div>
-                                                                {/if}
                                                             </div>
                                                         </div>
                                                     </div>
