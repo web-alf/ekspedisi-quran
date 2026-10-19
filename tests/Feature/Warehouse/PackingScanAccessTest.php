@@ -118,3 +118,34 @@ it('memastikan setiap penerima tugas benar-benar boleh memulai pemindaian', func
             ->toBeTrue("user #{$id} ({$u->name}) menerima tugas packing tetapi tidak boleh memindai");
     }
 });
+
+it('tidak menugasi super-admin walau ia memegang semua izin, tetapi SPV Gudang tetap ditugasi', function () {
+    // Di produksi peran super-admin memegang SELURUH izin, termasuk
+    // warehouse.packing.scan, sehingga saringan berbasis izin ikut menarik akun pemilik
+    // (Zabar, Administrator System). Tugasnya selalu berakhir tanpa satu pun mushaf
+    // dikemas, tetapi targetnya tetap masuk hitungan harian dan pemantauan SPV.
+    $hariKerja = today()->isWeekend() ? today()->next(Carbon::MONDAY) : today();
+
+    $pemilik = User::factory()->create(['is_active' => true]);
+    $pemilik->assignRole(RoleEnum::SUPER_ADMIN->value);
+
+    $petugas = User::factory()->create(['is_active' => true]);
+    $petugas->assignRole(RoleEnum::WAREHOUSE->value);
+
+    // SPV Gudang memindai sendiri di lapangan, jadi tugasnya harus tetap lahir.
+    $spv = User::factory()->create(['is_active' => true]);
+    $spv->assignRole([RoleEnum::SPV_GUDANG->value, RoleEnum::MANAGER_REPACKING->value]);
+
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    app(PackingAssignmentService::class)->runDailyAssignment($hariKerja);
+
+    $penerima = DB::table('daily_packing_tasks')
+        ->whereDate('tanggal_tugas', $hariKerja)->pluck('user_id');
+
+    expect($penerima)->toContain($petugas->id)
+        ->and($penerima)->toContain($spv->id)
+        ->and($penerima)->not->toContain($pemilik->id)
+        // Super-admin tetap boleh memindai sendiri; yang dihapus hanya tugas otomatisnya.
+        ->and($pemilik->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeTrue();
+});

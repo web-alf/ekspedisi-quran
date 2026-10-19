@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
 use App\Models\JenisQuran;
@@ -53,6 +54,16 @@ class PackingAssignmentService
             // memindai, bukan izin melihat.
             $warehouseUsers = User::permission('warehouse.packing.scan')
                 ->where('is_active', true)
+                // Super-admin TIDAK menerima tugas harian otomatis (keputusan pemilik, 19/10/2026).
+                //
+                // Saringan ini berbasis IZIN, dan peran super-admin memegang SELURUH izin di
+                // tabel — termasuk warehouse.packing.scan. Di produksi akibatnya akun pemilik
+                // (Zabar, Administrator System) ikut ditugasi setiap pagi: 18 tugas terakhir
+                // selesai 0 dan tidak satu pun mushaf dikemas, tetapi targetnya tetap masuk
+                // hitungan harian dan pemantauan SPV. Tugas yang tidak mungkin dikerjakan
+                // bukan tugas. Super-admin tetap boleh memindai sendiri — yang dihapus hanya
+                // penugasan otomatisnya.
+                ->whereDoesntHave('roles', fn ($query) => $query->where('name', RoleEnum::SUPER_ADMIN->value))
                 ->get();
 
             $results = [];
