@@ -39,6 +39,13 @@
   export let currentDate = '';
   
   export let sharedBoxes = [];  // ADDED for collaboration
+  // Ringkasan gudang untuk SPV (18/10/2026): null untuk staf — bagian ini
+  // hanya muncul bagi akun SPV yang bergudang.
+  export let ringkasanGudang = null;
+
+  $: persenPacking = ringkasanGudang?.packing?.target
+    ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
+    : 0;
   
   // State
   let showNotifications = false;
@@ -213,6 +220,7 @@
 <AdminLayout>
   <div class="min-h-screen bg-gray-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
       <!-- Header - Responsive -->
       <div class="mb-6 sm:mb-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -273,6 +281,149 @@
         </div>
     </div>
     
+      {#if ringkasanGudang}
+        <!-- Ringkasan gudang untuk SPV: semua angka sudah ter-coup ke gudang akun. -->
+        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-none">
+              <HeroIcon name="cube" class="w-4 h-4" />
+            </div>
+            <div>
+              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Packing Hari Ini — {ringkasanGudang.gudang.nama}</h2>
+              <p class="text-xs sm:text-sm text-gray-500">Gabungan seluruh tugas staf gudang ini</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Target hari ini</p>
+              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.target} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
+            </div>
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Sudah dikemas</p>
+              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.selesai} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 mt-1">{persenPacking}%</span>
+            </div>
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Kerdus tersegel</p>
+              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.kerdus_tersegel} <span class="text-sm font-medium text-gray-400">kerdus</span></p>
+            </div>
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Belum mulai</p>
+              <p class="text-2xl font-bold {ringkasanGudang.packing.staf_belum_mulai > 0 ? 'text-amber-600' : 'text-gray-900'}">{ringkasanGudang.packing.staf_belum_mulai} <span class="text-sm font-medium text-gray-400">staf</span></p>
+            </div>
+          </div>
+
+          <div class="mb-1 flex justify-between text-xs text-gray-500">
+            <span>Progress kemas gudang</span>
+            <span><b class="text-gray-900">{ringkasanGudang.packing.selesai}</b> / {ringkasanGudang.packing.target} mushaf</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-200 overflow-hidden">
+            <div class="h-full rounded-full bg-blue-500 transition-all duration-500" style="width: {persenPacking}%"></div>
+          </div>
+
+          {#if ringkasanGudang.packing.per_staf.length > 0}
+            <div class="mt-4 -mx-1 px-1 flex gap-2 overflow-x-auto">
+              {#each ringkasanGudang.packing.per_staf as staf (staf.nama)}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap {staf.mulai ? 'bg-white border border-gray-200 text-gray-600' : 'bg-amber-50 text-amber-700'}">
+                  {staf.nama} <b class="text-gray-900 ml-1">{staf.selesai}/{staf.target}</b>{staf.mulai ? '' : ' · belum mulai'}
+                </span>
+              {/each}
+            </div>
+          {/if}
+        </section>
+
+        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
+              <HeroIcon name="exclamation-circle" class="w-4 h-4" />
+            </div>
+            <div>
+              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Perlu Tindakan Anda</h2>
+              <p class="text-xs sm:text-sm text-gray-500">Yang menunggu keputusan SPV {ringkasanGudang.gudang.nama}</p>
+            </div>
+          </div>
+
+          {#if ringkasanGudang.perlu_tindakan.transfer_menunggu.length > 0}
+            {#each ringkasanGudang.perlu_tindakan.transfer_menunggu as t (t.kode)}
+              <div class="border border-gray-200 rounded-lg p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-xl flex-none">📥</div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold text-gray-900">Dokumen {t.kode} menunggu diterima</p>
+                  <p class="text-sm text-gray-600 mt-0.5">Dari {t.asal} · {t.jumlah_resi} resi ({t.jumlah_eks} mushaf)</p>
+                  <p class="text-xs text-gray-400 mt-1">Lokasi mushaf berpindah ke gudang ini setelah Anda menekan Terima.</p>
+                </div>
+                <a href="/admin/transfer-mushaf" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 text-center flex-none">Terima di sini</a>
+              </div>
+            {/each}
+          {:else}
+            <div class="rounded-lg border border-dashed border-gray-300 p-4 flex items-center gap-3 mb-3">
+              <span class="text-green-500 text-lg flex-none">✓</span>
+              <p class="text-sm text-gray-600">Tidak ada kiriman antar gudang yang menunggu. Semua beres.</p>
+            </div>
+          {/if}
+
+          <div class="rounded-lg border border-dashed border-gray-300 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <span class="text-lg flex-none">🚚</span>
+            <p class="text-sm text-gray-600 flex-1">
+              <b class="text-gray-900">{ringkasanGudang.perlu_tindakan.kerdus_menunggu_muat} kerdus</b> penuh menunggu dimuat ke kurir.
+            </p>
+            <a href="/admin/muatan" class="text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg flex-none">Lihat daftar →</a>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
+              <HeroIcon name="archive-box" class="w-4 h-4" />
+            </div>
+            <div>
+              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Beban Gudang</h2>
+              <p class="text-xs sm:text-sm text-gray-500">Resi yang tercatat sedang dikerjakan gudang ini</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+            {#each [['Pemesanan', ringkasanGudang.beban.pemesanan], ['Produksi', ringkasanGudang.beban.produksi], ['Packing', ringkasanGudang.beban.packing], ['Selesai packing', ringkasanGudang.beban.selesai_packing], ['Dalam kerdus', ringkasanGudang.beban.dalam_kerdus]] as [label, nilai]}
+              <div class="border border-gray-200 rounded-lg p-3">
+                <p class="text-xs text-gray-500 mb-1">{label}</p>
+                <p class="text-xl font-bold text-gray-900">{nilai}</p>
+                <p class="text-[11px] text-gray-400">resi</p>
+              </div>
+            {/each}
+          </div>
+          <p class="text-xs text-gray-400 -mt-3 mb-5">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
+
+          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-2">
+            <p class="text-sm font-medium text-gray-700">Stok mushaf gudang ini</p>
+            <p class="text-xs text-gray-400">Resi lama tanpa lokasi tidak dihitung di sini</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-500 border-b border-gray-200">
+                  <th class="py-2 pr-4 font-medium">Jenis</th>
+                  <th class="py-2 pr-4 font-medium hidden sm:table-cell">Varian</th>
+                  <th class="py-2 pr-4 font-medium text-right">Stok tersedia</th>
+                  <th class="py-2 font-medium text-right">Setara dus</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {#each ringkasanGudang.stok as baris (baris.jenis + baris.varian)}
+                  <tr>
+                    <td class="py-2 pr-4 font-medium text-gray-900">{baris.jenis}</td>
+                    <!-- Varian tampil di bawah jenis di ponsel; kolom sendiri di layar lebar. -->
+                    <td class="py-2 pr-4 text-gray-600 hidden sm:table-cell">{baris.varian}</td>
+                    <td class="py-2 pr-4 text-right text-gray-700">{baris.eks} eks<div class="text-[11px] text-gray-400 sm:hidden">{baris.varian}</div></td>
+                    <td class="py-2 text-right text-gray-600">{baris.dus} dus</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {/if}
+
     <!-- Today's Task Section - Responsive -->
     <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex items-center justify-center sm:justify-start mb-4 sm:mb-6">

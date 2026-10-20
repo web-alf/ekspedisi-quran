@@ -9,6 +9,7 @@ use App\Models\PackingNotification;
 use App\Models\SharedBoxAssignment;
 use App\Models\User;
 use App\Services\PackingAssignmentService;
+use App\Services\RingkasanGudangService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -17,8 +18,10 @@ class DashboardController extends Controller
 {
     protected $assignmentService;
 
-    public function __construct(PackingAssignmentService $assignmentService)
-    {
+    public function __construct(
+        PackingAssignmentService $assignmentService,
+        protected RingkasanGudangService $ringkasanGudang,
+    ) {
         $this->assignmentService = $assignmentService;
     }
 
@@ -57,6 +60,10 @@ class DashboardController extends Controller
 
             $recentBoxes = $this->getRecentBoxesForUser($user);
 
+            // Ringkasan gudang untuk SPV (18/10/2026): kondisi gudangnya sendiri, selalu
+            // ter-coup per gudang_id akun — bukan milik SPV lain.
+            $ringkasanGudang = $this->ringkasanGudang->untukSpv($user);
+
             // Get shared boxes for collaboration interface
             $sharedBoxes = $this->getSharedBoxesForCollaboration($user);
 
@@ -87,6 +94,7 @@ class DashboardController extends Controller
                 'performanceData' => $performanceData,
                 'recentBoxes' => $recentBoxes,
                 'sharedBoxes' => $sharedBoxes,
+                'ringkasanGudang' => $ringkasanGudang,
                 'currentUser' => [
                     'id' => $user->id,
                     'name' => $user->name,

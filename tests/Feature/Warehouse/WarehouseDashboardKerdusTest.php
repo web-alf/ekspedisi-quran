@@ -6,6 +6,7 @@ use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\User;
 use App\Services\PackingAssignmentService;
+use App\Services\RingkasanGudangService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
@@ -126,7 +127,7 @@ it('membatasi daftar kerdus pada jumlah yang diminta', function () {
         'jenis_quran_id' => $this->jenis->id,
     ]);
 
-    $controller = new DashboardController(app(PackingAssignmentService::class));
+    $controller = new DashboardController(app(PackingAssignmentService::class), app(RingkasanGudangService::class));
 
     expect($controller->getRecentBoxesForUser($this->staf, 2))->toHaveCount(2);
     expect($controller->getRecentBoxesForUser($this->staf, 10))->toHaveCount(3);
