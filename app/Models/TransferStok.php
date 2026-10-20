@@ -20,6 +20,7 @@ class TransferStok extends Model
         'gudang_asal_id',
         'gudang_tujuan_id',
         'jenis_quran_id',
+        'terjemahan',
         'jumlah_eks',
         'status',
         'catatan',
@@ -33,6 +34,7 @@ class TransferStok extends Model
         return [
             'approved_at' => 'datetime',
             'jumlah_eks' => 'integer',
+            'terjemahan' => 'boolean',
         ];
     }
 

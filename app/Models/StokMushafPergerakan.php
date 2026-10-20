@@ -16,12 +16,20 @@ class StokMushafPergerakan extends Model
     protected $fillable = [
         'gudang_id',
         'jenis_quran_id',
+        'terjemahan',
         'tipe',
         'jumlah_eks',
         'catatan',
         'created_by',
         'transfer_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'terjemahan' => 'boolean',
+        ];
+    }
 
     public function gudang(): BelongsTo
     {

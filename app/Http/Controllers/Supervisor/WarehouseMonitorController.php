@@ -144,9 +144,18 @@ class WarehouseMonitorController extends Controller
         $stockInfo = $this->getWarehouseStockInfo();
 
         // Get current month performance data
+        //
+        // Statistik performa dijaga izin `supervisor.performance.view|supervisor.dashboard`,
+        // sedangkan HALAMAN ini dijaga `supervisor.warehouse.monitor` — peran gudang
+        // (warehouse/spv-gudang) boleh membuka monitor tetapi TIDAK boleh membaca performa.
+        // Dulu halaman tetap memanggil endpoint performanya tiap 30 detik dan menerima 403
+        // beruntun (kejadian produksi 19/10/2026, 403 setiap 30 detik dari 14:18 sampai
+        // 15:06). Sekarang kartunya hanya dirender — dan datanya hanya diambil — bila
+        // memang berhak, jadi tidak ada permintaan yang pasti gagal.
+        $bolehLihatPerforma = $user->can('supervisor.performance.view') || $user->can('supervisor.dashboard');
         $currentMonth = date('Y-m');
-        $performanceStats = $this->getMonthlyPerformanceStats($currentMonth);
-        $userPerformance = $this->getUserPerformanceSummary($currentMonth);
+        $performanceStats = $bolehLihatPerforma ? $this->getMonthlyPerformanceStats($currentMonth) : [];
+        $userPerformance = $bolehLihatPerforma ? $this->getUserPerformanceSummary($currentMonth) : [];
 
         return Inertia::render('Supervisor/WarehouseMonitor', [
             'dailyTasks' => $todayTasks->map(function ($task) {
@@ -186,6 +195,10 @@ class WarehouseMonitorController extends Controller
             // Add performance data to initial load
             'performanceStats' => $performanceStats,
             'userPerformance' => $userPerformance,
+            // Halaman hanya memanggil endpoint performa bila izinnya ada (lihat di atas).
+            'bolehLihatPerforma' => $bolehLihatPerforma,
+            // Tombol Export memakai endpoint lain lagi (`supervisor.performance.reports`).
+            'bolehExportPerforma' => $user->can('supervisor.performance.reports'),
         ]);
     }
 

@@ -3,9 +3,12 @@
 namespace Tests\Feature\Supervisor;
 
 use App\Models\DailyPackingTask;
+use App\Models\Gudang;
 use App\Models\PackingBox;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class WarehouseMonitorTest extends TestCase
@@ -425,6 +428,52 @@ class WarehouseMonitorTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertInertia(fn ($page) => $page->component('Supervisor/WarehouseMonitor'));
+    }
+
+    /**
+     * Peran gudang boleh MEMBUKA monitor (`supervisor.warehouse.monitor`) tetapi tidak
+     * berhak membaca statistik performa (`supervisor.performance.view|supervisor.dashboard`).
+     *
+     * Kejadian produksi 19/10/2026: halaman tetap memanggil endpoint performanya tiap 30
+     * detik dan menerima 403 beruntun selama ~48 menit. Sekarang kartu performanya tidak
+     * dirender dan endpointnya tidak dipanggil lagi untuk peran ini.
+     */
+    public function test_gudang_tanpa_izin_performa_tidak_memanggil_performa()
+    {
+        $pj = User::factory()->create(['is_active' => true, 'gudang_id' => Gudang::byKode('SMG')->id]);
+        $pj->assignRole(['warehouse', 'manager-repacking']);
+
+        // Produksi: peran gudang tidak memegang izin performa (seeder masih mencantumkannya,
+        // jadi cabut di sini supaya keadaan yang diuji sama dengan lapangan).
+        Role::findByName('manager-repacking', 'web')
+            ->revokePermissionTo(['supervisor.performance.view', 'supervisor.dashboard']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $props = $this->actingAs($pj->fresh())
+            ->get('/admin/supervisor/warehouse-monitor')
+            ->assertStatus(200)
+            ->viewData('page')['props'];
+
+        expect($props['bolehLihatPerforma'])->toBeFalse()
+            ->and($props['bolehExportPerforma'])->toBeFalse()
+            ->and($props['performanceStats'])->toBe([])
+            ->and($props['userPerformance'])->toBe([]);
+
+        // Dan endpointnya memang tertutup — itulah kenapa halaman tidak boleh memanggilnya.
+        $this->actingAs($pj->fresh())
+            ->getJson('/admin/supervisor/warehouse-monitor/performance?month='.date('Y-m'))
+            ->assertForbidden();
+    }
+
+    public function test_supervisor_tetap_melihat_performa()
+    {
+        $props = $this->actingAs($this->supervisor)
+            ->get('/admin/supervisor/warehouse-monitor')
+            ->assertStatus(200)
+            ->viewData('page')['props'];
+
+        expect($props['bolehLihatPerforma'])->toBeTrue()
+            ->and($props['bolehExportPerforma'])->toBeTrue();
     }
 
     public function test_boxes_count_is_accurate()

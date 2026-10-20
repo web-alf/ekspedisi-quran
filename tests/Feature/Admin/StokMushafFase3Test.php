@@ -27,6 +27,10 @@ uses(RefreshDatabase::class);
  * - SPV asal TIDAK boleh menerima transfernya sendiri;
  * - freelancer (role warehouse) hanya melihat;
  * - seluruh pergerakan tercatat di buku besar beserta pelakunya.
+ *
+ * Temuan lapangan 19/10/2026: A5/A6 punya varian BER-TERJEMAHAN dan TANPA terjemahan.
+ * Varian WAJIB diisi di tiap pergerakan/saldo — A5 ber-terjemahan dan A5 tanpa terjemahan
+ * adalah dua tumpukan terpisah, bukan satu angka gabungan.
  */
 beforeEach(function () {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -57,13 +61,14 @@ function stokAkun(string $role, ?Gudang $gudang = null): User
     return $user->fresh();
 }
 
-function stokIsiAwal(Gudang $gudang, JenisQuran $jenis, int $dus): void
+function stokIsiAwal(Gudang $gudang, JenisQuran $jenis, int $eks, bool $terjemahan = false): void
 {
     // Setup data lewat jalur yang sama dengan produksi (service), bukan HTTP.
     app(StokMushafService::class)->catatMasuk(
         $gudang,
         $jenis,
-        $dus,
+        $eks,
+        $terjemahan,
         'Isi awal uji',
         stokAkun(RoleEnum::MANAGER_REPACKING->value),
     );
@@ -79,20 +84,23 @@ it('mencatat stok masuk berikut buku besarnya, dalam dus yang dikonversi ke eks'
             'gudang_id' => $gudang->id,
             'jenis_quran_id' => $jenis->id,
             'tipe' => 'masuk',
+            'terjemahan' => 1,
             'jumlah_eks' => 60,
             'catatan' => 'Terima barang produksi',
         ])
         ->assertSuccessful()
         ->assertJsonPath('success', true);
 
-    // 3 dus A5 = 60 eks.
+    // 3 dus A5 = 60 eks, tercatat sebagai varian BER-terjemahan.
     expect(DB::table('stok_mushaf')->where('gudang_id', $gudang->id)->value('jumlah_eks'))->toBe(60)
         ->and($respons->json('data.eks'))->toBe(60)
-        ->and($respons->json('data.dus'))->toBe(3);
+        ->and($respons->json('data.dus'))->toBe(3)
+        ->and($respons->json('message'))->toContain('ada terjemahan');
 
     $pergerakan = StokMushafPergerakan::first();
     expect($pergerakan->tipe)->toBe('masuk')
         ->and($pergerakan->jumlah_eks)->toBe(60)
+        ->and($pergerakan->terjemahan)->toBeTrue()
         ->and($pergerakan->created_by)->toBe($pelaku->id)
         ->and($pergerakan->catatan)->toBe('Terima barang produksi');
 });
@@ -109,6 +117,7 @@ it('mengurangi stok saat muwakif dilampirkan dan menolak bila stok tidak cukup',
             'gudang_id' => $gudang->id,
             'jenis_quran_id' => $jenis->id,
             'tipe' => 'keluar',
+            'terjemahan' => 0,
             'jumlah_eks' => 12,
             'catatan' => 'Dilampirkan ke muwakif',
         ]);
@@ -120,13 +129,16 @@ it('mengurangi stok saat muwakif dilampirkan dan menolak bila stok tidak cukup',
             'gudang_id' => $gudang->id,
             'jenis_quran_id' => $jenis->id,
             'tipe' => 'keluar',
+            'terjemahan' => 0,
             'jumlah_eks' => 500,
         ]);
 
     $gagal->assertStatus(422)
         ->assertJsonPath('success', false);
 
-    expect($gagal->json('message'))->toContain('Stok tidak cukup');
+    // Pesan galat menyebut variannya: stok terjemahan dan non-terjemahan terpisah.
+    expect($gagal->json('message'))->toContain('Stok tidak cukup')
+        ->and($gagal->json('message'))->toContain('tanpa terjemahan');
 
     // Stok tidak boleh minus.
     expect(DB::table('stok_mushaf')->where('gudang_id', $gudang->id)->value('jumlah_eks'))->toBe(28);
@@ -136,13 +148,14 @@ it('membuat dokumen transfer tanpa menggerakkan stok dulu', function () {
     $asal = stokGudang('SMG');
     $tujuan = stokGudang('BTL');
     $jenis = stokJenisA5();
-    stokIsiAwal($asal, $jenis, 80);
+    stokIsiAwal($asal, $jenis, 80, true);
 
     $respons = $this->actingAs(stokAkun(RoleEnum::MANAGER_REPACKING->value))
         ->postJson('/admin/warehouse/stok/transfer', [
             'gudang_asal_id' => $asal->id,
             'gudang_tujuan_id' => $tujuan->id,
             'jenis_quran_id' => $jenis->id,
+            'terjemahan' => 1,
             'jumlah_eks' => 40,
         ])
         ->assertSuccessful();
@@ -150,6 +163,8 @@ it('membuat dokumen transfer tanpa menggerakkan stok dulu', function () {
     $dokumen = TransferStok::first();
     expect($dokumen->status)->toBe('diproses')
         ->and($dokumen->jumlah_eks)->toBe(40)
+        // Varian ikut di dokumennya: yang dipindah adalah A5 ber-terjemahan.
+        ->and($dokumen->terjemahan)->toBeTrue()
         ->and($dokumen->kode)->toBe('TS-'.today()->format('Ymd').'-001')
         // Stok asal BELUM berpindah — menunggu SPV tujuan menerima.
         ->and(DB::table('stok_mushaf')->where('gudang_id', $asal->id)->value('jumlah_eks'))->toBe(80)
@@ -169,6 +184,7 @@ it('menolak dokumen yang melebihi stok asal atau asal sama dengan tujuan', funct
             'gudang_asal_id' => $asal->id,
             'gudang_tujuan_id' => $tujuan->id,
             'jenis_quran_id' => $jenis->id,
+            'terjemahan' => 0,
             'jumlah_eks' => 180,
         ]);
 
@@ -182,6 +198,7 @@ it('menolak dokumen yang melebihi stok asal atau asal sama dengan tujuan', funct
             'gudang_asal_id' => $asal->id,
             'gudang_tujuan_id' => $asal->id,
             'jenis_quran_id' => $jenis->id,
+            'terjemahan' => 0,
             'jumlah_eks' => 1,
         ])
         ->assertStatus(422)
@@ -204,6 +221,7 @@ it('memindahkan stok saat diterima SPV gudang tujuan, dan hanya dia', function (
             'gudang_asal_id' => $asal->id,
             'gudang_tujuan_id' => $tujuan->id,
             'jenis_quran_id' => $jenis->id,
+            'terjemahan' => 0,
             'jumlah_eks' => 40,
             'catatan' => 'Stok Boyolali habis',
         ]);
@@ -245,6 +263,7 @@ it('menolak menerima dokumen yang sudah diterima dan membiarkannya dibatalkan se
         'gudang_asal_id' => $asal->id,
         'gudang_tujuan_id' => $tujuan->id,
         'jenis_quran_id' => $jenis->id,
+        'terjemahan' => 0,
         'jumlah_eks' => 40,
     ]);
     $dokumen = TransferStok::first();
@@ -279,6 +298,7 @@ it('memberi freelancer akses baca saja', function () {
             'gudang_id' => stokGudang('SMG')->id,
             'jenis_quran_id' => stokJenisA5()->id,
             'tipe' => 'masuk',
+            'terjemahan' => 0,
             'jumlah_eks' => 1,
         ])
         ->assertForbidden();
@@ -292,13 +312,14 @@ it('memvalidasi bentuk permintaan entri dan transfer', function () {
     $this->actingAs($pengelola)
         ->postJson('/admin/warehouse/stok/entri', ['tipe' => 'masuk'])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['gudang_id', 'jenis_quran_id', 'jumlah_eks']);
+        ->assertJsonValidationErrors(['gudang_id', 'jenis_quran_id', 'terjemahan', 'jumlah_eks']);
 
     $this->actingAs($pengelola)
         ->postJson('/admin/warehouse/stok/entri', [
             'gudang_id' => stokGudang('SMG')->id,
             'jenis_quran_id' => stokJenisA5()->id,
             'tipe' => 'diangkut',
+            'terjemahan' => 0,
             'jumlah_eks' => 2,
         ])
         ->assertStatus(422)
@@ -309,10 +330,112 @@ it('memvalidasi bentuk permintaan entri dan transfer', function () {
             'gudang_asal_id' => stokGudang('SMG')->id,
             'gudang_tujuan_id' => stokGudang('BTL')->id,
             'jenis_quran_id' => stokJenisA5()->id,
+            'terjemahan' => 0,
             'jumlah_eks' => 0,
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrors('jumlah_eks');
+});
+
+it('memisahkan stok A5 ber-terjemahan dan tanpa terjemahan, dan menolak pergerakan tanpa varian', function () {
+    $gudang = stokGudang('SMG');
+    $jenis = stokJenisA5();
+    $pelaku = stokAkun(RoleEnum::SPV_GUDANG->value, $gudang);
+
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $jenis->id,
+            'tipe' => 'masuk',
+            'terjemahan' => 1,
+            'jumlah_eks' => 20,
+        ])
+        ->assertSuccessful();
+
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $jenis->id,
+            'tipe' => 'masuk',
+            'terjemahan' => 0,
+            'jumlah_eks' => 60,
+        ])
+        ->assertSuccessful();
+
+    // Dua tumpukan, bukan satu angka 80: 20 eks ber-terjemahan + 60 eks tanpa.
+    $saldo = StokMushaf::where('gudang_id', $gudang->id)->orderBy('id')->get();
+    expect($saldo)->toHaveCount(2)
+        ->and($saldo[0]->terjemahan)->toBeTrue()
+        ->and($saldo[0]->jumlah_eks)->toBe(20)
+        ->and($saldo[1]->terjemahan)->toBeFalse()
+        ->and($saldo[1]->jumlah_eks)->toBe(60);
+
+    // Mengurangi 20 eks TANPA terjemahan tidak boleh memakan tumpukan ber-terjemahan.
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $jenis->id,
+            'tipe' => 'keluar',
+            'terjemahan' => 0,
+            'jumlah_eks' => 20,
+        ])
+        ->assertSuccessful();
+
+    expect(StokMushaf::where('gudang_id', $gudang->id)->where('terjemahan', true)->value('jumlah_eks'))->toBe(20)
+        ->and(StokMushaf::where('gudang_id', $gudang->id)->where('terjemahan', false)->value('jumlah_eks'))->toBe(40);
+
+    // Varian wajib: permintaan tanpa `terjemahan` ditolak, stok tidak berubah.
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $jenis->id,
+            'tipe' => 'masuk',
+            'jumlah_eks' => 20,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('terjemahan');
+
+    expect((int) StokMushaf::where('gudang_id', $gudang->id)->sum('jumlah_eks'))->toBe(60);
+});
+
+it('menyampaikan galat validasi sebagai JSON, bukan pengalihan halaman', function () {
+    // Halaman stok memanggil endpoint ini dengan fetch + Accept: application/json.
+    // Tanpa header itu Laravel menjawab REDIRECT 302 dan browser menerima HTML —
+    // pesan aslinya tidak pernah sampai ke layar (kejadian 19/10/2026).
+    $pengelola = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    $respons = $this->actingAs($pengelola)->postJson('/admin/warehouse/stok/entri', [
+        'gudang_id' => stokGudang('SMG')->id,
+        'jenis_quran_id' => stokJenisA5()->id,
+        'tipe' => 'masuk',
+        'jumlah_eks' => 1,
+    ]);
+
+    $respons->assertStatus(422)
+        ->assertHeader('content-type', 'application/json')
+        ->assertJsonValidationErrors('terjemahan');
+});
+
+it('mengirim props datar yang benar-benar dipakai halaman stok', function () {
+    // Halaman membaca `stok.gudang` / `stok.jenis` sebagai TEKS. Dulu halaman membaca
+    // `stok.gudang?.nama`, sehingga kolom Gudang dan Jenis tampil kosong walau stoknya ada.
+    $gudang = stokGudang('SMG');
+    $jenis = stokJenisA5();
+    stokIsiAwal($gudang, $jenis, 20, true);
+
+    $props = $this->actingAs(stokAkun(RoleEnum::MANAGER_REPACKING->value))
+        ->get('/admin/warehouse/stok')
+        ->assertSuccessful()
+        ->viewData('page')['props'];
+
+    expect($props['stokList'][0])->toMatchArray([
+        'gudang' => $gudang->nama,
+        'jenis' => $jenis->nama_jenis,
+        'terjemahan' => 'Ada terjemahan',
+        'eks' => 20,
+    ])
+        ->and($props['stokList'][0])->not->toHaveKey('jenisQuran')
+        ->and($props['pergerakanList'][0]['terjemahan'])->toBe('Ada terjemahan');
 });
 
 /**
@@ -329,7 +452,7 @@ it('tidak memindahkan stok dua kali saat transfer diterima bersamaan', function 
 
     $layanan = app(StokMushafService::class);
     $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
-    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 60, null, $manager);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 60, false, null, $manager);
 
     $basi = TransferStok::find($dokumen->id);
 
@@ -351,7 +474,7 @@ it('tidak membatalkan dokumen yang baru saja diterima', function () {
 
     $layanan = app(StokMushafService::class);
     $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
-    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, null, $manager);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, false, null, $manager);
 
     $basi = TransferStok::find($dokumen->id);
 
@@ -373,7 +496,7 @@ it('tidak menerima dokumen yang baru saja dibatalkan', function () {
 
     $layanan = app(StokMushafService::class);
     $manager = stokAkun(RoleEnum::MANAGER_REPACKING->value);
-    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, null, $manager);
+    $dokumen = $layanan->buatTransfer($asal, $tujuan, $jenis, 40, false, null, $manager);
 
     $basi = TransferStok::find($dokumen->id);
 

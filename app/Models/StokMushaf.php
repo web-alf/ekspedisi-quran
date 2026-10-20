@@ -10,12 +10,14 @@ class StokMushaf extends Model
 {
     protected $table = 'stok_mushaf';
 
-    protected $fillable = ['gudang_id', 'jenis_quran_id', 'jumlah_eks'];
+    protected $fillable = ['gudang_id', 'jenis_quran_id', 'terjemahan', 'jumlah_eks'];
 
     protected function casts(): array
     {
         return [
             'jumlah_eks' => 'integer',
+            // Temuan lapangan 19/10/2026: A5/A6 ada varian ber-terjemahan dan tanpa.
+            'terjemahan' => 'boolean',
         ];
     }
 

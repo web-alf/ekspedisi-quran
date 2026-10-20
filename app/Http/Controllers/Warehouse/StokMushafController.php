@@ -42,6 +42,7 @@ class StokMushafController extends Controller
                     'gudang' => $stok->gudang->nama,
                     'gudang_id' => $stok->gudang_id,
                     'jenis' => $stok->jenisQuran->nama_jenis,
+                    'terjemahan' => $this->labelVarian((bool) $stok->terjemahan),
                     'eks' => $stok->jumlah_eks,
                     'dus' => $stok->jumlahDus(),
                     'sisaEks' => $stok->sisaEksDiLuarDus(),
@@ -59,6 +60,7 @@ class StokMushafController extends Controller
                     'asal' => $transfer->gudangAsal->nama,
                     'tujuan' => $transfer->gudangTujuan->nama,
                     'jenis' => $transfer->jenisQuran->nama_jenis,
+                    'terjemahan' => $this->labelVarian((bool) $transfer->terjemahan),
                     'jumlah_eks' => $transfer->jumlah_eks,
                     'status' => $transfer->status,
                     'catatan' => $transfer->catatan,
@@ -72,6 +74,7 @@ class StokMushafController extends Controller
                     'tipe' => $baris->tipe,
                     'gudang' => $baris->gudang->nama,
                     'jenis' => $baris->jenisQuran->nama_jenis,
+                    'terjemahan' => $this->labelVarian((bool) $baris->terjemahan),
                     'jumlah_eks' => $baris->jumlah_eks,
                     'catatan' => $baris->catatan,
                     'oleh' => $baris->pelaku->name,
@@ -91,6 +94,10 @@ class StokMushafController extends Controller
         $validated = $request->validate([
             'gudang_id' => ['required', 'integer', 'exists:gudang,id'],
             'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
+            // Temuan lapangan 19/10/2026: A5/A6 ada varian ber-terjemahan dan tanpa.
+            // WAJIB dipilih — tanpa ini dua tumpukan tercampur dan "stok tinggal 4 eks"
+            // tak bisa dijawab.
+            'terjemahan' => ['required', 'boolean'],
             'tipe' => ['required', 'in:masuk,keluar'],
             'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
             'catatan' => ['nullable', 'string', 'max:255'],
@@ -98,6 +105,7 @@ class StokMushafController extends Controller
 
         $gudang = Gudang::findOrFail($validated['gudang_id']);
         $jenis = JenisQuran::findOrFail($validated['jenis_quran_id']);
+        $terjemahan = (bool) $validated['terjemahan'];
 
         // SPV tercakup hanya boleh menyentuh stok gudangnya sendiri (server-side,
         // bukan sekadar disembunyikan di form).
@@ -108,15 +116,15 @@ class StokMushafController extends Controller
 
         try {
             $stok = $validated['tipe'] === 'masuk'
-                ? $this->stokMushaf->catatMasuk($gudang, $jenis, (int) $validated['jumlah_eks'], $validated['catatan'] ?? null, auth()->user())
-                : $this->stokMushaf->keluarkan($gudang, $jenis, (int) $validated['jumlah_eks'], $validated['catatan'] ?? null, auth()->user());
+                ? $this->stokMushaf->catatMasuk($gudang, $jenis, (int) $validated['jumlah_eks'], $terjemahan, $validated['catatan'] ?? null, auth()->user())
+                : $this->stokMushaf->keluarkan($gudang, $jenis, (int) $validated['jumlah_eks'], $terjemahan, $validated['catatan'] ?? null, auth()->user());
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'success' => true,
-            'message' => sprintf('Stok %s %s: %d eks (%d dus %s) terekam.', $jenis->nama_jenis, $gudang->nama, $stok->jumlah_eks, $stok->jumlahDus(), $stok->sisaEksDiLuarDus() > 0 ? '+ '.$stok->sisaEksDiLuarDus().' eks' : 'utuh'),
+            'message' => sprintf('Stok %s%s di %s: %d eks (%d dus %s) terekam.', $jenis->nama_jenis, $this->sebutanVarian($terjemahan), $gudang->nama, $stok->jumlah_eks, $stok->jumlahDus(), $stok->sisaEksDiLuarDus() > 0 ? '+ '.$stok->sisaEksDiLuarDus().' eks' : 'utuh'),
             'data' => ['eks' => $stok->jumlah_eks, 'dus' => $stok->jumlahDus()],
         ]);
     }
@@ -127,6 +135,7 @@ class StokMushafController extends Controller
             'gudang_asal_id' => ['required', 'integer', 'exists:gudang,id', 'different:gudang_tujuan_id'],
             'gudang_tujuan_id' => ['required', 'integer', 'exists:gudang,id'],
             'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
+            'terjemahan' => ['required', 'boolean'],
             'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
             'catatan' => ['nullable', 'string', 'max:255'],
         ]);
@@ -146,6 +155,7 @@ class StokMushafController extends Controller
                 $tujuan,
                 JenisQuran::findOrFail($validated['jenis_quran_id']),
                 (int) $validated['jumlah_eks'],
+                (bool) $validated['terjemahan'],
                 $validated['catatan'] ?? null,
                 auth()->user(),
             );
@@ -155,7 +165,7 @@ class StokMushafController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => sprintf('Dokumen %s dibuat: %d eks %s dari %s ke %s. Stok berpindah saat SPV tujuan menerima.', $transfer->kode, $transfer->jumlah_eks, $transfer->jenisQuran->nama_jenis, $transfer->gudangAsal->nama, $transfer->gudangTujuan->nama),
+            'message' => sprintf('Dokumen %s dibuat: %d eks %s%s dari %s ke %s. Stok berpindah saat SPV tujuan menerima.', $transfer->kode, $transfer->jumlah_eks, $transfer->jenisQuran->nama_jenis, $this->sebutanVarian((bool) $transfer->terjemahan), $transfer->gudangAsal->nama, $transfer->gudangTujuan->nama),
             'data' => ['id' => $transfer->id, 'kode' => $transfer->kode],
         ]);
     }
@@ -229,6 +239,22 @@ class StokMushafController extends Controller
         return $pelaku->hasRole(RoleEnum::SUPER_ADMIN->value)
             || ($pelaku->hasRole(RoleEnum::MANAGER_REPACKING->value)
                 && ! $pelaku->hasRole(RoleEnum::SPV_GUDANG->value));
+    }
+
+    /**
+     * Sebutan varian untuk kalimat: " (ada terjemahan)" / " (tanpa terjemahan)".
+     */
+    private function sebutanVarian(bool $terjemahan): string
+    {
+        return $terjemahan ? ' (ada terjemahan)' : ' (tanpa terjemahan)';
+    }
+
+    /**
+     * Label varian untuk kolom tabel: "Ada terjemahan" / "Tanpa terjemahan".
+     */
+    private function labelVarian(bool $terjemahan): string
+    {
+        return $terjemahan ? 'Ada terjemahan' : 'Tanpa terjemahan';
     }
 
     private function bolehBatalkan(User $pelaku, TransferStok $transfer): bool

@@ -33,6 +33,15 @@
       completion_rate: 0
     }
   }
+  // Statistik performa dijaga izin `supervisor.performance.view|supervisor.dashboard`,
+  // sedangkan halaman ini dijaga `supervisor.warehouse.monitor` — peran gudang boleh
+  // membuka monitor tetapi tidak boleh membaca performa. Tanpa penjaga ini halaman
+  // memanggil endpoint performanya tiap 30 detik dan menerima 403 beruntun; kartunya
+  // pun hanya menampilkan spinner yang tidak pernah selesai.
+  export let bolehLihatPerforma = false
+  // Tombol Export memakai endpoint `warehouse-monitor/export` yang dijaga
+  // `supervisor.performance.reports` — izin yang juga tidak dipegang peran gudang.
+  export let bolehExportPerforma = false
 
   let selectedMonth = new Date().toISOString().slice(0, 7)
   let loading = false
@@ -102,7 +111,7 @@
         }
         
         // Update performance data for current month only if month changed
-        if (selectedMonth === new Date().toISOString().slice(0, 7)) {
+        if (bolehLihatPerforma && selectedMonth === new Date().toISOString().slice(0, 7)) {
           loadPerformanceData()
         }
       }
@@ -132,6 +141,7 @@
   let performanceLoading = false;
 
   async function loadPerformanceData() {
+    if (!bolehLihatPerforma) return; // tanpa izin: jangan panggil endpoint yang pasti 403
     if (performanceLoading) return; // Prevent concurrent loads
     
     performanceLoading = true;
@@ -288,7 +298,7 @@
   }
 
   // Reactive statement for selected month
-  $: if (selectedMonth) {
+  $: if (selectedMonth && bolehLihatPerforma) {
     loadPerformanceData()
   }
 </script>
@@ -315,6 +325,7 @@
             <span class="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
             <span class="sm:hidden">Refresh</span>
           </button>
+          {#if bolehExportPerforma}
           <button 
             on:click={() => showExportModal = true}
             class="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base font-medium touch-manipulation"
@@ -323,6 +334,7 @@
             <span class="hidden sm:inline">Export Data</span>
             <span class="sm:hidden">Export</span>
           </button>
+          {/if}
           <button 
             on:click={() => showStockModal = true}
             class="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base font-medium touch-manipulation"
@@ -603,6 +615,7 @@
   </div>
 
   <!-- Performance Stats -->
+  {#if bolehLihatPerforma}
   <div class="bg-white rounded-xl shadow-sm border border-gray-100">
     <div class="p-4 sm:p-6 border-b border-gray-200">
       <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
@@ -719,6 +732,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 
   <!-- Export Modal -->
   {#if showExportModal}

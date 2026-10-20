@@ -71,7 +71,7 @@ it('menyusun kartu per gudang dari stok, kerdus aktif, dan kerdus tersegel', fun
     $statusSelesai = kartuStatus('selesai-packing', 'Selesai Packing', 5);
 
     // Stok belum ada muwakif: 40 eks A5 di Semarang (= 2 dus).
-    app(StokMushafService::class)->catatMasuk($semarang, $jenis, 40, 'uji', User::factory()->create());
+    app(StokMushafService::class)->catatMasuk($semarang, $jenis, 40, false, 'uji', User::factory()->create());
 
     // Kerdus aktif hari ini milik tugas Semarang; kerdus tersegel milik Boyolali.
     $petugas = User::factory()->create(['is_active' => true]);
@@ -125,7 +125,7 @@ it('membatasi monitor untuk SPV: tugas & kartu hanya gudangnya sendiri', functio
     $boyolali = Gudang::byKode('BTL');
     $jenis = JenisQuran::where('kode_jenis', 'A5')->first() ?? JenisQuran::factory()->a5()->create();
 
-    app(StokMushafService::class)->catatMasuk($semarang, $jenis, 40, 'uji', User::factory()->create());
+    app(StokMushafService::class)->catatMasuk($semarang, $jenis, 40, false, 'uji', User::factory()->create());
 
     $petugas = User::factory()->create(['is_active' => true]);
     foreach ([
