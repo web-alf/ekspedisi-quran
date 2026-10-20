@@ -144,6 +144,46 @@ it('mengurangi stok saat muwakif dilampirkan dan menolak bila stok tidak cukup',
     expect(DB::table('stok_mushaf')->where('gudang_id', $gudang->id)->value('jumlah_eks'))->toBe(28);
 });
 
+it('menolak SPV mencatat pergerakan stok gudang lain', function () {
+    $semarang = stokGudang('SMG');
+    $boyolali = stokGudang('BTL');
+    $jenis = stokJenisA5();
+
+    $spvSmg = stokAkun(RoleEnum::SPV_GUDANG->value, $semarang);
+
+    $this->actingAs($spvSmg)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $boyolali->id,
+            'jenis_quran_id' => $jenis->id,
+            'tipe' => 'masuk',
+            'terjemahan' => 0,
+            'jumlah_eks' => 10,
+        ])
+        ->assertForbidden()
+        ->assertJsonPath('success', false);
+
+    expect(StokMushaf::where('gudang_id', $boyolali->id)->exists())->toBeFalse();
+});
+
+it('menolak SPV membuat dokumen transfer dari gudang lain', function () {
+    $semarang = stokGudang('SMG');
+    $boyolali = stokGudang('BTL');
+    $jenis = stokJenisA5();
+    stokIsiAwal($boyolali, $jenis, 20);
+
+    $this->actingAs(stokAkun(RoleEnum::SPV_GUDANG->value, $semarang))
+        ->postJson('/admin/warehouse/stok/transfer', [
+            'gudang_asal_id' => $boyolali->id,
+            'gudang_tujuan_id' => $semarang->id,
+            'jenis_quran_id' => $jenis->id,
+            'terjemahan' => 0,
+            'jumlah_eks' => 5,
+        ])
+        ->assertForbidden();
+
+    expect(TransferStok::count())->toBe(0);
+});
+
 it('membuat dokumen transfer tanpa menggerakkan stok dulu', function () {
     $asal = stokGudang('SMG');
     $tujuan = stokGudang('BTL');

@@ -1,6 +1,7 @@
 <script>
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
+  import { gudangUntukEntri, gudangTujuanTransfer, gudangAwal } from '../../utils/pilihanGudang.js';
 
   // Fase 3: stok mushaf tanpa muwakif per gudang + dokumen transfer antar gudang.
   // Temuan lapangan 19/10/2026: A5/A6 punya varian ber-terjemahan dan tanpa, jadi
@@ -26,6 +27,19 @@
   let entriTerjemahan = '';
   let entriJumlah = 1;
   let entriCatatan = '';
+
+  // SPV tercakup gudang: kolom gudang terkunci ke gudangnya dan opsi gudang lain tidak
+  // pernah ditawarkan — server juga menolak (403), tapi menawarkan opsi yang pasti ditolak
+  // membuat pengguna baru tahu setelah menekan Simpan.
+  $: gudangEntri = gudangUntukEntri(gudangList, { gudangSaya, tercakupGudang });
+  $: transferAsalTerkunci = tercakupGudang ? gudangAwal({ gudangSaya, tercakupGudang }) : '';
+  $: gudangTujuan = gudangTujuanTransfer(gudangList, tercakupGudang ? gudangSaya : transferAsal);
+  $: if (tercakupGudang && gudangSaya !== null && String(entriGudang) !== String(gudangSaya)) {
+      entriGudang = String(gudangSaya);
+  }
+  $: if (tercakupGudang && gudangSaya !== null && String(transferAsal) !== String(gudangSaya)) {
+      transferAsal = String(gudangSaya);
+  }
 
   // Form transfer
   let transferAsal = '';
@@ -165,7 +179,12 @@
 
     {#if bolehKelola}
       <section class="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 class="font-semibold text-gray-900 mb-3">Catat Pergerakan</h2>
+        <h2 class="font-semibold text-gray-900 mb-1">Catat Pergerakan</h2>
+        {#if tercakupGudang}
+          <p class="text-xs text-gray-500 mb-3">Gudang terkunci ke gudang Anda — stok gudang lain tidak bisa dicatat dari akun ini.</p>
+        {:else}
+          <p class="text-xs text-gray-500 mb-3">Pilih gudang tempat pergerakan ini terjadi.</p>
+        {/if}
         <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 items-end">
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Tipe</span>
@@ -178,12 +197,17 @@
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Gudang
 </span>
-            <select bind:value={entriGudang} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Pilih gudang...</option>
-              {#each gudangList as gudang}
-                <option value={gudang.id}>{gudang.nama}</option>
-              {/each}
-            </select>
+            {#if tercakupGudang}
+              <input type="text" value={gudangEntri[0]?.nama ?? 'Belum ditempatkan'} disabled
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600" />
+            {:else}
+              <select bind:value={entriGudang} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Pilih gudang...</option>
+                {#each gudangList as gudang}
+                  <option value={gudang.id}>{gudang.nama}</option>
+                {/each}
+              </select>
+            {/if}
           </label>
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Jenis
@@ -236,19 +260,24 @@
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Dari
 </span>
-            <select bind:value={transferAsal} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Gudang asal...</option>
-              {#each gudangList as gudang}
-                <option value={gudang.id}>{gudang.nama}</option>
-              {/each}
-            </select>
+            {#if tercakupGudang}
+              <input type="text" value={gudangEntri[0]?.nama ?? 'Belum ditempatkan'} disabled
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600" />
+            {:else}
+              <select bind:value={transferAsal} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Gudang asal...</option>
+                {#each gudangList as gudang}
+                  <option value={gudang.id}>{gudang.nama}</option>
+                {/each}
+              </select>
+            {/if}
           </label>
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Ke
 </span>
             <select bind:value={transferTujuan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
               <option value="">Gudang tujuan...</option>
-              {#each gudangList as gudang}
+              {#each gudangTujuan as gudang}
                 <option value={gudang.id}>{gudang.nama}</option>
               {/each}
             </select>
