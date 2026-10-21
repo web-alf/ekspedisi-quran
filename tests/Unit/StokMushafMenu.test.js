@@ -71,15 +71,31 @@ describe('Navigasi halaman Stok Mushaf', () => {
      * Temuan lapangan: A5/A6 ada varian ber-terjemahan dan tanpa. Varian WAJIB dipilih,
      * jadi tombol tidak boleh aktif sebelum pilihannya ada (server juga menolak 422).
      */
-    it('mewajibkan pilihan terjemahan pada kedua form', () => {
+    it('mewajibkan pilihan varian pada kedua form', () => {
+        // Form entri memakai tombol varian; form transfer tetap select.
+        expect(halamanStok).toContain("'Dengan terjemahan'], [0, 'Tanpa terjemahan'");
         expect(halamanStok).toContain('Pilih varian...');
-        expect(halamanStok).toContain('Ada terjemahan');
-        expect(halamanStok).toContain('Tanpa terjemahan');
-        expect(halamanStok).toContain("disabled={!entriGudang || !entriJenis || entriTerjemahan === '' || sibuk}");
+        // Tombol simpan entri dijaga oleh bolehSimpan() (yang menolak varian kosong).
+        expect(halamanStok).toContain('disabled={!bolehRekam}');
+        // Kewajiban varian ditegakkan oleh bolehSimpan() di stokPratinjau.js
+        // (diuji terpisah di tests/Unit/StokPratinjau.test.js).
+        expect(halamanStok).toContain('terjemahan: entriTerjemahan');
         expect(halamanStok).toContain("disabled={!transferAsal || !transferTujuan || !transferJenis || transferTerjemahan === ''");
         // Varian ikut terkirim ke server pada kedua form.
         expect(halamanStok).toContain('terjemahan: Number(entriTerjemahan)');
         expect(halamanStok).toContain('terjemahan: Number(transferTerjemahan)');
+    });
+
+    it('menampilkan pratinjau stok sekarang ke sesudah sebelum disimpan', () => {
+        expect(halamanStok).toContain('stokSaatIni(stokList');
+        expect(halamanStok).toContain('hitungHasil(entriTipe, stokSekarang');
+        expect(halamanStok).toContain('→ menjadi');
+        expect(halamanStok).toContain('tidak cukup');
+    });
+
+    it('tidak menampilkan kolom gudang untuk SPV (gudang mengikuti akun)', () => {
+        expect(halamanStok).toContain('{#if !tercakupGudang}');
+        expect(halamanStok).toContain('gudang mengikuti akun Anda');
     });
 
     it('menjelaskan padanan dus dari eks yang diketik', () => {

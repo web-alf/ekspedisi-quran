@@ -2,6 +2,7 @@
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
   import { gudangUntukEntri, gudangTujuanTransfer, gudangAwal } from '../../utils/pilihanGudang.js';
+  import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian } from '../../utils/stokPratinjau.js';
 
   // Fase 3: stok mushaf tanpa muwakif per gudang + dokumen transfer antar gudang.
   // Temuan lapangan 19/10/2026: A5/A6 punya varian ber-terjemahan dan tanpa, jadi
@@ -27,6 +28,19 @@
   let entriTerjemahan = '';
   let entriJumlah = 1;
   let entriCatatan = '';
+  let hasilTerakhir = ''; // ringkasan sesudah simpan: "A5 tanpa terjemahan: 12 → 22 eks"
+
+  // Pratinjau akibat pergerakan SEBELUM disimpan — satu-satunya cara mencegah pencatatan
+  // pengurangan melebihi stok, yang sekarang baru ketahuan setelah server menolak (422).
+  $: stokSekarang = stokSaatIni(stokList, {
+      jenisId: entriJenis,
+      terjemahan: entriTerjemahan,
+      gudangId: tercakupGudang ? gudangSaya : entriGudang,
+  });
+  $: hasilEntri = hitungHasil(entriTipe, stokSekarang, Number(entriJumlah) || 0);
+  $: alasanTolak = bolehSimpan({ tipe: entriTipe, gudang: entriGudang, jenis: entriJenis, terjemahan: entriTerjemahan, jumlah: entriJumlah }).alasan;
+  $: stokKurang = entriTipe === 'keluar' && !hasilEntri.cukup;
+  $: bolehRekam = !alasanTolak && !stokKurang && !sibuk;
 
   // SPV tercakup gudang: kolom gudang terkunci ke gudangnya dan opsi gudang lain tidak
   // pernah ditawarkan — server juga menolak (403), tapi menawarkan opsi yang pasti ditolak
@@ -154,7 +168,7 @@
               <tr class="border-b border-gray-200 text-left text-gray-600">
                 <th class="py-2 pr-4">Gudang</th>
                 <th class="py-2 pr-4">Jenis</th>
-                <th class="py-2 pr-4">Terjemahan</th>
+                <th class="py-2 pr-4">Varian</th>
                 <th class="py-2 pr-4 text-right">Eks</th>
                 <th class="py-2 text-right">Jumlah dus</th>
               </tr>
@@ -181,97 +195,149 @@
       <section class="bg-white rounded-lg border border-gray-200 p-5">
         <h2 class="font-semibold text-gray-900 mb-1">Catat Pergerakan</h2>
         {#if tercakupGudang}
-          <p class="text-xs text-gray-500 mb-3">Gudang terkunci ke gudang Anda — stok gudang lain tidak bisa dicatat dari akun ini.</p>
+          <p class="text-xs text-gray-500 mb-4">
+            Mencatat pergerakan stok <span class="font-medium text-gray-700">{gudangEntri[0]?.nama ?? 'gudang Anda'}</span> — gudang mengikuti akun Anda.
+          </p>
         {:else}
-          <p class="text-xs text-gray-500 mb-3">Pilih gudang tempat pergerakan ini terjadi.</p>
+          <p class="text-xs text-gray-500 mb-4">Pilih gudang tempat pergerakan ini terjadi.</p>
         {/if}
-        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 items-end">
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Tipe</span>
-            <select bind:value={entriTipe} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="masuk">Masuk</option>
-              <option value="keluar">Keluar (muwakif dilampirkan)
-              </option>
+
+        <!-- Baris 1: apa yang terjadi -->
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+          <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Tipe pergerakan">
+            <button type="button" on:click={() => (entriTipe = 'masuk')}
+              class="px-3 py-1.5 rounded-md text-sm font-medium {entriTipe === 'masuk' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}"
+              aria-pressed={entriTipe === 'masuk'}>Masuk</button>
+            <button type="button" on:click={() => (entriTipe = 'keluar')}
+              class="px-3 py-1.5 rounded-md text-sm font-medium {entriTipe === 'keluar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}"
+              aria-pressed={entriTipe === 'keluar'}>Keluar</button>
+          </div>
+
+          {#if !tercakupGudang}
+            <select bind:value={entriGudang} aria-label="Gudang"
+              class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">Pilih gudang...</option>
+              {#each gudangList as gudang}
+                <option value={gudang.id}>{gudang.nama}</option>
+              {/each}
             </select>
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Gudang
-</span>
-            {#if tercakupGudang}
-              <input type="text" value={gudangEntri[0]?.nama ?? 'Belum ditempatkan'} disabled
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600" />
-            {:else}
-              <select bind:value={entriGudang} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                <option value="">Pilih gudang...</option>
-                {#each gudangList as gudang}
-                  <option value={gudang.id}>{gudang.nama}</option>
-                {/each}
-              </select>
-            {/if}
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Jenis
-</span>
-            <select bind:value={entriJenis} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          {/if}
+
+          <p class="text-xs text-gray-500">
+            {entriTipe === 'masuk'
+              ? 'Stok bertambah dari barang yang masuk.'
+              : 'Stok berkurang dan dicatat sebagai penyaluran ke muwakif.'}
+          </p>
+        </div>
+
+        <!-- Baris 2: barang dan jumlah -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <label class="block">
+            <span class="block text-sm text-gray-700 mb-1">Jenis <span class="text-[#eb3434]">*</span></span>
+            <select bind:value={entriJenis} class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
               <option value="">Pilih jenis...</option>
               {#each jenisList as jenis}
                 <option value={jenis.id}>{jenis.kode_jenis}</option>
               {/each}
             </select>
           </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Terjemahan <span class="text-gray-500">*</span>
-</span>
-            <select bind:value={entriTerjemahan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Pilih varian...</option>
-              <option value={1}>Ada terjemahan</option>
-              <option value={0}>Tanpa terjemahan</option>
-            </select>
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Jumlah eks
-</span>
-            <input type="number" min="1" max="500" bind:value={entriJumlah} class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Catatan
-</span>
-            <input type="text" bind:value={entriCatatan} placeholder="mis. terima barang produksi" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-          </label>
+
+          <div>
+            <span class="block text-sm text-gray-700 mb-1">Varian <span class="text-[#eb3434]">*</span></span>
+            <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Varian">
+              {#each [[1, 'Dengan terjemahan'], [0, 'Tanpa terjemahan']] as [nilai, teks]}
+                <button type="button" on:click={() => (entriTerjemahan = String(nilai))}
+                  class="px-3 py-1.5 rounded-md text-sm font-medium {String(entriTerjemahan) === String(nilai) ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}"
+                  aria-pressed={String(entriTerjemahan) === String(nilai)}>{teks}</button>
+              {/each}
+            </div>
+          </div>
+
+          <div>
+            <label for="entri-jumlah" class="block text-sm text-gray-700 mb-1">Jumlah <span class="text-[#eb3434]">*</span></label>
+            <div class="inline-flex items-stretch border border-gray-300 rounded-lg overflow-hidden">
+              <button type="button" on:click={() => (entriJumlah = Math.max(1, (Number(entriJumlah) || 0) - 1))}
+                class="w-9 bg-gray-50 text-gray-700 hover:bg-gray-100" aria-label="Kurangi jumlah">−</button>
+              <input id="entri-jumlah" type="number" inputmode="numeric" min="1" max="500" bind:value={entriJumlah}
+                class="w-20 text-center border-0 text-sm focus:outline-none" />
+              <button type="button" on:click={() => (entriJumlah = (Number(entriJumlah) || 0) + 1)}
+                class="w-9 bg-gray-50 text-gray-700 hover:bg-gray-100" aria-label="Tambah jumlah">+</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              1 dus {namaJenis(entriJenis) || 'jenis ini'} = {kapasitasJenis(entriJenis) || 0} eks{#if entriJenis && entriJumlah} · {Number(entriJumlah) || 0} eks = {padananDus(entriJumlah, entriJenis)}{/if}
+            </p>
+          </div>
         </div>
-        <p class="text-xs text-gray-500 mt-2">
-          1 dus {namaJenis(entriJenis) || 'jenis ini'} = {kapasitasJenis(entriJenis) || 0} eks{#if entriJenis && entriJumlah} · {Number(entriJumlah) || 0} eks = {padananDus(entriJumlah, entriJenis)}{/if}
-          {#if entriTipe === 'keluar'} · pengurangan hanya berlaku untuk varian yang dipilih{/if}
-        </p>
+
+        <label for="entri-catatan" class="block mt-4">
+          <span class="block text-sm text-gray-700 mb-1">Catatan <span class="text-gray-400">(opsional)</span></span>
+          <input id="entri-catatan" type="text" bind:value={entriCatatan} placeholder="mis. terima barang produksi 21/10"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+        </label>
+
+        <!-- Pratinjau akibat: stok sekarang -> sesudah -->
+        <div class="mt-4 rounded-lg px-4 py-3 text-sm {stokKurang ? 'bg-red-50 border border-dashed border-red-200' : 'bg-gray-50 border border-dashed border-gray-300'}" aria-live="polite">
+          {#if entriTerjemahan === '' || !entriJenis}
+            <span class="text-gray-500">Pilih jenis dan varian untuk melihat stok sekarang.</span>
+          {:else if stokKurang}
+            <span class="text-red-700">
+              Stok {namaJenis(entriJenis)} {labelVarian(entriTerjemahan).toLowerCase()} hanya <b>{stokSekarang} eks</b> — pengurangan {Number(entriJumlah) || 0} eks tidak cukup.
+            </span>
+          {:else}
+            Stok {namaJenis(entriJenis)} {labelVarian(entriTerjemahan).toLowerCase()} saat ini <b>{stokSekarang} eks</b> → menjadi <b>{hasilEntri.akhir} eks</b>
+          {/if}
+        </div>
+
+        {#if hasilTerakhir}
+          <p class="mt-3 text-xs text-green-700" aria-live="polite">✓ {hasilTerakhir}</p>
+        {/if}
+        {#if alasanTolak && (entriJenis || entriTerjemahan !== '')}
+          <p class="mt-2 text-xs text-gray-500">{alasanTolak}</p>
+        {/if}
+
         <button
           type="button"
-          disabled={!entriGudang || !entriJenis || entriTerjemahan === '' || sibuk}
-          on:click={() => kirimJson('/admin/warehouse/stok/entri', { gudang_id: entriGudang, jenis_quran_id: entriJenis, terjemahan: Number(entriTerjemahan), tipe: entriTipe, jumlah_eks: Number(entriJumlah) || 0, catatan: entriCatatan }, () => { router.reload({ only: ['stokList', 'pergerakanList'] }); })}
-          class="mt-3 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50"
-        >{sibuk ? 'Merekam...' : 'Rekam Pergerakan'}</button>
+          disabled={!bolehRekam}
+          on:click={() => {
+            const ringkas = `${namaJenis(entriJenis)} ${labelVarian(entriTerjemahan).toLowerCase()}: ${stokSekarang} → ${hasilEntri.akhir} eks`;
+            kirimJson('/admin/warehouse/stok/entri', { gudang_id: entriGudang, jenis_quran_id: entriJenis, terjemahan: Number(entriTerjemahan), tipe: entriTipe, jumlah_eks: Number(entriJumlah) || 0, catatan: entriCatatan }, () => {
+              hasilTerakhir = ringkas;
+              // Jenis & varian dipertahankan untuk entri berikutnya; hanya jumlah yang direset.
+              entriJumlah = 1;
+              entriCatatan = '';
+              router.reload({ only: ['stokList', 'pergerakanList'] });
+            });
+          }}
+          class="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {#if sibuk}
+            Merekam...
+          {:else if Number(entriJumlah) > 0}
+            Catat {Number(entriJumlah)} eks {entriTipe}
+          {:else}
+            Catat pergerakan
+          {/if}
+        </button>
       </section>
     {/if}
 
     {#if bolehTransfer}
       <section class="bg-white rounded-lg border border-gray-200 p-5">
         <h2 class="font-semibold text-gray-900 mb-1">Dokumen Transfer Antar Gudang</h2>
-        <p class="text-xs text-gray-500 mb-3">Dibuat dulu; stok berpindah saat SPV gudang TUJUAN menerima (barang fisik sudah tiba). Varian harus sama dari asal ke tujuan.</p>
-        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 items-end">
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Dari
-</span>
-            {#if tercakupGudang}
-              <input type="text" value={gudangEntri[0]?.nama ?? 'Belum ditempatkan'} disabled
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600" />
-            {:else}
+        <p class="text-xs text-gray-500 mb-3">
+          {#if tercakupGudang}Dari <span class="font-medium text-gray-700">{gudangEntri[0]?.nama ?? 'gudang Anda'}</span>. {/if}Dibuat dulu; stok berpindah saat SPV gudang TUJUAN menerima (barang fisik sudah tiba). Varian harus sama dari asal ke tujuan.</p>
+        <div class="grid grid-cols-2 gap-3 items-end {tercakupGudang ? 'sm:grid-cols-5' : 'sm:grid-cols-6'}">
+          {#if !tercakupGudang}
+            <label class="block text-sm">
+              <span class="block text-gray-700 mb-1">Dari</span>
               <select bind:value={transferAsal} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="">Gudang asal...</option>
                 {#each gudangList as gudang}
                   <option value={gudang.id}>{gudang.nama}</option>
                 {/each}
               </select>
-            {/if}
-          </label>
+            </label>
+          {/if}
           <label class="block text-sm">
             <span class="block text-gray-700 mb-1">Ke
 </span>
@@ -293,7 +359,7 @@
             </select>
           </label>
           <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Terjemahan <span class="text-gray-500">*</span>
+            <span class="block text-gray-700 mb-1">Varian <span class="text-gray-500">*</span>
 </span>
             <select bind:value={transferTerjemahan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
               <option value="">Pilih varian...</option>
@@ -319,7 +385,7 @@
           type="button"
           disabled={!transferAsal || !transferTujuan || !transferJenis || transferTerjemahan === '' || transferAsal === transferTujuan || sibuk}
           on:click={() => kirimJson('/admin/warehouse/stok/transfer', { gudang_asal_id: transferAsal, gudang_tujuan_id: transferTujuan, jenis_quran_id: transferJenis, terjemahan: Number(transferTerjemahan), jumlah_eks: Number(transferJumlah) || 0, catatan: transferCatatan }, () => { router.reload({ only: ['transferList'] }); })}
-          class="mt-3 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50"
+          class="mt-3 w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >Buat Dokumen Transfer</button>
       </section>
     {/if}
@@ -336,7 +402,7 @@
                 <th class="py-2 pr-4">Kode</th>
                 <th class="py-2 pr-4">Dari → Ke</th>
                 <th class="py-2 pr-4">Jenis</th>
-                <th class="py-2 pr-4">Terjemahan</th>
+                <th class="py-2 pr-4">Varian</th>
                 <th class="py-2 pr-4 text-right">Eks</th>
                 <th class="py-2 pr-4">Status</th>
                 <th class="py-2">Aksi</th>

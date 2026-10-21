@@ -283,7 +283,7 @@
     
       {#if ringkasanGudang}
         <!-- Ringkasan gudang untuk SPV: semua angka sudah ter-coup ke gudang akun. -->
-        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
           <div class="flex items-center gap-3 mb-4">
             <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-none">
               <HeroIcon name="cube" class="w-4 h-4" />
@@ -333,7 +333,7 @@
           {/if}
         </section>
 
-        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
           <div class="flex items-center gap-3 mb-4">
             <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
               <HeroIcon name="exclamation-circle" class="w-4 h-4" />
@@ -347,7 +347,9 @@
           {#if ringkasanGudang.perlu_tindakan.transfer_menunggu.length > 0}
             {#each ringkasanGudang.perlu_tindakan.transfer_menunggu as t (t.kode)}
               <div class="border border-gray-200 rounded-lg p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-xl flex-none">📥</div>
+                <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
+                  <HeroIcon name="arrow-down-tray" class="w-6 h-6" />
+                </div>
                 <div class="flex-1 min-w-0">
                   <p class="font-semibold text-gray-900">Dokumen {t.kode} menunggu diterima</p>
                   <p class="text-sm text-gray-600 mt-0.5">Dari {t.asal} · {t.jumlah_resi} resi ({t.jumlah_eks} mushaf)</p>
@@ -364,7 +366,7 @@
           {/if}
 
           <div class="rounded-lg border border-dashed border-gray-300 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <span class="text-lg flex-none">🚚</span>
+            <span class="flex-none text-indigo-600"><HeroIcon name="truck" class="w-5 h-5" /></span>
             <p class="text-sm text-gray-600 flex-1">
               <b class="text-gray-900">{ringkasanGudang.perlu_tindakan.kerdus_menunggu_muat} kerdus</b> penuh menunggu dimuat ke kurir.
             </p>
@@ -372,7 +374,7 @@
           </div>
         </section>
 
-        <section class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
           <div class="flex items-center gap-3 mb-4">
             <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
               <HeroIcon name="archive-box" class="w-4 h-4" />
@@ -425,7 +427,7 @@
       {/if}
 
     <!-- Today's Task Section - Responsive -->
-    <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex items-center justify-center sm:justify-start mb-4 sm:mb-6">
         <div class="flex items-center space-x-2 sm:space-x-3">
           <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
@@ -528,7 +530,7 @@
     </div>
 
     <!-- Kerdus Terbaru - Responsive -->
-    <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div class="flex items-center space-x-2 sm:space-x-3">
           <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
@@ -601,7 +603,7 @@
     <!-- Performance Stats Grid - Responsive -->
     <div class="performance-stats grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       <!-- This Week Performance -->
-      <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
             <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
@@ -635,7 +637,7 @@
       </div>
       
       <!-- This Month Performance -->
-      <div class="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
             <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">

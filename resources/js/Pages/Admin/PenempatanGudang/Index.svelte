@@ -63,23 +63,23 @@
         class="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
     </div>
 
-    <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <section class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       {#if tampil.length === 0}
         <p class="px-4 py-10 text-center text-sm text-gray-500">Tidak ada akun pada pilihan ini.</p>
       {:else}
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-200 text-left text-gray-600 bg-gray-50">
-                <th class="py-2 px-4 font-medium">Nama</th>
-                <th class="py-2 px-4 font-medium hidden sm:table-cell">Peran</th>
-                <th class="py-2 px-3 sm:px-4 font-medium sm:w-56">Gudang</th>
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Peran</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:w-56">Gudang</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody class="bg-white divide-y divide-gray-200">
               {#each tampil as orang (orang.id)}
-                <tr class="border-b border-gray-100 last:border-0" data-akun={orang.id}>
-                  <td class="py-2 px-3 sm:px-4">
+                <tr class="hover:bg-gray-50" data-akun={orang.id}>
+                  <td class="px-6 py-4">
                     <div class="font-medium text-gray-900">{orang.nama}</div>
                     <!-- Di ponsel peran ditaruh di bawah nama supaya kolom gudang tidak terjepit. -->
                     <div class="text-xs text-gray-500 sm:hidden">{orang.peran}</div>
@@ -87,13 +87,13 @@
                       {orang.email}{orang.aktif ? '' : ' · nonaktif'}
                     </div>
                   </td>
-                  <td class="py-2 px-4 text-gray-700 whitespace-nowrap hidden sm:table-cell">
+                  <td class="px-6 py-4 whitespace-nowrap hidden sm:table-cell text-sm text-gray-700">
                     <span class="inline-flex items-center gap-1.5">
                       <span class="w-1.5 h-1.5 rounded-full {['bg-gray-900', 'bg-gray-600', 'bg-gray-300'][orang.urutan_peran] || 'bg-gray-300'}"></span>
                       {orang.peran}
                     </span>
                   </td>
-                  <td class="py-2 px-3 sm:px-4">
+                  <td class="px-6 py-4">
                     <select
                       value={orang.gudang_id ?? ''}
                       on:change={(e) => pindahkan(orang, e.currentTarget.value)}

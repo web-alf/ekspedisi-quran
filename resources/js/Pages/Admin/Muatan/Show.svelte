@@ -196,7 +196,7 @@
           Kembali ke daftar muatan
         </a>
 
-        <div class="bg-white rounded-xl shadow p-4 sm:p-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
             <div>
               <div class="flex items-center gap-3 flex-wrap">

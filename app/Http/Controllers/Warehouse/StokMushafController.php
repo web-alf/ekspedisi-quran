@@ -42,6 +42,10 @@ class StokMushafController extends Controller
                     'gudang' => $stok->gudang->nama,
                     'gudang_id' => $stok->gudang_id,
                     'jenis' => $stok->jenisQuran->nama_jenis,
+                    // id + nilai varian ikut dikirim: formulir "Catat Pergerakan" menghitung
+                    // stok sekarang untuk pasangan jenis × varian sebelum menyimpan.
+                    'jenis_id' => $stok->jenis_quran_id,
+                    'varian' => (bool) $stok->terjemahan,
                     'terjemahan' => $this->labelVarian((bool) $stok->terjemahan),
                     'eks' => $stok->jumlah_eks,
                     'dus' => $stok->jumlahDus(),
