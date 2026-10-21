@@ -12,6 +12,7 @@ use App\Models\Pengiriman;
 use App\Models\TransferMushaf;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
+use App\Support\CakupanGudang;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -455,6 +456,13 @@ class PackingAssignmentService
             throw new \Exception('Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor.');
         }
 
+        // Penjagaan silang gudang (21/10/2026): resi yang sudah bertanda gudang lain tidak
+        // boleh dikemas dari akun gudang ini — kalau lolos, lokasi mushafnya ikut berpindah
+        // tanpa dokumen perpindahan.
+        if (! CakupanGudang::bolehSentuh($user, $pengiriman->gudang_id)) {
+            throw new \Exception(CakupanGudang::pesanTolak());
+        }
+
         // Check if pengiriman is available for packing
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
         if ($pengiriman->status_id !== $packingStatusId) {
@@ -723,11 +731,14 @@ class PackingAssignmentService
     /**
      * Get available pengiriman count for free-pick
      */
-    public function getAvailablePengirimanCount()
+    public function getAvailablePengirimanCount(?User $user = null)
     {
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
 
-        return Pengiriman::where('status_id', $packingStatusId)
+        // CAKUPAN GUDANG (21/10/2026): SPV tidak boleh melihat — apalagi mengemas — resi
+        // yang sudah bertanda gudang lain; resi yang belum berlabel tetap ditawarkan karena
+        // pemindaian itulah cara memberinya label.
+        return CakupanGudang::terapkan(Pengiriman::where('status_id', $packingStatusId), $user)
             ->whereNotNull('qr_code_path')
             ->whereDoesntHave('dailyPackingTaskItem', function ($q) {
                 $q->whereHas('dailyPackingTask', function ($q2) {
@@ -740,11 +751,11 @@ class PackingAssignmentService
     /**
      * Get available pengiriman for free-pick (paginated)
      */
-    public function getAvailablePengiriman($limit = 50)
+    public function getAvailablePengiriman($limit = 50, ?User $user = null)
     {
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
 
-        return Pengiriman::where('status_id', $packingStatusId)
+        return CakupanGudang::terapkan(Pengiriman::where('status_id', $packingStatusId), $user)
             ->whereNotNull('qr_code_path')
             ->whereDoesntHave('dailyPackingTaskItem', function ($q) {
                 $q->whereHas('dailyPackingTask', function ($q2) {

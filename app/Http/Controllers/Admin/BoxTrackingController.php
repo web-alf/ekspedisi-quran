@@ -8,6 +8,7 @@ use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\User;
 use App\Support\BoxUnits;
+use App\Support\CakupanGudang;
 use App\Support\PerPage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -35,6 +36,11 @@ class BoxTrackingController extends Controller
                     ]);
             },
         ]);
+
+        // CAKUPAN GUDANG (21/10/2026): SPV hanya melihat kerdus gudangnya sendiri + kerdus
+        // yang belum berlabel. Kerdus adalah data fisik gudang; melihat kerdus gudang lain
+        // tidak ada gunanya kecuali saat menerima kiriman (lewat Perpindahan Mushaf).
+        CakupanGudang::terapkan($query, $request->user());
 
         // Filter by search (kode kerdus, user name, jenis quran)
         if ($request->search) {
@@ -161,6 +167,7 @@ class BoxTrackingController extends Controller
         return Inertia::render('Admin/BoxTracking/Index', [
             'perPage' => PerPage::resolve($request),
             'perPageOptions' => PerPage::OPTIONS,
+            'cakupanGudang' => CakupanGudang::berlaku($request->user()) ? $request->user()->gudang?->nama : null,
             'boxes' => $boxesData,
             'filters' => $request->only(['search', 'status', 'jenis_quran_id', 'user_id', 'start_date', 'end_date', 'selesai_packing']),
             'jenisQuranList' => $jenisQuranList,

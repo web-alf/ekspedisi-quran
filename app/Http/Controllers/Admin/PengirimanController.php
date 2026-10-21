@@ -15,6 +15,7 @@ use App\Models\StatusPengiriman;
 use App\Models\TrackingHistory;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
+use App\Support\CakupanGudang;
 use App\Support\PengirimanStageVisibility;
 use App\Support\PerPage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -109,6 +110,11 @@ class PengirimanController extends Controller
                 ? $query->whereNull('gudang_id')
                 : $query->where('gudang_id', $request->gudang);
         }
+
+        // CAKUPAN GUDANG (21/10/2026): SPV hanya melihat resi gudangnya sendiri + yang
+        // belum berlabel. Sebelum ini kedua SPV melihat daftar yang sama, dan SPV Semarang
+        // bisa mengubah status resi yang tercatat di Boyolali.
+        CakupanGudang::terapkan($query, $request->user());
 
         // Filter by alamat status
         if ($request->alamat_status) {
@@ -265,6 +271,7 @@ class PengirimanController extends Controller
             'statusList' => PengirimanStageVisibility::visibleProgressStatuses($request->user()),
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
+            'cakupanGudang' => CakupanGudang::berlaku($request->user()) ? $request->user()->gudang?->nama : null,
             'stats' => $this->getOptimizedPengirimanStats($request->user()),
             'stageVisibility' => PengirimanStageVisibility::frontendContext($request->user()),
         ]);
@@ -1201,6 +1208,12 @@ class PengirimanController extends Controller
                 ], 404);
             }
 
+            // Penjagaan silang gudang (21/10/2026): SPV tidak boleh memindahkan status resi
+            // gudang lain lewat pindai QR.
+            if (! CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id)) {
+                return response()->json(['success' => false, 'message' => CakupanGudang::pesanTolak()], 403);
+            }
+
             $oldStatus = $pengiriman->status_id;
 
             // Wewenang atas TUJUAN statusnya, bukan hanya atas aksinya.
@@ -1441,6 +1454,12 @@ class PengirimanController extends Controller
                     'success' => false,
                     'message' => 'Pengiriman dengan resi '.$noResi.' tidak ditemukan',
                 ], 404);
+            }
+
+            // Penjagaan silang gudang (21/10/2026): SPV tidak boleh memindahkan status resi
+            // gudang lain lewat pindai QR.
+            if (! CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id)) {
+                return response()->json(['success' => false, 'message' => CakupanGudang::pesanTolak()], 403);
             }
 
             $oldStatus = $pengiriman->status_id;

@@ -10,6 +10,8 @@
   export let perPage = 20;
   export let perPageOptions = [10, 20, 50, 100, 200];
   export let boxes = {};
+  // Nama gudang bila akun dibatasi ke satu gudang (SPV); null untuk PJ/super-admin.
+  export let cakupanGudang = null;
   export let filters = {};
   export let jenisQuranList = [];
   export let warehouseUsers = [];
@@ -117,6 +119,12 @@
       <div>
         <h2 class="text-2xl font-bold text-gray-900 mb-2">Tracking Kerdus</h2>
         <p class="text-gray-600">Monitor dan tracking semua kerdus packing</p>
+        {#if cakupanGudang}
+          <p class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-gray-100 text-xs text-gray-700" data-cakupan>
+            <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+            Menampilkan {cakupanGudang} + kerdus yang belum berlabel gudang
+          </p>
+        {/if}
       </div>
     </div>
   </div>

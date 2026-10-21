@@ -121,8 +121,8 @@ class PackingController extends Controller
             ->get();
 
         // Get available pengiriman for free-pick (show sample of what's available)
-        $availablePengiriman = $this->assignmentService->getAvailablePengiriman(20);
-        $availableCount = $this->assignmentService->getAvailablePengirimanCount();
+        $availablePengiriman = $this->assignmentService->getAvailablePengiriman(20, $user);
+        $availableCount = $this->assignmentService->getAvailablePengirimanCount($user);
 
         // OPTIMIZED: Get packed items in current box with constrained eager loading
         $packedItems = $currentBox ? $currentBox->packingItems()

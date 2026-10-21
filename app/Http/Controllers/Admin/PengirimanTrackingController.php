@@ -7,6 +7,7 @@ use App\Models\Pengiriman;
 use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Models\TrackingHistory;
+use App\Support\CakupanGudang;
 use App\Support\PengirimanStageVisibility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +70,13 @@ class PengirimanTrackingController extends Controller
      */
     public function updateStatusWithDocs(Request $request, Pengiriman $pengiriman)
     {
+        // Penjagaan silang gudang (21/10/2026): SPV tidak boleh mengubah status resi yang
+        // sudah tercatat di gudang lain — menyaring daftar saja tidak cukup, karena endpoint
+        // ini bisa dipanggil langsung dengan id resi mana pun.
+        if (! CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id)) {
+            abort(403, CakupanGudang::pesanTolak());
+        }
+
         $request->validate([
             'status_id' => ['required', 'exists:status_pengiriman,id'],
             'catatan' => ['nullable', 'string', 'max:1000'],
@@ -230,6 +238,12 @@ class PengirimanTrackingController extends Controller
                 ->get();
 
             foreach ($pengirimanList as $pengiriman) {
+                if (! CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id)) {
+                    $failed++;
+
+                    continue;
+                }
+
                 // Batas per-baris: staff gudang tidak boleh menarik kembali resi
                 // yang sudah lewat tahap awal, walau tahap tujuannya sendiri sah.
                 if (! PengirimanStageVisibility::bolehPindahkan($request->user(), $pengiriman, $statusTujuan)) {
