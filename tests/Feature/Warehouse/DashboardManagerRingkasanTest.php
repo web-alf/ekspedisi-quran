@@ -101,3 +101,33 @@ it('staf freelancer tidak menerima ringkasan manager', function () {
 
     expect($props['ringkasanManager'])->toBeNull();
 });
+
+it('ringkasan manager ikut disegarkan lewat dashboard-status saat ?ringkasan=1', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+    $stafSmg = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
+    $stafBtl = drAkun([RoleEnum::WAREHOUSE->value], $this->btl);
+
+    DailyPackingTask::create(['user_id' => $stafSmg->id, 'gudang_id' => $this->smg->id, 'tanggal_tugas' => today(), 'total_target' => 40, 'total_selesai' => 20, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()->subHours(2)]);
+    DailyPackingTask::create(['user_id' => $stafBtl->id, 'gudang_id' => $this->btl->id, 'tanggal_tugas' => today(), 'total_target' => 30, 'total_selesai' => 10, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()]);
+
+    $data = $this->actingAs($pj)
+        ->getJson('/admin/warehouse/dashboard-status?ringkasan=1')
+        ->assertOk()->json('data');
+
+    expect($data['ringkasanManager'])->not->toBeNull()
+        ->and($data['ringkasanManager']['gabungan']['target'])->toEqual(70)
+        ->and(collect($data['ringkasanManager']['per_gudang'])->pluck('nama'))->toHaveCount(2)
+        // PJ bukan SPV — ringkasan satu gudang tetap kosong.
+        ->and($data['ringkasanGudang'])->toBeNull();
+});
+
+it('poling dashboard-status tanpa ?ringkasan tidak membawa ringkasan', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+
+    // Tanpa querstring: ringkasan penuh (belasan query per gudang) tidak boleh
+    // ikut di tiap tick 15 detik.
+    $data = $this->actingAs($pj)->getJson('/admin/warehouse/dashboard-status')->assertOk()->json('data');
+
+    expect(array_key_exists('ringkasanManager', $data))->toBeFalse()
+        ->and(array_key_exists('ringkasanGudang', $data))->toBeFalse();
+});

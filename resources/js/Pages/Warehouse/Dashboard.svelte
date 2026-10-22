@@ -60,9 +60,52 @@
   $: persenPacking = ringkasanGudang?.packing?.target
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
     : 0;
+
+  // ===== Turunan ringkasan dua gudang (Manager / PJ, 22/10/2026) =====
+  // Nilai untuk kartu "Ringkasan Packing Hari Ini" (gabungan) dan "Performa
+  // Gudang" (per gudang). Gudang diurut dari persen tertinggi supaya orang
+  // gudang langsung melihat yang terdepan, bukan urutan dari database.
+  const DONUT_KELILING = 2 * Math.PI * 27; // keliling donut SVG r=27
+
+  $: gabunganTarget = ringkasanManager?.gabungan?.target ?? 0;
+  $: gabunganSelesai = ringkasanManager?.gabungan?.selesai ?? 0;
+  $: pctGabungan = gabunganTarget > 0 ? Math.round((gabunganSelesai / gabunganTarget) * 100) : 0;
+  $: sisaGabungan = Math.max(0, gabunganTarget - gabunganSelesai);
+  $: perGudangUrut = ringkasanManager
+    ? [...ringkasanManager.per_gudang].sort(
+        (a, b) => (b.persen - a.persen) || (b.selesai - a.selesai) || a.nama.localeCompare(b.nama)
+      )
+    : [];
+  // Bar bertumpuk kartu gabungan: kontribusi tiap gudang terhadap target
+  // gabungan, di-clamp supaya hasil di atas target tidak meluber.
+  $: segGabungan = (() => {
+    if (gabunganTarget <= 0) return [0, 0];
+    const segA = Math.max(0, Math.min(100, ((perGudangUrut[0]?.selesai ?? 0) / gabunganTarget) * 100));
+    const segB = Math.max(0, Math.min(100 - segA, ((perGudangUrut[1]?.selesai ?? 0) / gabunganTarget) * 100));
+    return [segA, segB];
+  })();
+  // Nama staf yang belum mulai, diberi kode gudangnya: "Andi · SMG".
+  $: gBelumNama = perGudangUrut.flatMap((g) => (g.belum_nama || []).map((n) => n + ' · ' + g.kode));
+
+  function warnaGudang(i) {
+    return i === 0 ? '#5e6ad2' : '#a5b0e8';
+  }
+
+  function donutOffset(persen) {
+    const p = Math.max(0, Math.min(100, persen || 0));
+    return DONUT_KELILING * (1 - p / 100);
+  }
+
+  // "Terdepan hari ini" hanya bila persennya beda dan memang di atas 0.
+  function tampilTerdepan(i) {
+    if (i !== 0 || perGudangUrut.length < 2) return false;
+    return perGudangUrut[0].persen > 0 && perGudangUrut[0].persen !== perGudangUrut[1].persen;
+  }
   
   // State
   let showNotifications = false;
+  // Penghitung poling 15 detik: tiap tick ke-4 ikut meminta ?ringkasan=1.
+  let hitungRefreshRingkasan = 0;
   let isStartingTask = false;
   let showSharedBoxCollaboration = false;
   
@@ -152,10 +195,15 @@
   
   async function updateDashboardStatus() {
     if (isRefreshing) return;
-    
+
     isRefreshing = true;
+    hitungRefreshRingkasan += 1;
     try {
-      const response = await fetch('/admin/warehouse/dashboard-status', {
+      // Setiap poling ke-4 (±1 menit) ikut meminta ringkasan (?ringkasan=1)
+      // supaya kartu Ringkasan Packing / Performa Gudang bergerak tanpa
+      // reload halaman, tanpa memikul ringkasan penuh di setiap tick 15 dtk.
+      const mintaRingkasan = hitungRefreshRingkasan % 4 === 0;
+      const response = await fetch('/admin/warehouse/dashboard-status' + (mintaRingkasan ? '?ringkasan=1' : ''), {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -193,6 +241,15 @@
           // tidak boleh membuat tampilan mempertahankan daftar lama.
           if (Array.isArray(data.recentBoxes)) {
             recentBoxes = data.recentBoxes;
+          }
+
+          // Ringkasan SPV/manager ikut disegarkan bila endpoint mengirimnya
+          // (pasangan ?ringkasan=1 di atas) — kartu performa gudang ikut hidup.
+          if (data.ringkasanGudang !== undefined) {
+            ringkasanGudang = data.ringkasanGudang;
+          }
+          if (data.ringkasanManager !== undefined) {
+            ringkasanManager = data.ringkasanManager;
           }
           
           // Update notifications count
@@ -444,83 +501,132 @@
         <!-- ===== RINGKASAN DUA GUDANG (Manager Gudang / PJ) ===== -->
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
           <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-none">
+            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5e6ad2] flex-none">
               <HeroIcon name="chart-bar" class="w-4 h-4" />
             </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Packing Hari Ini — Seluruh Gudang</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Gabungan tugas semua staf di kedua gudang</p>
+            <div class="min-w-0">
+              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Ringkasan Packing Hari Ini</h2>
+              <p class="text-xs sm:text-sm text-gray-500">Gabungan target &amp; hasil {perGudangUrut.map((g) => g.nama).join(' + ')}</p>
+            </div>
+            <div class="ml-auto text-right flex-none">
+              <p class="text-2xl sm:text-3xl font-bold text-[#5e6ad2] leading-none">{pctGabungan}%</p>
+              <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Target hari ini</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanManager.gabungan.target} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <div class="border border-gray-200 rounded-xl p-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Target hari ini</p>
+              <p class="text-2xl font-bold text-gray-900">{gabunganTarget} <span class="text-xs font-medium text-gray-400">mushaf</span></p>
             </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Sudah dikemas</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanManager.gabungan.selesai} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 mt-1">
-                {ringkasanManager.gabungan.target > 0 ? Math.round((ringkasanManager.gabungan.selesai / ringkasanManager.gabungan.target) * 100) : 0}%
+            <div class="border border-gray-200 rounded-xl p-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Sudah dikemas</p>
+              <p class="text-2xl font-bold text-gray-900">{gabunganSelesai} <span class="text-xs font-medium text-gray-400">mushaf</span></p>
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-gray-200 text-[#5e6ad2] mt-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#5e6ad2]"></span>{pctGabungan}%
               </span>
             </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Kerdus tersegel</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanManager.gabungan.kerdus_tersegel} <span class="text-sm font-medium text-gray-400">kerdus</span></p>
+            <div class="border border-gray-200 rounded-xl p-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Kerdus tersegel</p>
+              <p class="text-2xl font-bold text-gray-900">{ringkasanManager.gabungan.kerdus_tersegel} <span class="text-xs font-medium text-gray-400">kerdus</span></p>
             </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Staf belum mulai</p>
-              <p class="text-2xl font-bold {ringkasanManager.gabungan.staf_belum_mulai > 0 ? 'text-amber-600' : 'text-gray-900'}">{ringkasanManager.gabungan.staf_belum_mulai} <span class="text-sm font-medium text-gray-400">staf</span></p>
+            <div class="border border-gray-200 rounded-xl p-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Staf belum mulai</p>
+              <p class="text-2xl font-bold {ringkasanManager.gabungan.staf_belum_mulai > 0 ? 'text-amber-700' : 'text-gray-900'}">{ringkasanManager.gabungan.staf_belum_mulai} <span class="text-xs font-medium text-gray-400">staf</span></p>
+              {#if gBelumNama.length > 0}
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-gray-200 text-amber-700 mt-2 max-w-full overflow-hidden">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-none"></span>
+                  <span class="truncate">{gBelumNama.slice(0, 3).join(', ')}{gBelumNama.length > 3 ? ' +' + (gBelumNama.length - 3) + ' lagi' : ''}</span>
+                </span>
+              {/if}
             </div>
           </div>
 
-          <div class="mb-1 flex justify-between text-xs text-gray-500">
-            <span>Progress kemas gabungan</span>
-            <span><b class="text-gray-900">{ringkasanManager.gabungan.selesai}</b> / {ringkasanManager.gabungan.target} mushaf</span>
+          <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
+            <span>Progress gabungan</span>
+            <span><b class="text-gray-900">{gabunganSelesai}</b> / {gabunganTarget} mushaf · {ringkasanManager.gabungan.staf_bertugas} staf bertugas</span>
           </div>
-          <div class="h-2 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-blue-500 transition-all duration-500"
-              style="width: {(ringkasanManager.gabungan.target > 0 ? (ringkasanManager.gabungan.selesai / ringkasanManager.gabungan.target * 100) : 0)}%"></div>
+          <!-- Setiap segmen = kontribusi satu gudang terhadap target gabungan
+               (segmen pertama = gudang terdepan, warnanya sama dengan kartu
+               Performa Gudang di bawah); lihat legendanya. -->
+          <div class="flex h-2.5 rounded-full bg-gray-200 overflow-hidden">
+            {#if segGabungan[0] > 0}
+              <span class="h-full transition-all duration-500" style="width: {segGabungan[0]}%; background: {warnaGudang(0)};"></span>
+            {/if}
+            {#if segGabungan[1] > 0}
+              <span class="h-full transition-all duration-500" style="width: {segGabungan[1]}%; background: {warnaGudang(1)};"></span>
+            {/if}
+          </div>
+          <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
+            {#each perGudangUrut as g, i (g.id)}
+              <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full flex-none" style="background: {warnaGudang(i)};"></span>{g.nama} · {g.selesai}</span>
+            {/each}
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-300 flex-none"></span>Sisa {sisaGabungan}</span>
           </div>
         </section>
 
-        <!-- Perbandingan gudang -->
+        <!-- Performa gudang: capaian tiap gudang, diurut dari persen tertinggi -->
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
           <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
-              <HeroIcon name="document-chart-bar" class="w-4 h-4" />
+            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5e6ad2] flex-none">
+              <HeroIcon name="chart-pie" class="w-4 h-4" />
             </div>
             <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Perbandingan Gudang</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Angka yang sama, dilihat per gudang</p>
+              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Performa Gudang</h2>
+              <p class="text-xs sm:text-sm text-gray-500">Capaian tiap gudang hari ini, diurut dari yang terdepan</p>
             </div>
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {#each ringkasanManager.per_gudang as g (g.id)}
-              <div class="rounded-lg border border-gray-200 p-4">
-                <div class="flex items-center justify-between mb-3">
-                  <p class="font-semibold text-gray-900">{g.nama}</p>
-                  <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">{g.persen}%</span>
+            {#each perGudangUrut as g, i (g.id)}
+              <div class="border border-gray-200 rounded-xl p-4">
+                <div class="flex items-start justify-between gap-3 mb-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <p class="font-semibold text-gray-900">{g.nama}</p>
+                      <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border border-gray-200 text-gray-500">{g.kode}</span>
+                    </div>
+                    {#if tampilTerdepan(i)}
+                      <span class="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border border-gray-200 text-gray-500">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Terdepan hari ini
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="relative w-16 h-16 flex-none">
+                    <svg viewBox="0 0 64 64" class="w-16 h-16">
+                      <circle cx="32" cy="32" r="27" fill="none" stroke="rgb(229 231 235)" stroke-width="7"></circle>
+                      <circle cx="32" cy="32" r="27" fill="none" stroke={warnaGudang(i)} stroke-width="7" stroke-linecap="round"
+                        stroke-dasharray={DONUT_KELILING} stroke-dashoffset={donutOffset(g.persen)} transform="rotate(-90 32 32)"></circle>
+                    </svg>
+                    <span class="absolute inset-0 flex items-center justify-center text-[15px] font-bold text-gray-900">{g.persen}%</span>
+                  </div>
                 </div>
-                <div class="h-2 rounded-full bg-gray-200 overflow-hidden mb-3">
-                  <div class="h-full rounded-full bg-blue-500" style="width: {g.persen}%"></div>
-                </div>
-                <div class="grid grid-cols-2 gap-y-2 text-sm">
-                  <span class="text-gray-500">Target</span><span class="text-right font-medium text-gray-900">{g.target} mushaf</span>
-                  <span class="text-gray-500">Sudah dikemas</span><span class="text-right font-medium text-gray-900">{g.selesai} mushaf</span>
+
+                <div class="grid grid-cols-2 gap-y-2 text-sm border-t border-gray-100 pt-3">
+                  <span class="text-gray-500">Target</span><span class="text-right font-medium text-gray-900">{g.target}</span>
+                  <span class="text-gray-500">Sudah dikemas</span><span class="text-right font-medium text-gray-900">{g.selesai}</span>
                   <span class="text-gray-500">Kerdus tersegel</span><span class="text-right font-medium text-gray-900">{g.kerdus_tersegel} kerdus</span>
-                  <span class="text-gray-500">Staf bertugas</span><span class="text-right font-medium text-gray-900">{g.staf_total}</span>
+                  <span class="text-gray-500">Staf bertugas</span><span class="text-right font-medium text-gray-900">{g.staf_total} staf</span>
+                  <span class="text-gray-500">Menunggu dimuat</span><span class="text-right font-medium text-gray-900">{g.kerdus_menunggu_muat} kerdus penuh</span>
                 </div>
-                <p class="text-xs text-gray-500 mt-3">
+
+                <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200">
                   {#if g.staf_belum_mulai > 0}
                     <!-- tanpa @html: tag <b> di template literal ditampilkan mentah oleh Svelte -->
-                    <b class="text-amber-700">{g.staf_belum_mulai} staf belum mulai</b> — {g.belum_nama.join(', ')}
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border border-gray-200 text-amber-700 min-w-0">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-none"></span>
+                      <span class="truncate">{g.staf_belum_mulai} staf belum mulai — {g.belum_nama.join(', ')}</span>
+                    </span>
                   {:else}
-                    Semua staf sudah mulai.
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border border-gray-200 text-green-700">
+                      <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                      Semua staf sudah mulai
+                    </span>
                   {/if}
-                </p>
+                  <span class="w-14 h-1.5 rounded-full bg-gray-200 overflow-hidden flex-none">
+                    <span class="block h-full rounded-full" style="width: {g.persen}%; background: {warnaGudang(i)};"></span>
+                  </span>
+                </div>
               </div>
             {/each}
           </div>

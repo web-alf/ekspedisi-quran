@@ -534,7 +534,7 @@ class DashboardController extends Controller
     /**
      * Get real-time dashboard status for auto-refresh
      */
-    public function getDashboardStatus()
+    public function getDashboardStatus(Request $request)
     {
         $user = auth()->user();
 
@@ -584,16 +584,27 @@ class DashboardController extends Controller
                 ], $this->getBoxBasedAssignmentData($todayTask));
             }
 
+            $statusData = [
+                'todayTask' => $taskData,
+                'activeBox' => $activeBox,
+                'notificationsCount' => $notificationsCount,
+                'sharedBoxes' => $sharedBoxes,
+                'recentBoxes' => $recentBoxes,
+                'timestamp' => now()->toISOString(),
+            ];
+
+            // Ringkasan SPV/manager hanya dihitung saat diminta (?ringkasan=1):
+            // poling berjalan terus tiap 15 detik, sedangkan ringkasan penuh
+            // butuh belasan query per gudang. Frontend meminta ini sekitar
+            // sekali per menit supaya kartu performa ikut hidup tanpa reload.
+            if ($request->boolean('ringkasan')) {
+                $statusData['ringkasanGudang'] = $this->ringkasanGudang->untukSpv($user);
+                $statusData['ringkasanManager'] = $this->ringkasanGudang->untukManager($user);
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'todayTask' => $taskData,
-                    'activeBox' => $activeBox,
-                    'notificationsCount' => $notificationsCount,
-                    'sharedBoxes' => $sharedBoxes,
-                    'recentBoxes' => $recentBoxes,
-                    'timestamp' => now()->toISOString(),
-                ],
+                'data' => $statusData,
             ]);
 
         } catch (\Exception $e) {

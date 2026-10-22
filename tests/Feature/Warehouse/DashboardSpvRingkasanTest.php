@@ -210,3 +210,16 @@ it('stok per jenis mengikuti satuan halaman Stok Mushaf', function () {
         ->and($tanpa['eks'])->toBe(8)
         ->and($tanpa['status'])->toBe('rendah'); // 8 eks < 1 dus A5
 });
+
+it('ringkasan SPV ikut disegarkan lewat dashboard-status saat ?ringkasan=1', function () {
+    rgTugas($this->stafSmg, 20, 12);
+
+    $data = $this->actingAs($this->spvSmg)
+        ->getJson('/admin/warehouse/dashboard-status?ringkasan=1')
+        ->assertOk()->json('data');
+
+    expect($data['ringkasanGudang']['packing']['target'])->toBe(20)
+        ->and($data['ringkasanGudang']['packing']['selesai'])->toBe(12)
+        // Endpoint sama, tapi SPV tetap tidak menerima ringkasan manager.
+        ->and($data['ringkasanManager'])->toBeNull();
+});
