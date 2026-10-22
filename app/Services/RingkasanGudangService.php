@@ -43,8 +43,87 @@ class RingkasanGudangService
             'packing' => $this->packingHariIni($gudang->id),
             'perlu_tindakan' => $this->perluTindakan($gudang->id),
             'beban' => $this->bebanGudang($gudang->id),
-            'stok' => $this->stokPerJenis($gudang->id),
+            'stok_kartu' => $this->stokKartu($gudang->id),
         ];
+    }
+
+    /**
+     * Ringkasan DUA GUDANG untuk Manager Gudang (PJ, keputusan pemilik sistem 21/10/2026).
+     *
+     * Akun PJ tidak terikat satu gudang (gudang_id NULL) dan mengurus Semarang + Boyolali,
+     * jadi dia butuh angka kedua gudang berdampingan — bukan ringkasan satu gudang. SPV
+     * justru TERKECUALI: di produksi SPV ikut memegang role manager-repacking, sehingga
+     * cakupannya tetap gudangnya sendiri (pakai untukSpv()).
+     *
+     * @return array<string, mixed>|null null bila bukan PJ.
+     */
+    public function untukManager(User $user): ?array
+    {
+        $bukanSpv = $user->hasRole(RoleEnum::MANAGER_REPACKING->value)
+            && ! $user->hasRole(RoleEnum::SPV_GUDANG->value);
+
+        if (! $bukanSpv) {
+            return null;
+        }
+
+        $gudangList = Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']);
+
+        return [
+            'gudangList' => $gudangList->map(fn (Gudang $g) => [
+                'id' => $g->id, 'kode' => $g->kode, 'nama' => $g->nama,
+            ])->values()->all(),
+
+            // Gabungan seluruh tugas kedua gudang ini hari ini.
+            'gabungan' => [
+                'target' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->sum('total_target'),
+                'selesai' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->sum('total_selesai'),
+                'kerdus_tersegel' => PackingBox::query()->whereDate('sealed_at', today())->count(),
+                'staf_bertugas' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->count(),
+                'staf_belum_mulai' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->whereNull('started_at')->count(),
+            ],
+
+            'per_gudang' => $gudangList->map(function (Gudang $g) {
+                $packing = $this->packingHariIni($g->id);
+
+                return [
+                    'id' => $g->id, 'nama' => $g->nama, 'kode' => $g->kode,
+                    'target' => $packing['target'], 'selesai' => $packing['selesai'],
+                    'kerdus_tersegel' => $packing['kerdus_tersegel'],
+                    'staf_total' => $packing['jumlah_staf'],
+                    'staf_belum_mulai' => $packing['staf_belum_mulai'],
+                    'belum_nama' => collect($packing['per_staf'])->where('mulai', false)->pluck('nama')->values()->all(),
+                    // Hitungan miring saat pusat membeku; buat selalu betul:
+                    'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
+                    'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),
+                    'beban' => $this->bebanGudang($g->id),
+                    'stok_kartu' => $this->stokKartu($g->id),
+                ];
+            })->values()->all(),
+
+            // Dokumen perpindahan yang menunggu diterima di gudang MANA PUN di bawah,
+            // dengan arah asal → tujuan begitu jelas.
+            'transfer_menunggu' => TransferMushaf::query()
+                ->where('status', TransferMushaf::STATUS_DIPROSES)
+                ->with(['gudangAsal:id,nama', 'gudangTujuan:id,nama'])
+                ->orderByDesc('id')
+                ->limit(10)
+                ->get()
+                ->map(fn (TransferMushaf $t) => [
+                    'kode' => $t->kode,
+                    'asal' => $t->gudangAsal?->nama,
+                    'tujuan' => $t->gudangTujuan?->nama,
+                    'jumlah_resi' => (int) $t->jumlah_resi,
+                    'jumlah_eks' => (int) $t->jumlah_eks,
+                    'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
+                ])
+                ->values()->all(),
+        ];
+    }
+
+    /** Hitungan kerdus penuh/tersegel yang belum dimuat — diekstrak dari perluTindakan supaya juga dipakai manager. */
+    private function hitungKerdusMenungguMuat(int $gudangId): int
+    {
+        return $this->perluTindakan($gudangId)['kerdus_menunggu_muat'];
     }
 
     /**
@@ -156,27 +235,50 @@ class RingkasanGudangService
     }
 
     /**
-     * Stok gudang per jenis, dalam eks dan dus (satuannya sama dengan halaman Stok Mushaf).
+     * Saldo stok dalam bentuk KARTU per jenis × varian (A5/A6 punya varian terjemahan;
+     * IQRA/IQRO tidak). Dipakai dashboard SPV dan manager gudang.
      *
      * @return array<int, array<string, mixed>>
      */
-    private function stokPerJenis(int $gudangId): array
+    public function stokKartu(int $gudangId): array
     {
+        $varianJenis = config('pengiriman.stok_varian_jenis', ['A5', 'A6']);
+
         return StokMushaf::query()
             ->where('gudang_id', $gudangId)
-            ->with('jenisQuran:id,kode_jenis,nama_jenis')
+            ->with('jenisQuran:id,kode_jenis,nama_jenis,default_capacity')
             ->orderBy('jenis_quran_id')
-            ->orderByDesc('terjemahan')
+            ->orderBy('terjemahan')
             ->get()
-            ->map(fn (StokMushaf $s) => [
-                'jenis' => $s->jenisQuran?->nama_jenis ?? $s->jenisQuran?->kode_jenis ?? '-',
-                // Varian wajib disebut (stok per jenis × varian sejak 19/10/2026): tanpa ini
-                // dua baris "Al-Quran A5" terlihat identik.
-                'varian' => $s->terjemahan ? 'Ada terjemahan' : 'Tanpa terjemahan',
-                'eks' => $s->jumlahEks(),
-                'dus' => $s->jumlahDus(),
-            ])
-            ->values()
-            ->all();
+            ->map(function (StokMushaf $s) use ($varianJenis) {
+                $adaVarian = in_array($s->jenisQuran?->kode_jenis, $varianJenis, true);
+
+                return [
+                    'kode_jenis' => $s->jenisQuran?->kode_jenis ?? '-',
+                    'nama_jenis' => $s->jenisQuran?->nama_jenis ?? '-',
+                    'varian' => $adaVarian ? $this->labelVarian((bool) $s->terjemahan) : '',
+                    'eks' => $s->jumlahEks(),
+                    'dus' => $s->jumlahDus(),
+                    'sisa_eks' => $s->sisaEksDiLuarDus(),
+                    'status' => $this->statusStok($s),
+                ];
+            })
+            ->values()->all();
+    }
+
+    /** A5/A6/… punya varian terjemahan; IQRA/IQRO tidak memakai varian. */
+    private function labelVarian(bool $terjemahan): ?string
+    {
+        return $terjemahan ? 'Dengan terjemahan' : 'Tanpa terjemahan';
+    }
+
+    /** Stok habis (0), rendah (di bawah satu dus penuh), atau normal. */
+    private function statusStok(StokMushaf $s): string
+    {
+        if ($s->jumlahEks() <= 0) {
+            return 'habis';
+        }
+
+        return $s->jumlahEks() < ($s->jenisQuran?->getDefaultCapacity() ?? 1) ? 'rendah' : 'normal';
     }
 }

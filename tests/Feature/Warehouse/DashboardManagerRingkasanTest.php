@@ -1,0 +1,103 @@
+<?php
+
+use App\Enums\RoleEnum;
+use App\Models\DailyPackingTask;
+use App\Models\Gudang;
+use App\Models\JenisQuran;
+use App\Models\StokMushaf;
+use App\Models\TransferMushaf;
+use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\PermissionRegistrar;
+
+/*
+ * Ringkasan DUA GUDANG di dashboard Manager Gudang (21/10/2026).
+ *
+ * Akun PJ tidak terikat satu gudang (gudang_id NULL) dan mengurus Semarang + Boyolali,
+ * jadi dia butuh angka kedua gudang berdampingan. SPV justru TERKECUALI — di produksi
+ * SPV ikut memegang role manager-repacking, sehingga cakupannya tetap gudang sendiri.
+ */
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    $this->seed(RolePermissionSeeder::class);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $this->smg = Gudang::firstOrCreate(['kode' => 'SMG'], ['nama' => 'Gudang Semarang', 'is_active' => true]);
+    $this->btl = Gudang::firstOrCreate(['kode' => 'BTL'], ['nama' => 'Gudang Boyolali', 'is_active' => true]);
+    $this->a5 = JenisQuran::firstOrCreate(['kode_jenis' => 'A5'], ['nama_jenis' => "Al-Qur'an A5", 'default_capacity' => 20, 'is_active' => true]);
+});
+
+function drAkun(array $peran, $gudang = null): User
+{
+    $u = User::factory()->create(['is_active' => true, 'gudang_id' => $gudang?->id]);
+    $u->syncRoles($peran);
+
+    return $u->refresh();
+}
+
+it('manager gudang menerima ringkasan kedua gudang: gabungan, per gudang, kartu stok', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+    $stafSmg = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
+    $stafBtl = drAkun([RoleEnum::WAREHOUSE->value], $this->btl);
+
+    DailyPackingTask::create(['user_id' => $stafSmg->id, 'gudang_id' => $this->smg->id, 'tanggal_tugas' => today(), 'total_target' => 40, 'total_selesai' => 20, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()->subHours(2)]);
+    DailyPackingTask::create(['user_id' => $stafBtl->id, 'gudang_id' => $this->btl->id, 'tanggal_tugas' => today(), 'total_target' => 30, 'total_selesai' => 20, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()]);
+
+    StokMushaf::create(['gudang_id' => $this->smg->id, 'jenis_quran_id' => $this->a5->id, 'terjemahan' => 1, 'jumlah_eks' => 18]);
+    StokMushaf::create(['gudang_id' => $this->smg->id, 'jenis_quran_id' => $this->a5->id, 'terjemahan' => 0, 'jumlah_eks' => 120]);
+    StokMushaf::create(['gudang_id' => $this->btl->id, 'jenis_quran_id' => $this->a5->id, 'terjemahan' => 0, 'jumlah_eks' => 90]);
+    StokMushaf::create(['gudang_id' => $this->btl->id, 'jenis_quran_id' => $this->a5->id, 'terjemahan' => 1, 'jumlah_eks' => 0]);
+
+    $props = $this->actingAs($pj)->get('/admin/warehouse')->assertOk()->viewData('page')['props'];
+    $m = $props['ringkasanManager'];
+
+    expect($m)->not->toBeNull()
+        ->and($m['gudangList'])->toHaveCount(2)
+        // Gabungan 40 + 30 = 70 (garis berhenti —nya string).
+        ->and($m['gabungan']['target'])->toEqual(70)
+        ->and((int) $m['gabungan']['selesai'])->toEqual(40)
+        // Dua gudang, staf 1 + 1, satu belum mulai (mulai jam 2 lalu → keduanya mulai).
+        ->and($m['per_gudang'])->toHaveCount(2)
+        ->and($m['per_gudang'][0]['nama'])->toBe('Gudang Semarang')
+        ->and($m['per_gudang'][1]['persen'])->toBe(67) // 20/30
+
+        // Kartu stok per gudang: SMG 2 kartu, BTL 2 kartu.
+        ->and($m['per_gudang'][0]['stok_kartu'])->toHaveCount(2)
+        ->and(collect($m['per_gudang'][0]['stok_kartu'])->firstWhere('varian', 'Tanpa terjemahan')['eks'])->toBe(120)
+        ->and(collect($m['per_gudang'][1]['stok_kartu'])->firstWhere('varian', 'Dengan terjemahan')['status'])->toBe('habis');
+});
+
+it('embansi transfer menunggu dengan arah asal dan tujuan yang jelas', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+    $dok = TransferMushaf::create([
+        'kode' => 'TM-20261021-001', 'gudang_asal_id' => $this->btl->id, 'gudang_tujuan_id' => $this->smg->id,
+        'status' => 'diproses', 'jumlah_resi' => 6, 'jumlah_eks' => 6, 'created_by' => $pj->id,
+    ]);
+
+    $m = $this->actingAs($pj)->get('/admin/warehouse')->assertOk()->viewData('page')['props']['ringkasanManager'];
+
+    expect($m['transfer_menunggu'])->toHaveCount(1)
+        ->and($m['transfer_menunggu'][0]['asal'])->toBe('Gudang Boyolali')
+        ->and($m['transfer_menunggu'][0]['tujuan'])->toBe('Gudang Semarang');
+});
+
+it('SPV tidak menerima ringkasan manager — walau memegang role manager-repacking', function () {
+    $spv = drAkun(['warehouse', 'manager-repacking', 'spv-gudang'], $this->smg);
+
+    $props = $this->actingAs($spv)->get('/admin/warehouse')->assertOk()->viewData('page')['props'];
+
+    expect($props['ringkasanManager'])->toBeNull()
+        ->and($props['ringkasanGudang'])->not->toBeNull()
+        ->and($props['ringkasanGudang']['gudang']['nama'])->toBe('Gudang Semarang');
+});
+
+it('staf freelancer tidak menerima ringkasan manager', function () {
+    $staf = drAkun([RoleEnum::WAREHOUSE->value]);
+
+    $props = $this->actingAs($staf)->get('/admin/warehouse')->assertOk()->viewData('page')['props'];
+
+    expect($props['ringkasanManager'])->toBeNull();
+});

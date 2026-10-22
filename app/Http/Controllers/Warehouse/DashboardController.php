@@ -64,6 +64,10 @@ class DashboardController extends Controller
             // ter-coup per gudang_id akun — bukan milik SPV lain.
             $ringkasanGudang = $this->ringkasanGudang->untukSpv($user);
 
+            // Ringkasan DUA GUDANG untuk Manager Gudang (21/10/2026): akun PJ tidak terikat
+            // satu gudang dan mengurus Semarang + Boyolali.
+            $ringkasanManager = $this->ringkasanGudang->untukManager($user);
+
             // Get shared boxes for collaboration interface
             $sharedBoxes = $this->getSharedBoxesForCollaboration($user);
 
@@ -95,6 +99,7 @@ class DashboardController extends Controller
                 'recentBoxes' => $recentBoxes,
                 'sharedBoxes' => $sharedBoxes,
                 'ringkasanGudang' => $ringkasanGudang,
+                'ringkasanManager' => $ringkasanManager,
                 'currentUser' => [
                     'id' => $user->id,
                     'name' => $user->name,

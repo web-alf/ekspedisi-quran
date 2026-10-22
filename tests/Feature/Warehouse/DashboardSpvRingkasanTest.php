@@ -196,12 +196,17 @@ it('stok per jenis mengikuti satuan halaman Stok Mushaf', function () {
 
     $r = $this->actingAs($this->spvSmg)->get('/admin/warehouse')->assertOk()->viewData('page')['props']['ringkasanGudang'];
 
-    // Baris varian ber-terjemahan dulu, lalu tanpa — dua baris, bukan tercampur.
-    expect($r['stok'])->toHaveCount(2)
-        ->and($r['stok'][0]['jenis'])->toBe($a5->nama_jenis)
-        ->and($r['stok'][0]['varian'])->toBe('Ada terjemahan')
-        ->and($r['stok'][0]['eks'])->toBe(45)
-        ->and($r['stok'][0]['dus'])->toBe(2) // kapasitas A5 = 20/dus
-        ->and($r['stok'][1]['varian'])->toBe('Tanpa terjemahan')
-        ->and($r['stok'][1]['eks'])->toBe(8);
+    // Sekarang berbentuk KARTU (21/10/2026). Urutan kartu tidak dituntut — diambil per
+    // varian, karena urutan kolom terjemahan di DB tidak menjamin apa pun.
+    $dengan = collect($r['stok_kartu'])->firstWhere('varian', 'Dengan terjemahan');
+    $tanpa = collect($r['stok_kartu'])->firstWhere('varian', 'Tanpa terjemahan');
+
+    expect($r['stok_kartu'])->toHaveCount(2)
+        ->and($dengan['nama_jenis'])->toBe($a5->nama_jenis)
+        ->and($dengan['eks'])->toBe(45)
+        ->and($dengan['dus'])->toBe(2) // kapasitas A5 = 20/dus
+        ->and($dengan['sisa_eks'])->toBe(5)
+        ->and($dengan['status'])->toBe('normal')
+        ->and($tanpa['eks'])->toBe(8)
+        ->and($tanpa['status'])->toBe('rendah'); // 8 eks < 1 dus A5
 });
