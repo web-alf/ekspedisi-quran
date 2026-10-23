@@ -1,13 +1,74 @@
 <script>
   import { onMount } from 'svelte';
+  import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
+  import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
+  import StatTile from '../../Components/Warehouse/StatTile.svelte';
+  import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   
   // Props
 // Omit unused props to reduce build warnings
   export let performance = null;
   export let weeklyComparison = {};
   export let recentTasks = [];
+  // SPV / Manager Gudang (23/10/2026): semua freelancer yang ditugaskan pada satu
+  // tanggal di gudang yang dipantau. null untuk freelancer — mereka tetap melihat
+  // performa pribadinya di bawah.
+  export let daftarKerja = null;
+
+  // Saring per gudang (Manager memantau lebih dari satu gudang): 'semua' / id gudang.
+  let gudangAktif = 'semua';
+  let memuatTanggal = false;
+
+  $: adalahHariIni = daftarKerja?.tanggal === daftarKerja?.hari_ini;
+  $: banyakGudang = (daftarKerja?.gudang?.length ?? 0) > 1;
+  $: stafTampil = (daftarKerja?.staf ?? []).filter(
+    (s) => gudangAktif === 'semua' || String(s.gudang_id) === gudangAktif
+  );
+  $: persenGabungan = daftarKerja?.ringkasan?.target
+    ? Math.round((daftarKerja.ringkasan.selesai / daftarKerja.ringkasan.target) * 100)
+    : 0;
+
+  function geserTanggal(tanggal, hari) {
+    const [y, m, d] = tanggal.split('-').map(Number);
+    const hasil = new Date(y, m - 1, d + hari);
+    const dd = String(hasil.getDate()).padStart(2, '0');
+    const mm = String(hasil.getMonth() + 1).padStart(2, '0');
+
+    return `${hasil.getFullYear()}-${mm}-${dd}`;
+  }
+
+  function pilihTanggal(tanggal) {
+    if (!tanggal || tanggal > daftarKerja.hari_ini || tanggal === daftarKerja.tanggal) return;
+
+    memuatTanggal = true;
+    router.get('/admin/warehouse/performance', { tanggal }, {
+      only: ['daftarKerja'],
+      preserveState: true,
+      preserveScroll: true,
+      replace: true,
+      onFinish: () => (memuatTanggal = false),
+    });
+  }
+
+  function labelTanggal(tanggal) {
+    const [y, m, d] = tanggal.split('-').map(Number);
+
+    return new Date(y, m - 1, d).toLocaleDateString('id-ID', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
+  }
+
+  // Status per freelancer. Untuk tanggal lampau, "mulai" berarti tidak tuntas.
+  function statusKerja(status) {
+    if (status === 'selesai') return { warna: 'green', label: 'Target tercapai' };
+    if (status === 'mulai') {
+      return adalahHariIni ? { warna: 'indigo', label: 'Sedang kerja' } : { warna: 'amber', label: 'Tidak tuntas' };
+    }
+
+    return adalahHariIni ? { warna: 'amber', label: 'Belum mulai' } : { warna: 'gray', label: 'Tidak mulai' };
+  }
   
   // State
   let selectedPeriod = 'week'; // 'week' | 'month' | 'all'
@@ -106,6 +167,115 @@
 </script>
 
 <AdminLayout>
+  {#if daftarKerja}
+  <div class="max-w-7xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
+      <div>
+        <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Performa Kerja</h1>
+        <p class="text-sm sm:text-base text-gray-600 mt-1">
+          Freelancer yang bertugas per tanggal — {daftarKerja.gudang.map((g) => g.nama).join(' + ')}
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button type="button" on:click={() => pilihTanggal(geserTanggal(daftarKerja.tanggal, -1))}
+          class="p-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+          aria-label="Hari sebelumnya">
+          <HeroIcon name="chevron-left" class="w-4 h-4" />
+        </button>
+        <input type="date" value={daftarKerja.tanggal} max={daftarKerja.hari_ini}
+          on:change={(e) => pilihTanggal(e.currentTarget.value)}
+          class="rounded-lg border-gray-200 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+          aria-label="Pilih tanggal" />
+        <button type="button" on:click={() => pilihTanggal(geserTanggal(daftarKerja.tanggal, 1))}
+          disabled={adalahHariIni}
+          class="p-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Hari berikutnya">
+          <HeroIcon name="chevron-right" class="w-4 h-4" />
+        </button>
+        {#if !adalahHariIni}
+          <button type="button" on:click={() => pilihTanggal(daftarKerja.hari_ini)}
+            class="px-3 py-2 rounded-lg text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100">
+            Hari ini
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <RingkasanSection
+      icon="clipboard-document-check"
+      judul={labelTanggal(daftarKerja.tanggal)}
+      keterangan="Semua freelancer yang ditugaskan, termasuk yang tidak mulai"
+    >
+      <div slot="kanan" class="text-right flex-none">
+        <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{persenGabungan}%</p>
+        <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">target tercapai</p>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 {memuatTanggal ? 'opacity-50' : ''}">
+        <StatTile label="Ditugaskan" nilai={daftarKerja.ringkasan.ditugaskan} satuan="staf" />
+        <StatTile label="Sudah kerja" nilai={daftarKerja.ringkasan.kerja} satuan="staf" />
+        <StatTile
+          label={adalahHariIni ? 'Belum mulai' : 'Tidak mulai'}
+          nilai={daftarKerja.ringkasan.tidak_mulai}
+          satuan="staf"
+          peringatan={daftarKerja.ringkasan.tidak_mulai > 0}
+        />
+        <StatTile label="Sudah dikemas" nilai={daftarKerja.ringkasan.selesai} satuan="/ {daftarKerja.ringkasan.target} mushaf" />
+      </div>
+
+      {#if banyakGudang}
+        <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg mb-4" role="tablist" aria-label="Saring per gudang">
+          <button type="button" role="tab" aria-selected={gudangAktif === 'semua'} on:click={() => (gudangAktif = 'semua')}
+            class="px-3 py-1.5 rounded-md text-sm font-medium {gudangAktif === 'semua' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua</button>
+          {#each daftarKerja.gudang as g (g.id)}
+            <button type="button" role="tab" aria-selected={gudangAktif === String(g.id)} on:click={() => (gudangAktif = String(g.id))}
+              class="px-3 py-1.5 rounded-md text-sm font-medium {gudangAktif === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
+          {/each}
+        </div>
+      {/if}
+
+      {#if stafTampil.length > 0}
+        <ul class="divide-y divide-gray-100 border border-gray-200 rounded-xl {memuatTanggal ? 'opacity-50' : ''}">
+          {#each stafTampil as s (s.id)}
+            <li class="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-semibold text-gray-900 truncate">{s.nama}</p>
+                  {#if banyakGudang}
+                    <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border border-gray-200 text-gray-500">{s.gudang_kode}</span>
+                  {/if}
+                  <PilTitik warna={statusKerja(s.status).warna}>{statusKerja(s.status).label}</PilTitik>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                  {#if s.jam_mulai}
+                    Mulai {s.jam_mulai}{s.jam_selesai ? ' · selesai ' + s.jam_selesai : ''} · {s.kerdus} kerdus
+                  {:else}
+                    Tidak ada pemindaian
+                  {/if}
+                </p>
+              </div>
+              <div class="sm:w-56 flex-none">
+                <div class="flex items-baseline justify-between text-sm mb-1">
+                  <span><b class="text-gray-900">{s.selesai}</b><span class="text-gray-500"> / {s.target} mushaf</span></span>
+                  <span class="text-xs font-semibold text-gray-500">{s.persen}%</span>
+                </div>
+                <div class="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                  <div class="h-full rounded-full {s.status === 'selesai' ? 'bg-green-500' : 'bg-indigo-500'}" style="width: {Math.min(100, s.persen)}%"></div>
+                </div>
+              </div>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <div class="rounded-xl border border-dashed border-gray-300 p-6 flex items-center gap-3">
+          <HeroIcon name="inbox-stack" class="w-5 h-5 text-gray-400 flex-none" />
+          <p class="text-sm text-gray-600">Tidak ada freelancer yang ditugaskan pada tanggal ini.</p>
+        </div>
+      {/if}
+    </RingkasanSection>
+  </div>
+  {:else}
   <div class="max-w-7xl mx-auto space-y-6">
     <!-- Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -357,4 +527,5 @@
       {/if}
     </div>
   </div>
+  {/if}
 </AdminLayout>

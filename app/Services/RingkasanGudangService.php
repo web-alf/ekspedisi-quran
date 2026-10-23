@@ -10,7 +10,9 @@ use App\Models\Pengiriman;
 use App\Models\StokMushaf;
 use App\Models\TransferMushaf;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Ringkasan gudang untuk dashboard SPV (18/10/2026).
@@ -118,6 +120,90 @@ class RingkasanGudangService
                 ])
                 ->values()->all(),
         ];
+    }
+
+    /**
+     * Daftar freelancer yang DITUGASKAN pada satu tanggal, untuk halaman Performa Kerja
+     * (23/10/2026). Cakupannya sama dengan dashboard: SPV hanya gudangnya sendiri,
+     * Manager Gudang (PJ) semua gudang aktif, peran lain null. Yang ditugaskan tapi
+     * tidak mulai tetap dimuat (status `tidak_mulai`) supaya SPV tahu siapa yang absen.
+     *
+     * @return array{tanggal: string, hari_ini: string, gudang: array<int, array{id: int, kode: string, nama: string}>, ringkasan: array<string, int>, staf: array<int, array<string, mixed>>}|null
+     */
+    public function daftarKerja(User $user, CarbonInterface $tanggal): ?array
+    {
+        $gudangList = $this->cakupanGudang($user);
+
+        if ($gudangList === null) {
+            return null;
+        }
+
+        $tugas = DailyPackingTask::query()
+            ->whereDate('tanggal_tugas', $tanggal)
+            ->whereIn('gudang_id', $gudangList->pluck('id'))
+            ->with(['user:id,name', 'gudang:id,kode,nama'])
+            ->withCount('packingBoxes')
+            ->get();
+
+        $staf = $tugas
+            ->map(fn (DailyPackingTask $t) => [
+                'id' => $t->id,
+                'nama' => $t->user?->name ?? '-',
+                'gudang_id' => $t->gudang_id,
+                'gudang_kode' => $t->gudang?->kode,
+                'target' => (int) $t->total_target,
+                'selesai' => (int) $t->total_selesai,
+                'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
+                'status' => $this->statusKerja($t),
+                'jam_mulai' => $t->started_at?->format('H:i'),
+                'jam_selesai' => $t->completed_at?->format('H:i'),
+                'kerdus' => (int) $t->packing_boxes_count,
+            ])
+            ->sortBy(fn (array $s) => [$s['status'] === 'tidak_mulai' ? 1 : 0, -$s['selesai'], $s['nama']])
+            ->values();
+
+        return [
+            'tanggal' => $tanggal->format('Y-m-d'),
+            'hari_ini' => today()->format('Y-m-d'),
+            'gudang' => $gudangList->map(fn (Gudang $g) => ['id' => $g->id, 'kode' => $g->kode, 'nama' => $g->nama])->values()->all(),
+            'ringkasan' => [
+                'ditugaskan' => $staf->count(),
+                'kerja' => $staf->where('status', '!=', 'tidak_mulai')->count(),
+                'tidak_mulai' => $staf->where('status', 'tidak_mulai')->count(),
+                'target' => (int) $staf->sum('target'),
+                'selesai' => (int) $staf->sum('selesai'),
+            ],
+            'staf' => $staf->all(),
+        ];
+    }
+
+    /**
+     * Gudang yang boleh dipantau akun ini — aturan yang sama dengan untukSpv()/untukManager().
+     *
+     * @return Collection<int, Gudang>|null
+     */
+    private function cakupanGudang(User $user): ?Collection
+    {
+        if ($user->hasRole(RoleEnum::SPV_GUDANG->value)) {
+            return $user->gudang_id
+                ? Gudang::whereKey($user->gudang_id)->get(['id', 'kode', 'nama'])
+                : null;
+        }
+
+        if ($user->hasRole(RoleEnum::MANAGER_REPACKING->value)) {
+            return Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']);
+        }
+
+        return null;
+    }
+
+    private function statusKerja(DailyPackingTask $tugas): string
+    {
+        if ($tugas->status === 'completed' || ($tugas->total_target > 0 && $tugas->total_selesai >= $tugas->total_target)) {
+            return 'selesai';
+        }
+
+        return $tugas->started_at ? 'mulai' : 'tidak_mulai';
     }
 
     /** Hitungan kerdus penuh/tersegel yang belum dimuat — diekstrak dari perluTindakan supaya juga dipakai manager. */

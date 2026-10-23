@@ -69,6 +69,12 @@
   // tidak relevan bagi mereka kecuali memang ikut mengerjakan tugas packing.
   $: adalahPemantau = Boolean(ringkasanGudang || ringkasanManager);
 
+  // Dashboard SPV hanya menampilkan freelancer yang SUDAH mulai kerja hari ini;
+  // yang ditugaskan tapi belum mulai cukup terhitung di kotak "Staf belum mulai".
+  // Daftar lengkap per tanggal ada di halaman Performa Kerja.
+  $: stafKerjaHariIni = (ringkasanGudang?.packing?.per_staf ?? []).filter((s) => s.mulai);
+  $: bolehLihatPerforma = hasPermission('warehouse.performance.view');
+
   $: persenPacking = ringkasanGudang?.packing?.target
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
     : 0;
@@ -404,15 +410,28 @@
             <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
           </div>
 
-          {#if ringkasanGudang.packing.per_staf.length > 0}
-            <div class="mt-4 flex flex-wrap gap-2">
-              {#each ringkasanGudang.packing.per_staf as staf (staf.nama)}
-                <PilTitik warna={staf.mulai ? 'gray' : 'amber'}>
-                  {staf.nama} · {staf.selesai}/{staf.target}{staf.mulai ? '' : ' · belum mulai'}
-                </PilTitik>
-              {/each}
+          <div class="mt-4 pt-4 border-t border-dashed border-gray-200">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <p class="text-xs font-medium text-gray-500">Freelancer yang kerja hari ini</p>
+              {#if bolehLihatPerforma}
+                <a href="/admin/warehouse/performance" class="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800">
+                  Semua per tanggal
+                  <HeroIcon name="arrow-right" class="w-3.5 h-3.5" />
+                </a>
+              {/if}
             </div>
-          {/if}
+            {#if stafKerjaHariIni.length > 0}
+              <div class="flex flex-wrap gap-2">
+                {#each stafKerjaHariIni as staf (staf.nama)}
+                  <PilTitik warna={staf.selesai >= staf.target && staf.target > 0 ? 'green' : 'indigo'}>
+                    {staf.nama} · {staf.selesai}/{staf.target}
+                  </PilTitik>
+                {/each}
+              </div>
+            {:else}
+              <p class="text-sm text-gray-500">Belum ada freelancer yang mulai kerja hari ini.</p>
+            {/if}
+          </div>
         </RingkasanSection>
 
         <RingkasanSection

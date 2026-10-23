@@ -117,6 +117,14 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(isi).toMatch(/\{#if bolehBukaMuatan\}[\s\S]*?\/admin\/muatan[\s\S]*?\{\/if\}/);
     });
 
+    it('dashboard SPV hanya menampilkan freelancer yang sudah mulai kerja hari ini', () => {
+        expect(skrip).toMatch(/stafKerjaHariIni\s*=\s*\(ringkasanGudang\?\.packing\?\.per_staf \?\? \[\]\)\.filter\(\(s\) => s\.mulai\)/);
+        expect(blokSpv).toMatch(/\{#each stafKerjaHariIni as/);
+        expect(blokSpv).not.toMatch(/\{#each ringkasanGudang\.packing\.per_staf as/);
+        expect(blokSpv).not.toContain('belum mulai\'}');
+        expect(blokSpv).toMatch(/\{#if bolehLihatPerforma\}[\s\S]*?\/admin\/warehouse\/performance[\s\S]*?\{\/if\}/);
+    });
+
     it('menyembunyikan kartu pribadi staf bagi SPV/Manager yang hanya memantau', () => {
         expect(skrip).toMatch(/adalahPemantau\s*=\s*Boolean\(ringkasanGudang \|\| ringkasanManager\)/);
         expect(markup).toMatch(/\{#if !adalahPemantau \|\| todayTask\}/);

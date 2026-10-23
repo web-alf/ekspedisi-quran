@@ -3,20 +3,24 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Warehouse\LihatPerformaKerjaRequest;
 use App\Models\DailyPackingTask;
 use App\Models\UserPerformance;
-use Illuminate\Http\Request;
+use App\Services\RingkasanGudangService;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class PerformanceController extends Controller
 {
     /**
-     * Display performance page
+     * Halaman Performa Kerja. Freelancer melihat performa pribadinya; SPV dan Manager
+     * Gudang juga menerima `daftarKerja`: semua freelancer yang ditugaskan pada
+     * ?tanggal= (default hari ini) di gudang yang mereka pantau.
      */
-    public function index()
+    public function index(LihatPerformaKerjaRequest $request, RingkasanGudangService $ringkasanGudang): Response
     {
-        $user = auth()->user();
-        
+        $user = $request->user();
+
         // Get current month performance
         $currentMonth = now()->format('Y-m');
         $performance = UserPerformance::where('user_id', $user->id)
@@ -31,15 +35,16 @@ class PerformanceController extends Controller
             ->get();
 
         // Calculate weekly performance
-        $thisWeek = $recentTasks->filter(function($task) {
+        $thisWeek = $recentTasks->filter(function ($task) {
             return $task->tanggal_tugas->isCurrentWeek();
         });
 
-        $lastWeek = $recentTasks->filter(function($task) {
+        $lastWeek = $recentTasks->filter(function ($task) {
             return $task->tanggal_tugas->isLastWeek();
         });
 
         return Inertia::render('Warehouse/Performance', [
+            'daftarKerja' => $ringkasanGudang->daftarKerja($user, $request->tanggal()),
             'performance' => $performance ? [
                 'bulan' => $performance->bulan,
                 'total_target' => $performance->total_target,
@@ -62,9 +67,9 @@ class PerformanceController extends Controller
                     'completed' => $lastWeek->where('is_completed', true)->count(),
                     'total_target' => $lastWeek->sum('total_target'),
                     'total_achieved' => $lastWeek->sum('total_selesai'),
-                ]
+                ],
             ],
-            'recentTasks' => $recentTasks->map(function($task) {
+            'recentTasks' => $recentTasks->map(function ($task) {
                 return [
                     'id' => $task->id,
                     'tanggal_tugas' => $task->tanggal_tugas->format('Y-m-d'),
@@ -77,7 +82,7 @@ class PerformanceController extends Controller
                     'started_at' => $task->started_at?->format('H:i'),
                     'completed_at' => $task->completed_at?->format('H:i'),
                 ];
-            })
+            }),
         ]);
     }
 }
