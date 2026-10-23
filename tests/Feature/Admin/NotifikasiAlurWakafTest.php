@@ -12,7 +12,6 @@ use App\Models\WhatsAppTemplate;
 use App\Services\WhatsApp\WhatsAppTemplateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
-use RuntimeException;
 
 uses(RefreshDatabase::class);
 

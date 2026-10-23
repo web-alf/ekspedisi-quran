@@ -111,14 +111,14 @@ class OptimizationIntegrationTest extends TestCase
 
         $this->createRealisticTestData();
 
-        // Test bulk certificate generation
-        $wakafBatch = WakafBatch::factory()->create();
-        $certificates = Sertifikat::factory(20)->create(['wakaf_batch_id' => $wakafBatch->id]);
+        // Test bulk certificate generation (one certificate per batch, enforced by sertifikat_wakaf_batch_id_unique)
+        $wakafBatches = WakafBatch::factory(20)->create();
+        $wakafBatches->each(fn (WakafBatch $wakafBatch) => Sertifikat::factory()->create(['wakaf_batch_id' => $wakafBatch->id]));
 
         $start = microtime(true);
 
         // Dispatch bulk job
-        GenerateBulkCertificatesJob::dispatch([$wakafBatch->id]);
+        GenerateBulkCertificatesJob::dispatch($wakafBatches->pluck('id')->all());
 
         // Process jobs
         Artisan::call('queue:work', [
