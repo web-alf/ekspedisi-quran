@@ -7,6 +7,11 @@
   import SharedBoxCollaboration from '../../Components/SharedBoxCollaboration.svelte';
   import SealReadyBoxes from '../../Components/SealReadyBoxes.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
+  import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
+  import StatTile from '../../Components/Warehouse/StatTile.svelte';
+  import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
+  import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
+  import PerluTindakan from '../../Components/Warehouse/PerluTindakan.svelte';
   import { hasPermission } from '../../utils/permissions.js';
   import { can } from '../../utils/permissions.js';
 
@@ -47,15 +52,22 @@
   // Status aktif kartu stok (manager): 'semua' / id gudang.
   let stokAktif = 'semua';
 
-  // Padanan dus yang BENER: "6 dus", "5 dus + 10 eks", atau "18 eks". Dulu hilang kata
-  // "dus" karena number + string tanpa menyebut satuannya.
-  function padananStok(b) {
-    if (b.dus > 0 && b.sisa_eks > 0) return b.dus + ' dus + ' + b.sisa_eks + ' eks';
-    if (b.dus > 0) return b.dus + ' dus';
-    if (b.eks > 0) return b.eks + ' eks';
+  // Urutan tahap beban gudang — sama untuk SPV dan Manager.
+  const TAHAP_BEBAN = [
+    ['pemesanan', 'Pemesanan'],
+    ['produksi', 'Produksi'],
+    ['packing', 'Packing'],
+    ['selesai_packing', 'Selesai packing'],
+    ['dalam_kerdus', 'Dalam kerdus'],
+  ];
 
-    return 'Pesan produksi dulu';
+  function totalBeban(kunci) {
+    return (ringkasanManager?.per_gudang ?? []).reduce((n, g) => n + (g.beban?.[kunci] ?? 0), 0);
   }
+
+  // SPV & Manager hanya memantau: kartu pribadi staf (tugas, kerdus, performa)
+  // tidak relevan bagi mereka kecuali memang ikut mengerjakan tugas packing.
+  $: adalahPemantau = Boolean(ringkasanGudang || ringkasanManager);
 
   $: persenPacking = ringkasanGudang?.packing?.target
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
@@ -87,8 +99,12 @@
   // Nama staf yang belum mulai, diberi kode gudangnya: "Andi · SMG".
   $: gBelumNama = perGudangUrut.flatMap((g) => (g.belum_nama || []).map((n) => n + ' · ' + g.kode));
 
+  // Palet Tailwind (bukan hex lepas) supaya seragam dengan halaman lain.
+  // Ditulis utuh agar tidak dibuang purge Tailwind.
   function warnaGudang(i) {
-    return i === 0 ? '#5e6ad2' : '#a5b0e8';
+    return i === 0
+      ? { bg: 'bg-indigo-500', stroke: 'stroke-indigo-500' }
+      : { bg: 'bg-indigo-300', stroke: 'stroke-indigo-300' };
   }
 
   function donutOffset(persen) {
@@ -303,7 +319,7 @@
             <!-- System Online Status - Responsive -->
             <div class="inline-flex items-center px-2 sm:px-3 py-2 bg-green-100 text-green-800 rounded-lg text-xs sm:text-sm font-medium">
               <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse mr-2"></div>
-              <span class="hidden sm:inline">System Online</span>
+              <span class="hidden sm:inline">Sistem Online</span>
               <span class="sm:hidden">Online</span>
             </div>
             
@@ -352,231 +368,152 @@
         </div>
     </div>
     
+      <!-- Ringkasan SPV (satu gudang) dan Manager (dua gudang) memakai komponen
+           yang sama dengan urutan yang sama: Packing → (Performa, manager) →
+           Perlu Tindakan → Beban → Stok. Ubah komponennya, bukan salah satu blok. -->
       {#if ringkasanGudang}
-        <!-- Ringkasan gudang untuk SPV: semua angka sudah ter-coup ke gudang akun. -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-none">
-              <HeroIcon name="cube" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Packing Hari Ini — {ringkasanGudang.gudang.nama}</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Gabungan seluruh tugas staf gudang ini</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Target hari ini</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.target} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
-            </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Sudah dikemas</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.selesai} <span class="text-sm font-medium text-gray-400">mushaf</span></p>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 mt-1">{persenPacking}%</span>
-            </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Kerdus tersegel</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanGudang.packing.kerdus_tersegel} <span class="text-sm font-medium text-gray-400">kerdus</span></p>
-            </div>
-            <div>
-              <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Belum mulai</p>
-              <p class="text-2xl font-bold {ringkasanGudang.packing.staf_belum_mulai > 0 ? 'text-amber-600' : 'text-gray-900'}">{ringkasanGudang.packing.staf_belum_mulai} <span class="text-sm font-medium text-gray-400">staf</span></p>
-            </div>
-          </div>
-
-          <div class="mb-1 flex justify-between text-xs text-gray-500">
-            <span>Progress kemas gudang</span>
-            <span><b class="text-gray-900">{ringkasanGudang.packing.selesai}</b> / {ringkasanGudang.packing.target} mushaf</span>
-          </div>
-          <div class="h-2 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-blue-500 transition-all duration-500" style="width: {persenPacking}%"></div>
-          </div>
-
-          {#if ringkasanGudang.packing.per_staf.length > 0}
-            <div class="mt-4 -mx-1 px-1 flex gap-2 overflow-x-auto">
-              {#each ringkasanGudang.packing.per_staf as staf (staf.nama)}
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap {staf.mulai ? 'bg-white border border-gray-200 text-gray-600' : 'bg-amber-50 text-amber-700'}">
-                  {staf.nama} <b class="text-gray-900 ml-1">{staf.selesai}/{staf.target}</b>{staf.mulai ? '' : ' · belum mulai'}
-                </span>
-              {/each}
-            </div>
-          {/if}
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
-              <HeroIcon name="exclamation-circle" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Perlu Tindakan Anda</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Yang menunggu keputusan SPV {ringkasanGudang.gudang.nama}</p>
-            </div>
-          </div>
-
-          {#if ringkasanGudang.perlu_tindakan.transfer_menunggu.length > 0}
-            {#each ringkasanGudang.perlu_tindakan.transfer_menunggu as t (t.kode)}
-              <div class="border border-gray-200 rounded-lg p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
-                  <HeroIcon name="arrow-down-tray" class="w-6 h-6" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="font-semibold text-gray-900">Dokumen {t.kode} menunggu diterima</p>
-                  <p class="text-sm text-gray-600 mt-0.5">Dari {t.asal} · {t.jumlah_resi} resi ({t.jumlah_eks} mushaf)</p>
-                  <p class="text-xs text-gray-400 mt-1">Lokasi mushaf berpindah ke gudang ini setelah Anda menekan Terima.</p>
-                </div>
-                <a href="/admin/transfer-mushaf" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 text-center flex-none">Terima di sini</a>
-              </div>
-            {/each}
-          {:else}
-            <div class="rounded-lg border border-dashed border-gray-300 p-4 flex items-center gap-3 mb-3">
-              <span class="text-green-500 text-lg flex-none">✓</span>
-              <p class="text-sm text-gray-600">Tidak ada kiriman antar gudang yang menunggu. Semua beres.</p>
-            </div>
-          {/if}
-
-          <div class="rounded-lg border border-dashed border-gray-300 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <span class="flex-none text-indigo-600"><HeroIcon name="truck" class="w-5 h-5" /></span>
-            <p class="text-sm text-gray-600 flex-1">
-              <b class="text-gray-900">{ringkasanGudang.perlu_tindakan.kerdus_menunggu_muat} kerdus</b> penuh menunggu dimuat ke kurir.
-            </p>
-            <a href="/admin/muatan" class="text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg flex-none">Lihat daftar →</a>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
-              <HeroIcon name="archive-box" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Beban Gudang</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Resi yang tercatat sedang dikerjakan gudang ini</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
-            {#each [['Pemesanan', ringkasanGudang.beban.pemesanan], ['Produksi', ringkasanGudang.beban.produksi], ['Packing', ringkasanGudang.beban.packing], ['Selesai packing', ringkasanGudang.beban.selesai_packing], ['Dalam kerdus', ringkasanGudang.beban.dalam_kerdus]] as [label, nilai]}
-              <div class="border border-gray-200 rounded-lg p-3">
-                <p class="text-xs text-gray-500 mb-1">{label}</p>
-                <p class="text-xl font-bold text-gray-900">{nilai}</p>
-                <p class="text-[11px] text-gray-400">resi</p>
-              </div>
-            {/each}
-          </div>
-          <p class="text-xs text-gray-400 -mt-3 mb-5">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
-
-          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
-            <p class="text-sm font-medium text-gray-700">Saldo stok per varian</p>
-            <p class="text-xs text-gray-400">Resi lama tanpa lokasi tidak dihitung di sini</p>
-          </div>
-
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {#each ringkasanGudang.stok_kartu as baris (baris.kode_jenis + (baris.varian || 'x'))}
-              <div class="rounded-lg border p-4 {baris.status === 'habis' ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}">
-                <div class="flex items-center gap-1.5 mb-2 flex-wrap">
-                  <span class="text-xs font-bold text-gray-900">{baris.kode_jenis}</span>
-                  {#if baris.varian}
-                    <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
-                      {baris.varian}
-                    </span>
-                  {/if}
-                  {#if baris.status !== 'normal'}
-                    <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
-                      {baris.status === 'habis' ? 'Stok habis' : 'Stok rendah'}
-                    </span>
-                  {/if}
-                </div>
-                <p class="text-2xl font-bold text-gray-900">{baris.eks} <span class="text-xs font-medium text-gray-400">eks</span></p>
-                <p class="text-xs text-gray-500">{padananStok(baris)}</p>
-              </div>
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      {#if ringkasanManager}
-
-        <!-- ===== RINGKASAN DUA GUDANG (Manager Gudang / PJ) ===== -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5e6ad2] flex-none">
-              <HeroIcon name="chart-bar" class="w-4 h-4" />
-            </div>
-            <div class="min-w-0">
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Ringkasan Packing Hari Ini</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Gabungan target &amp; hasil {perGudangUrut.map((g) => g.nama).join(' + ')}</p>
-            </div>
-            <div class="ml-auto text-right flex-none">
-              <p class="text-2xl sm:text-3xl font-bold text-[#5e6ad2] leading-none">{pctGabungan}%</p>
-              <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
-            </div>
+        <RingkasanSection
+          icon="cube"
+          judul="Packing Hari Ini — {ringkasanGudang.gudang.nama}"
+          keterangan="Gabungan seluruh tugas staf gudang ini"
+        >
+          <div slot="kanan" class="text-right flex-none">
+            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{persenPacking}%</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
 
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <div class="border border-gray-200 rounded-xl p-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Target hari ini</p>
-              <p class="text-2xl font-bold text-gray-900">{gabunganTarget} <span class="text-xs font-medium text-gray-400">mushaf</span></p>
-            </div>
-            <div class="border border-gray-200 rounded-xl p-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Sudah dikemas</p>
-              <p class="text-2xl font-bold text-gray-900">{gabunganSelesai} <span class="text-xs font-medium text-gray-400">mushaf</span></p>
-              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-gray-200 text-[#5e6ad2] mt-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-[#5e6ad2]"></span>{pctGabungan}%
-              </span>
-            </div>
-            <div class="border border-gray-200 rounded-xl p-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Kerdus tersegel</p>
-              <p class="text-2xl font-bold text-gray-900">{ringkasanManager.gabungan.kerdus_tersegel} <span class="text-xs font-medium text-gray-400">kerdus</span></p>
-            </div>
-            <div class="border border-gray-200 rounded-xl p-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Staf belum mulai</p>
-              <p class="text-2xl font-bold {ringkasanManager.gabungan.staf_belum_mulai > 0 ? 'text-amber-700' : 'text-gray-900'}">{ringkasanManager.gabungan.staf_belum_mulai} <span class="text-xs font-medium text-gray-400">staf</span></p>
-              {#if gBelumNama.length > 0}
-                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-gray-200 text-amber-700 mt-2 max-w-full overflow-hidden">
-                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-none"></span>
-                  <span class="truncate">{gBelumNama.slice(0, 3).join(', ')}{gBelumNama.length > 3 ? ' +' + (gBelumNama.length - 3) + ' lagi' : ''}</span>
-                </span>
-              {/if}
-            </div>
+            <StatTile label="Target hari ini" nilai={ringkasanGudang.packing.target} satuan="mushaf" />
+            <StatTile label="Sudah dikemas" nilai={ringkasanGudang.packing.selesai} satuan="mushaf">
+              <PilTitik class="mt-2">{persenPacking}%</PilTitik>
+            </StatTile>
+            <StatTile label="Kerdus tersegel" nilai={ringkasanGudang.packing.kerdus_tersegel} satuan="kerdus" />
+            <StatTile
+              label="Staf belum mulai"
+              nilai={ringkasanGudang.packing.staf_belum_mulai}
+              satuan="staf"
+              peringatan={ringkasanGudang.packing.staf_belum_mulai > 0}
+            />
           </div>
 
           <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
-            <span>Progress gabungan</span>
+            <span>Progress kemas gudang</span>
+            <span><b class="text-gray-900">{ringkasanGudang.packing.selesai}</b> / {ringkasanGudang.packing.target} mushaf · {ringkasanGudang.packing.jumlah_staf ?? ringkasanGudang.packing.per_staf.length} staf bertugas</span>
+          </div>
+          <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+            <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
+          </div>
+
+          {#if ringkasanGudang.packing.per_staf.length > 0}
+            <div class="mt-4 flex flex-wrap gap-2">
+              {#each ringkasanGudang.packing.per_staf as staf (staf.nama)}
+                <PilTitik warna={staf.mulai ? 'gray' : 'amber'}>
+                  {staf.nama} · {staf.selesai}/{staf.target}{staf.mulai ? '' : ' · belum mulai'}
+                </PilTitik>
+              {/each}
+            </div>
+          {/if}
+        </RingkasanSection>
+
+        <RingkasanSection
+          icon="exclamation-circle"
+          warna="amber"
+          judul="Perlu Tindakan"
+          keterangan="Yang menunggu keputusan SPV {ringkasanGudang.gudang.nama}"
+        >
+          <PerluTindakan
+            transfer={ringkasanGudang.perlu_tindakan.transfer_menunggu}
+            muat={[{ ...ringkasanGudang.gudang, kerdus_menunggu_muat: ringkasanGudang.perlu_tindakan.kerdus_menunggu_muat }]}
+          />
+        </RingkasanSection>
+
+        <RingkasanSection
+          icon="clipboard-document-list"
+          warna="blue"
+          judul="Beban Gudang"
+          keterangan="Resi yang tercatat sedang dikerjakan {ringkasanGudang.gudang.nama}"
+        >
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {#each TAHAP_BEBAN as [kunci, label] (kunci)}
+              <StatTile {label} nilai={ringkasanGudang.beban[kunci] ?? 0} satuan="resi" />
+            {/each}
+          </div>
+          <p class="text-xs text-gray-400 mt-3">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
+        </RingkasanSection>
+
+        <RingkasanSection
+          icon="archive-box"
+          warna="green"
+          judul="Saldo Stok per Varian"
+          keterangan="A5, A6, dan IQRA dipisah varian terjemahannya — {ringkasanGudang.gudang.nama}"
+        >
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {#each ringkasanGudang.stok_kartu as baris (baris.kode_jenis + (baris.varian || 'x'))}
+              <KartuStok {baris} />
+            {/each}
+          </div>
+          <p class="text-xs text-gray-400 mt-3">Resi lama tanpa lokasi tidak dihitung di sini.</p>
+        </RingkasanSection>
+      {/if}
+
+      {#if ringkasanManager}
+        <RingkasanSection
+          icon="cube"
+          judul="Packing Hari Ini — Semua Gudang"
+          keterangan="Gabungan target & hasil {perGudangUrut.map((g) => g.nama).join(' + ')}"
+        >
+          <div slot="kanan" class="text-right flex-none">
+            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{pctGabungan}%</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <StatTile label="Target hari ini" nilai={gabunganTarget} satuan="mushaf" />
+            <StatTile label="Sudah dikemas" nilai={gabunganSelesai} satuan="mushaf">
+              <PilTitik class="mt-2">{pctGabungan}%</PilTitik>
+            </StatTile>
+            <StatTile label="Kerdus tersegel" nilai={ringkasanManager.gabungan.kerdus_tersegel} satuan="kerdus" />
+            <StatTile
+              label="Staf belum mulai"
+              nilai={ringkasanManager.gabungan.staf_belum_mulai}
+              satuan="staf"
+              peringatan={ringkasanManager.gabungan.staf_belum_mulai > 0}
+            >
+              {#if gBelumNama.length > 0}
+                <PilTitik warna="amber" class="mt-2">
+                  {gBelumNama.slice(0, 3).join(', ')}{gBelumNama.length > 3 ? ' +' + (gBelumNama.length - 3) + ' lagi' : ''}
+                </PilTitik>
+              {/if}
+            </StatTile>
+          </div>
+
+          <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
+            <span>Progress kemas gabungan</span>
             <span><b class="text-gray-900">{gabunganSelesai}</b> / {gabunganTarget} mushaf · {ringkasanManager.gabungan.staf_bertugas} staf bertugas</span>
           </div>
           <!-- Setiap segmen = kontribusi satu gudang terhadap target gabungan
                (segmen pertama = gudang terdepan, warnanya sama dengan kartu
                Performa Gudang di bawah); lihat legendanya. -->
           <div class="flex h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            {#if segGabungan[0] > 0}
-              <span class="h-full transition-all duration-500" style="width: {segGabungan[0]}%; background: {warnaGudang(0)};"></span>
-            {/if}
-            {#if segGabungan[1] > 0}
-              <span class="h-full transition-all duration-500" style="width: {segGabungan[1]}%; background: {warnaGudang(1)};"></span>
-            {/if}
+            {#each segGabungan as lebar, i}
+              {#if lebar > 0}
+                <span class="h-full transition-all duration-500 {warnaGudang(i).bg}" style="width: {lebar}%"></span>
+              {/if}
+            {/each}
           </div>
           <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
             {#each perGudangUrut as g, i (g.id)}
-              <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full flex-none" style="background: {warnaGudang(i)};"></span>{g.nama} · {g.selesai}</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full flex-none {warnaGudang(i).bg}"></span>{g.nama} · {g.selesai}</span>
             {/each}
             <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-300 flex-none"></span>Sisa {sisaGabungan}</span>
           </div>
-        </section>
+        </RingkasanSection>
 
-        <!-- Performa gudang: capaian tiap gudang, diurut dari persen tertinggi -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-[#5e6ad2] flex-none">
-              <HeroIcon name="chart-pie" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Performa Gudang</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Capaian tiap gudang hari ini, diurut dari yang terdepan</p>
-            </div>
-          </div>
-
+        <RingkasanSection
+          icon="chart-pie"
+          judul="Performa Gudang"
+          keterangan="Capaian tiap gudang hari ini, diurut dari yang terdepan"
+        >
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {#each perGudangUrut as g, i (g.id)}
               <div class="border border-gray-200 rounded-xl p-4">
@@ -587,15 +524,13 @@
                       <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border border-gray-200 text-gray-500">{g.kode}</span>
                     </div>
                     {#if tampilTerdepan(i)}
-                      <span class="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border border-gray-200 text-gray-500">
-                        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Terdepan hari ini
-                      </span>
+                      <PilTitik warna="green" class="mt-1.5">Terdepan hari ini</PilTitik>
                     {/if}
                   </div>
                   <div class="relative w-16 h-16 flex-none">
                     <svg viewBox="0 0 64 64" class="w-16 h-16">
-                      <circle cx="32" cy="32" r="27" fill="none" stroke="rgb(229 231 235)" stroke-width="7"></circle>
-                      <circle cx="32" cy="32" r="27" fill="none" stroke={warnaGudang(i)} stroke-width="7" stroke-linecap="round"
+                      <circle cx="32" cy="32" r="27" fill="none" class="stroke-gray-200" stroke-width="7"></circle>
+                      <circle cx="32" cy="32" r="27" fill="none" class={warnaGudang(i).stroke} stroke-width="7" stroke-linecap="round"
                         stroke-dasharray={DONUT_KELILING} stroke-dashoffset={donutOffset(g.persen)} transform="rotate(-90 32 32)"></circle>
                     </svg>
                     <span class="absolute inset-0 flex items-center justify-center text-[15px] font-bold text-gray-900">{g.persen}%</span>
@@ -603,8 +538,8 @@
                 </div>
 
                 <div class="grid grid-cols-2 gap-y-2 text-sm border-t border-gray-100 pt-3">
-                  <span class="text-gray-500">Target</span><span class="text-right font-medium text-gray-900">{g.target}</span>
-                  <span class="text-gray-500">Sudah dikemas</span><span class="text-right font-medium text-gray-900">{g.selesai}</span>
+                  <span class="text-gray-500">Target</span><span class="text-right font-medium text-gray-900">{g.target} mushaf</span>
+                  <span class="text-gray-500">Sudah dikemas</span><span class="text-right font-medium text-gray-900">{g.selesai} mushaf</span>
                   <span class="text-gray-500">Kerdus tersegel</span><span class="text-right font-medium text-gray-900">{g.kerdus_tersegel} kerdus</span>
                   <span class="text-gray-500">Staf bertugas</span><span class="text-right font-medium text-gray-900">{g.staf_total} staf</span>
                   <span class="text-gray-500">Menunggu dimuat</span><span class="text-right font-medium text-gray-900">{g.kerdus_menunggu_muat} kerdus penuh</span>
@@ -612,171 +547,84 @@
 
                 <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200">
                   {#if g.staf_belum_mulai > 0}
-                    <!-- tanpa @html: tag <b> di template literal ditampilkan mentah oleh Svelte -->
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border border-gray-200 text-amber-700 min-w-0">
-                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-none"></span>
-                      <span class="truncate">{g.staf_belum_mulai} staf belum mulai — {g.belum_nama.join(', ')}</span>
-                    </span>
+                    <PilTitik warna="amber">{g.staf_belum_mulai} staf belum mulai — {g.belum_nama.join(', ')}</PilTitik>
                   {:else}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border border-gray-200 text-green-700">
-                      <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                      Semua staf sudah mulai
-                    </span>
+                    <PilTitik warna="green">Semua staf sudah mulai</PilTitik>
                   {/if}
                   <span class="w-14 h-1.5 rounded-full bg-gray-200 overflow-hidden flex-none">
-                    <span class="block h-full rounded-full" style="width: {g.persen}%; background: {warnaGudang(i)};"></span>
+                    <span class="block h-full rounded-full {warnaGudang(i).bg}" style="width: {Math.min(100, g.persen)}%"></span>
                   </span>
                 </div>
               </div>
             {/each}
           </div>
-        </section>
+        </RingkasanSection>
 
-        <!-- Perlu tindakan -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
-              <HeroIcon name="exclamation-circle" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Perlu Tindakan</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Menunggu keputusan manager gudang</p>
-            </div>
-          </div>
+        <RingkasanSection
+          icon="exclamation-circle"
+          warna="amber"
+          judul="Perlu Tindakan"
+          keterangan="Yang menunggu keputusan manager gudang"
+        >
+          <PerluTindakan
+            transfer={ringkasanManager.transfer_menunggu}
+            muat={ringkasanManager.per_gudang}
+            tampilTujuan
+          />
+        </RingkasanSection>
 
-          {#if ringkasanManager.transfer_menunggu.length > 0}
-            {#each ringkasanManager.transfer_menunggu as t (t.kode)}
-              <div class="border border-gray-200 rounded-lg p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
-                  <HeroIcon name="arrow-down-tray" class="w-6 h-6" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="font-semibold text-gray-900">Dokumen {t.kode} menunggu diterima</p>
-                  <p class="text-sm text-gray-600 mt-0.5">{t.asal} → <b class="text-gray-900">{t.tujuan}</b> · {t.jumlah_resi} resi ({t.jumlah_eks} mushaf)</p>
-                  <p class="text-xs text-gray-400 mt-1">Dibuat {t.dibuat_pada} — lokasi mushaf berpindah saat gudang tujuan menekan Terima.</p>
-                </div>
-                <a href="/admin/transfer-mushaf" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 text-center flex-none">Buka Perpindahan</a>
-              </div>
-            {/each}
-          {:else}
-            <div class="rounded-lg border border-dashed border-gray-300 p-4 flex items-center gap-3 mb-3">
-              <span class="text-green-500 text-lg flex-none">✓</span>
-              <p class="text-sm text-gray-600">Tidak ada kiriman antar gudang yang menunggu. Semua beres.</p>
-            </div>
-          {/if}
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {#each ringkasanManager.per_gudang as g (g.id)}
-              <div class="rounded-lg border border-dashed border-gray-300 p-4 flex items-center gap-3">
-                <span class="flex-none text-indigo-600"><HeroIcon name="truck" class="w-5 h-5" /></span>
-                <p class="text-sm text-gray-600 flex-1">
-                  <b class="text-gray-900">{g.kerdus_menunggu_muat} kerdus</b> penuh menunggu dimuat — <span class="text-gray-500">{g.nama}</span>
+        <RingkasanSection
+          icon="clipboard-document-list"
+          warna="blue"
+          judul="Beban Gudang"
+          keterangan="Resi yang tercatat sedang dikerjakan — gabungan dengan rincian per gudang"
+        >
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {#each TAHAP_BEBAN as [kunci, label] (kunci)}
+              <StatTile {label} nilai={totalBeban(kunci)} satuan="resi">
+                <p class="text-[11px] text-gray-500 mt-1 truncate">
+                  {ringkasanManager.per_gudang.map((g) => g.kode + ' ' + (g.beban[kunci] ?? 0)).join(' · ')}
                 </p>
-              </div>
+              </StatTile>
             {/each}
           </div>
-        </section>
+          <p class="text-xs text-gray-400 mt-3">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
+        </RingkasanSection>
 
-        <!-- Kartu stok DUA gudang -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-green-600 flex-none">
-                <HeroIcon name="archive-box" class="w-4 h-4" />
-              </div>
-              <div>
-                <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Saldo Stok per Varian</h2>
-                <p class="text-xs sm:text-sm text-gray-500">A5, A6, dan IQRA dipisah varian terjemahannya — per gudang</p>
-              </div>
-            </div>
-            <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Saring kartu stok per gudang">
-              <button type="button" on:click={() => (stokAktif = 'semua')}
-                class="px-3 py-1.5 rounded-md text-sm font-medium {stokAktif === 'semua' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua</button>
-              {#each ringkasanManager.per_gudang as g (g.id)}
-                <button type="button" on:click={() => (stokAktif = String(g.id))}
-                  class="px-3 py-1.5 rounded-md text-sm font-medium {String(stokAktif) === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
-              {/each}
-            </div>
+        <RingkasanSection
+          icon="archive-box"
+          warna="green"
+          judul="Saldo Stok per Varian"
+          keterangan="A5, A6, dan IQRA dipisah varian terjemahannya — per gudang"
+        >
+          <div slot="kanan" class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Saring kartu stok per gudang">
+            <button type="button" role="tab" aria-selected={stokAktif === 'semua'} on:click={() => (stokAktif = 'semua')}
+              class="px-3 py-1.5 rounded-md text-sm font-medium {stokAktif === 'semua' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua</button>
+            {#each ringkasanManager.per_gudang as g (g.id)}
+              <button type="button" role="tab" aria-selected={stokAktif === String(g.id)} on:click={() => (stokAktif = String(g.id))}
+                class="px-3 py-1.5 rounded-md text-sm font-medium {stokAktif === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
+            {/each}
           </div>
 
           <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {#each ringkasanManager.per_gudang as g (g.id)}
+            {#each ringkasanManager.per_gudang.filter((g) => stokAktif === 'semua' || stokAktif === String(g.id)) as g (g.id)}
               {#each g.stok_kartu as baris (g.id + baris.kode_jenis + (baris.varian || 'x'))}
-                <div class="rounded-lg border p-4 {baris.status === 'habis' ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}"
-                  style={stokAktif !== 'semua' && String(stokAktif) !== String(g.id) ? 'display:none' : ''}>
-                  <div class="flex items-center gap-1.5 mb-2 flex-wrap">
-                    <span class="text-xs font-bold text-gray-900">{baris.kode_jenis}</span>
-                    {#if baris.varian}
-                      <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">{baris.varian}</span>
-                    {/if}
-                    {#if baris.status !== 'normal'}
-                      <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
-                        {baris.status === 'habis' ? 'Stok habis' : 'Stok rendah'}
-                      </span>
-                    {/if}
-                  </div>
-                  <p class="text-2xl font-bold text-gray-900">{baris.eks} <span class="text-xs font-medium text-gray-400">eks</span></p>
-                  <p class="text-xs text-gray-500">{padananStok(baris)}</p>
-                  <p class="text-xs text-gray-400 mt-2">{g.nama}</p>
-                </div>
+                <KartuStok {baris} gudang={g.nama} />
               {/each}
             {/each}
           </div>
-        </section>
-
-        <!-- Beban per gudang (tabel) -->
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
-              <HeroIcon name="document-text" class="w-4 h-4" />
-            </div>
-            <div>
-              <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Beban per Gudang</h2>
-              <p class="text-xs sm:text-sm text-gray-500">Resi yang tercatat sedang dikerjakan tiap gudang</p>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gudang</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Pemesanan</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Packing</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Selesai packing</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Dalam kerdus</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                {#each ringkasanManager.per_gudang as g (g.id)}
-                  <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 font-medium text-gray-900">{g.nama}</td>
-                    <td class="px-4 py-3 text-right text-gray-700">{g.beban.pemesanan}</td>
-                    <td class="px-4 py-3 text-right text-gray-700">{g.beban.packing}</td>
-                    <td class="px-4 py-3 text-right text-gray-700">{g.beban.selesai_packing}</td>
-                    <td class="px-4 py-3 text-right text-gray-700">{g.beban.dalam_kerdus}</td>
-                  </tr>
-                {/each}
-                <tr class="bg-gray-50 font-semibold">
-                  <td class="px-4 py-3 text-gray-900">Total</td>
-                  <td class="px-4 py-3 text-right">{(ringkasanManager.per_gudang || []).reduce((n, i) => n + i.beban.pemesanan, 0)}</td>
-                  <td class="px-4 py-3 text-right">{(ringkasanManager.per_gudang || []).reduce((n, i) => n + i.beban.packing, 0)}</td>
-                  <td class="px-4 py-3 text-right">{(ringkasanManager.per_gudang || []).reduce((n, i) => n + i.beban.selesai_packing, 0)}</td>
-                  <td class="px-4 py-3 text-right">{(ringkasanManager.per_gudang || []).reduce((n, i) => n + i.beban.dalam_kerdus, 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+          <p class="text-xs text-gray-400 mt-3">Resi lama tanpa lokasi tidak dihitung di sini.</p>
+        </RingkasanSection>
       {/if}
 
 
+    {#if !adalahPemantau || todayTask}
     <!-- Today's Task Section - Responsive -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex items-center justify-center sm:justify-start mb-4 sm:mb-6">
         <div class="flex items-center space-x-2 sm:space-x-3">
           <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-            <HeroIcon name="pencil-square" class="w-5 h-5" />
+            <HeroIcon name="clipboard-document-check" class="w-4 h-4" />
           </div>
           <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Tugas Hari Ini</h2>
         </div>
@@ -796,7 +644,7 @@
                   {todayTask.total_selesai}<span class="text-lg sm:text-xl text-gray-500">/{todayTask.total_target}</span>
                 </div>
                 <div class="text-base sm:text-lg text-gray-600 mb-3 sm:mb-4">
-                  <span class="font-semibold">{todayTask.progress_percentage}%</span> Progress Completed
+                  <span class="font-semibold">{todayTask.progress_percentage}%</span> tercapai
                 </div>
                 
                 <!-- Progress Bar - Responsive -->
@@ -818,7 +666,7 @@
               {#if todayTask.is_completed}
                 <div class="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6">
                   <div class="mb-2 flex justify-center">
-                    <HeroIcon name="sparkles" class="w-10 h-10 text-green-600" />
+                    <HeroIcon name="check-circle" class="w-10 h-10 text-green-600" />
                   </div>
                   <p class="text-green-800 font-semibold text-base sm:text-lg mb-1">Selamat! Tugas hari ini telah selesai!</p>
                   <p class="text-sm sm:text-base text-green-600">Total: <span class="font-semibold">{todayTask.total_selesai} mushaf</span> berhasil dipacking</p>
@@ -836,7 +684,7 @@
                     </svg>
                     Memulai...
                   {:else}
-                    <HeroIcon name="plus" class="w-5 h-5 mr-2" />
+                    <HeroIcon name="qr-code" class="w-5 h-5 mr-2" />
                     {todayTask.status === 'assigned' ? 'Mulai Packing' : 'Lanjutkan Packing'}
                   {/if}
                 </button>
@@ -873,13 +721,15 @@
             </div>
           {/if}
     </div>
+    {/if}
 
+    {#if !adalahPemantau || recentBoxes.length > 0}
     <!-- Kerdus Terbaru - Responsive -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div class="flex items-center space-x-2 sm:space-x-3">
           <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
-            <HeroIcon name="archive-box" class="w-5 h-5" />
+            <HeroIcon name="archive-box" class="w-4 h-4" />
           </div>
           <div>
             <h2 class="text-lg sm:text-xl font-semibold text-gray-900">Kerdus Terbaru</h2>
@@ -945,6 +795,9 @@
       {/if}
     </div>
 
+    {/if}
+
+    {#if !adalahPemantau}
     <!-- Performance Stats Grid - Responsive -->
     <div class="performance-stats grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       <!-- This Week Performance -->
@@ -952,7 +805,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
             <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <HeroIcon name="chart-bar" class="w-5 h-5" />
+              <HeroIcon name="chart-bar" class="w-4 h-4" />
             </div>
             <div>
               <h3 class="text-base sm:text-lg font-semibold text-gray-900">Performa Minggu Ini</h3>
@@ -971,7 +824,7 @@
             <span class="text-sm sm:text-xl font-semibold text-gray-900">{performanceData.week?.total_achieved || (todayTask ? todayTask.total_selesai : 0)} mushaf</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-sm sm:text-base text-gray-600">Completion Rate</span>
+            <span class="text-sm sm:text-base text-gray-600">Tingkat capaian</span>
             <span class="text-sm sm:text-xl font-semibold text-gray-900">{performanceData.week?.completion_rate || (todayTask ? todayTask.progress_percentage : 0)}%</span>
           </div>
           <div class="flex justify-between items-center">
@@ -986,7 +839,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
             <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <HeroIcon name="calendar-days" class="w-5 h-5" />
+              <HeroIcon name="calendar-days" class="w-4 h-4" />
             </div>
             <div>
               <h3 class="text-base sm:text-lg font-semibold text-gray-900">Performa Bulan Ini</h3>
@@ -1005,16 +858,17 @@
             <span class="text-sm sm:text-xl font-semibold text-gray-900">{performanceData.month?.total_achieved || (todayTask ? todayTask.total_selesai : 0)} mushaf</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-sm sm:text-base text-gray-600">Completion Rate</span>
+            <span class="text-sm sm:text-base text-gray-600">Tingkat capaian</span>
             <span class="text-sm sm:text-xl font-semibold text-gray-900">{performanceData.month?.completion_rate || (todayTask ? todayTask.progress_percentage : 0)}%</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-sm sm:text-base text-gray-600">Perfect Days</span>
+            <span class="text-sm sm:text-base text-gray-600">Hari target penuh</span>
             <span class="text-sm sm:text-xl font-semibold text-gray-900">{performanceData.month?.perfect_days || 0} hari</span>
           </div>
         </div>
       </div>
     </div>
+    {/if}
   </div>
 </AdminLayout>
 
