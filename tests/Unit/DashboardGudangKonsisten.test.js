@@ -30,7 +30,7 @@ const batasMarkup = sumber.indexOf('</script>');
 const skrip = tanpaKomentar(sumber.slice(0, batasMarkup));
 const markup = tanpaKomentar(sumber.slice(batasMarkup));
 
-const KOMPONEN = ['RingkasanSection', 'StatTile', 'PilTitik', 'KartuStok', 'PerluTindakan'];
+const KOMPONEN = ['RingkasanSection', 'StatTile', 'PilTitik', 'KartuStok', 'PerluTindakan', 'FreelancerKerjaHariIni'];
 const sumberKomponen = Object.fromEntries(
     KOMPONEN.map((n) => [n, tanpaKomentar(baca(`Components/Warehouse/${n}.svelte`))]),
 );
@@ -117,12 +117,22 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(isi).toMatch(/\{#if bolehBukaMuatan\}[\s\S]*?\/admin\/muatan[\s\S]*?\{\/if\}/);
     });
 
-    it('dashboard SPV hanya menampilkan freelancer yang sudah mulai kerja hari ini', () => {
+    it('SPV dan Manager hanya menyebut freelancer yang sudah mulai kerja hari ini', () => {
         expect(skrip).toMatch(/stafKerjaHariIni\s*=\s*\(ringkasanGudang\?\.packing\?\.per_staf \?\? \[\]\)\.filter\(\(s\) => s\.mulai\)/);
-        expect(blokSpv).toMatch(/\{#each stafKerjaHariIni as/);
+        expect(skrip).toMatch(/stafKerjaManager\s*=[\s\S]*?g\.staf_kerja/);
+        expect(blokSpv).toMatch(/<FreelancerKerjaHariIni staf=\{stafKerjaHariIni\} \/>/);
+        expect(blokManager).toMatch(/<FreelancerKerjaHariIni staf=\{stafKerjaManager\} \/>/);
+
+        // Nama yang belum mulai tidak lagi disebut di mana pun.
+        expect(sumber).not.toMatch(/belum_nama|gBelumNama/);
         expect(blokSpv).not.toMatch(/\{#each ringkasanGudang\.packing\.per_staf as/);
-        expect(blokSpv).not.toContain('belum mulai\'}');
-        expect(blokSpv).toMatch(/\{#if bolehLihatPerforma\}[\s\S]*?\/admin\/warehouse\/performance[\s\S]*?\{\/if\}/);
+    });
+
+    it('tautan daftar lengkap per tanggal dijaga izin halaman Performa Kerja', () => {
+        const isi = tanpaKomentar(baca('Components/Warehouse/FreelancerKerjaHariIni.svelte'));
+        expect(isi).toMatch(/hasPermission\('warehouse\.performance\.view'\)/);
+        expect(isi).toMatch(/\{#if bolehLihatPerforma\}[\s\S]*?\/admin\/warehouse\/performance[\s\S]*?\{\/if\}/);
+        expect(isi).toMatch(/\{#if staf\.length > 0\}[\s\S]*\{:else\}[\s\S]*Belum ada freelancer/);
     });
 
     it('menyembunyikan kartu pribadi staf bagi SPV/Manager yang hanya memantau', () => {

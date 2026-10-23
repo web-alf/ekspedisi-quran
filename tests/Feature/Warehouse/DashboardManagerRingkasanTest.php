@@ -131,3 +131,21 @@ it('poling dashboard-status tanpa ?ringkasan tidak membawa ringkasan', function 
     expect(array_key_exists('ringkasanManager', $data))->toBeFalse()
         ->and(array_key_exists('ringkasanGudang', $data))->toBeFalse();
 });
+
+it('manager hanya menerima nama freelancer yang sudah mulai kerja hari ini, sama seperti SPV', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+    $andi = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
+    $budi = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
+    $andi->update(['name' => 'Andi']);
+    $budi->update(['name' => 'Budi']);
+
+    DailyPackingTask::create(['user_id' => $andi->id, 'gudang_id' => $this->smg->id, 'tanggal_tugas' => today(), 'total_target' => 20, 'total_selesai' => 12, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()->subHour()]);
+    DailyPackingTask::create(['user_id' => $budi->id, 'gudang_id' => $this->smg->id, 'tanggal_tugas' => today(), 'total_target' => 20, 'total_selesai' => 0, 'status' => 'assigned', 'assigned_at' => now()]);
+
+    $smg = collect($this->actingAs($pj)->get('/admin/warehouse')->assertOk()->viewData('page')['props']['ringkasanManager']['per_gudang'])
+        ->firstWhere('kode', 'SMG');
+
+    expect($smg['staf_kerja'])->toBe([['nama' => 'Andi', 'selesai' => 12, 'target' => 20]])
+        ->and($smg['staf_belum_mulai'])->toBe(1)
+        ->and($smg)->not->toHaveKey('belum_nama');
+});

@@ -93,7 +93,10 @@ class RingkasanGudangService
                     'kerdus_tersegel' => $packing['kerdus_tersegel'],
                     'staf_total' => $packing['jumlah_staf'],
                     'staf_belum_mulai' => $packing['staf_belum_mulai'],
-                    'belum_nama' => collect($packing['per_staf'])->where('mulai', false)->pluck('nama')->values()->all(),
+                    // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya.
+                    'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)
+                        ->map(fn (array $s) => ['nama' => $s['nama'], 'selesai' => $s['selesai'], 'target' => $s['target']])
+                        ->values()->all(),
                     // Hitungan miring saat pusat membeku; buat selalu betul:
                     'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
                     'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),

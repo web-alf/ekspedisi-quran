@@ -12,6 +12,7 @@
   import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
   import PerluTindakan from '../../Components/Warehouse/PerluTindakan.svelte';
+  import FreelancerKerjaHariIni from '../../Components/Warehouse/FreelancerKerjaHariIni.svelte';
   import { hasPermission } from '../../utils/permissions.js';
   import { can } from '../../utils/permissions.js';
 
@@ -73,7 +74,6 @@
   // yang ditugaskan tapi belum mulai cukup terhitung di kotak "Staf belum mulai".
   // Daftar lengkap per tanggal ada di halaman Performa Kerja.
   $: stafKerjaHariIni = (ringkasanGudang?.packing?.per_staf ?? []).filter((s) => s.mulai);
-  $: bolehLihatPerforma = hasPermission('warehouse.performance.view');
 
   $: persenPacking = ringkasanGudang?.packing?.target
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
@@ -102,8 +102,8 @@
     const segB = Math.max(0, Math.min(100 - segA, ((perGudangUrut[1]?.selesai ?? 0) / gabunganTarget) * 100));
     return [segA, segB];
   })();
-  // Nama staf yang belum mulai, diberi kode gudangnya: "Andi · SMG".
-  $: gBelumNama = perGudangUrut.flatMap((g) => (g.belum_nama || []).map((n) => n + ' · ' + g.kode));
+  // Sama dengan SPV: hanya freelancer yang sudah kerja hari ini, diberi kode gudangnya.
+  $: stafKerjaManager = perGudangUrut.flatMap((g) => (g.staf_kerja || []).map((st) => ({ ...st, kode: g.kode })));
 
   // Palet Tailwind (bukan hex lepas) supaya seragam dengan halaman lain.
   // Ditulis utuh agar tidak dibuang purge Tailwind.
@@ -410,28 +410,7 @@
             <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
           </div>
 
-          <div class="mt-4 pt-4 border-t border-dashed border-gray-200">
-            <div class="flex items-center justify-between gap-3 mb-2">
-              <p class="text-xs font-medium text-gray-500">Freelancer yang kerja hari ini</p>
-              {#if bolehLihatPerforma}
-                <a href="/admin/warehouse/performance" class="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800">
-                  Semua per tanggal
-                  <HeroIcon name="arrow-right" class="w-3.5 h-3.5" />
-                </a>
-              {/if}
-            </div>
-            {#if stafKerjaHariIni.length > 0}
-              <div class="flex flex-wrap gap-2">
-                {#each stafKerjaHariIni as staf (staf.nama)}
-                  <PilTitik warna={staf.selesai >= staf.target && staf.target > 0 ? 'green' : 'indigo'}>
-                    {staf.nama} · {staf.selesai}/{staf.target}
-                  </PilTitik>
-                {/each}
-              </div>
-            {:else}
-              <p class="text-sm text-gray-500">Belum ada freelancer yang mulai kerja hari ini.</p>
-            {/if}
-          </div>
+          <FreelancerKerjaHariIni staf={stafKerjaHariIni} />
         </RingkasanSection>
 
         <RingkasanSection
@@ -497,13 +476,7 @@
               nilai={ringkasanManager.gabungan.staf_belum_mulai}
               satuan="staf"
               peringatan={ringkasanManager.gabungan.staf_belum_mulai > 0}
-            >
-              {#if gBelumNama.length > 0}
-                <PilTitik warna="amber" class="mt-2">
-                  {gBelumNama.slice(0, 3).join(', ')}{gBelumNama.length > 3 ? ' +' + (gBelumNama.length - 3) + ' lagi' : ''}
-                </PilTitik>
-              {/if}
-            </StatTile>
+            />
           </div>
 
           <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
@@ -526,6 +499,8 @@
             {/each}
             <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-300 flex-none"></span>Sisa {sisaGabungan}</span>
           </div>
+
+          <FreelancerKerjaHariIni staf={stafKerjaManager} />
         </RingkasanSection>
 
         <RingkasanSection
@@ -566,7 +541,7 @@
 
                 <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200">
                   {#if g.staf_belum_mulai > 0}
-                    <PilTitik warna="amber">{g.staf_belum_mulai} staf belum mulai — {g.belum_nama.join(', ')}</PilTitik>
+                    <PilTitik warna="amber">{g.staf_belum_mulai} staf belum mulai</PilTitik>
                   {:else}
                     <PilTitik warna="green">Semua staf sudah mulai</PilTitik>
                   {/if}
