@@ -347,10 +347,10 @@ class TransferMushafController extends Controller
         return null;
     }
 
-    /** Boleh MENERIMA = pengguna gudang TUJUAN, Manager Repacking, atau super-admin. */
+    /** Boleh MENERIMA = pengguna gudang TUJUAN, Manager Repacking (PJ), atau super-admin. */
     private function bolehTerima(User $user, TransferMushaf $transfer): bool
     {
-        if ($user->hasRole([RoleEnum::SUPER_ADMIN->value, RoleEnum::MANAGER_REPACKING->value])) {
+        if ($this->adalahPj($user)) {
             return true;
         }
 
@@ -360,11 +360,22 @@ class TransferMushafController extends Controller
     /** Boleh MEMBATALKAN = pembuat, pengguna gudang ASAL, Manager Repacking, super-admin. */
     private function bolehBatalkan(User $user, TransferMushaf $transfer): bool
     {
-        if ($user->id === $transfer->created_by
-            || $user->hasRole([RoleEnum::SUPER_ADMIN->value, RoleEnum::MANAGER_REPACKING->value])) {
+        if ($user->id === $transfer->created_by || $this->adalahPj($user)) {
             return true;
         }
 
         return $user->gudang_id && (int) $user->gudang_id === (int) $transfer->gudang_asal_id;
+    }
+
+    /**
+     * PJ = super-admin, atau manager-repacking TANPA role spv-gudang. Di produksi SPV ikut
+     * memegang role manager-repacking; tanpa pengecualian ini SPV Semarang bisa menerima
+     * dokumen yang ditujukan ke Boyolali. Aturan yang sama dengan StokMushafController.
+     */
+    private function adalahPj(User $user): bool
+    {
+        return $user->hasRole(RoleEnum::SUPER_ADMIN->value)
+            || ($user->hasRole(RoleEnum::MANAGER_REPACKING->value)
+                && ! $user->hasRole(RoleEnum::SPV_GUDANG->value));
     }
 }

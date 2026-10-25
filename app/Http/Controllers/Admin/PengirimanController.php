@@ -518,6 +518,7 @@ class PengirimanController extends Controller
 
             $updated = 0;
             $skipped = 0;
+            $diluarGudang = 0;
             $pengirimanList = PengirimanStageVisibility::applyToQuery(
                 Pengiriman::query(),
                 $request->user()
@@ -564,6 +565,15 @@ class PengirimanController extends Controller
             }
 
             foreach ($pengirimanList as $pengiriman) {
+                // Cakupan gudang (25/10/2026): panel "Update Status Massal" di Data Resi memakai
+                // rute ini, bukan batch-status. Tanpa pemeriksaan per baris, SPV bisa mengirim
+                // ID resi gudang lain dan statusnya ikut berpindah.
+                if (! CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id)) {
+                    $diluarGudang++;
+
+                    continue;
+                }
+
                 $oldStatus = $pengiriman->status_id;
 
                 // Validate status transition — skip illegal transitions (backwards, final, same)
@@ -609,23 +619,26 @@ class PengirimanController extends Controller
 
             \DB::commit();
 
+            $message = "{$updated} pengiriman berhasil diupdate statusnya."
+                .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : '')
+                .($diluarGudang > 0 ? " {$diluarGudang} dilewati (tercatat di gudang lain)." : '');
+
             // Return JSON response for AJAX requests
             if ($request->expectsJson() || $request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => "{$updated} pengiriman berhasil diupdate statusnya."
-                        .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''),
+                    'message' => $message,
                     'data' => [
                         'updated_count' => $updated,
                         'skipped_count' => $skipped,
+                        'outside_gudang_count' => $diluarGudang,
                         'files_uploaded' => count($uploadedFiles),
                         'file_paths' => $uploadedFiles,
                     ],
                 ]);
             }
 
-            return back()->with('success', "{$updated} pengiriman berhasil diupdate statusnya."
-                .($skipped > 0 ? " {$skipped} dilewati (transisi tidak valid)." : ''));
+            return back()->with('success', $message);
 
         } catch (\Exception $e) {
             \DB::rollback();

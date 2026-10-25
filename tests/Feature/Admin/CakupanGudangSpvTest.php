@@ -7,6 +7,7 @@ use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
+use App\Models\TransferMushaf;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -167,4 +168,177 @@ it('memindai resi gudang lain di halaman packing ditolak', function () {
 
     expect($res->status())->toBeGreaterThanOrEqual(400)
         ->and($resi->fresh()->gudang_id)->toBe($this->btl->id);
+});
+
+it('Update Status Massal di Data Resi melewati resi gudang lain', function () {
+    $milikSaya = cgResi('pemesanan', $this->smg, 'EQ-2026-76001');
+    $belumBerlabel = cgResi('pemesanan', null, 'EQ-2026-76002');
+    $milikLain = cgResi('pemesanan', $this->btl, 'EQ-2026-76003');
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/pengiriman/bulk-status', [
+            'pengiriman_ids' => [$milikSaya->id, $belumBerlabel->id, $milikLain->id],
+            'status_id' => StatusPengiriman::where('slug', 'produksi')->value('id'),
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('data.updated_count', 2)
+        ->assertJsonPath('data.outside_gudang_count', 1);
+
+    expect($milikSaya->fresh()->status->slug)->toBe('produksi')
+        ->and($belumBerlabel->fresh()->status->slug)->toBe('produksi')
+        ->and($milikLain->fresh()->status->slug)->toBe('pemesanan');
+});
+
+it('PJ tetap bisa Update Status Massal resi semua gudang', function () {
+    $resiSmg = cgResi('pemesanan', $this->smg, 'EQ-2026-76011');
+    $resiBtl = cgResi('pemesanan', $this->btl, 'EQ-2026-76012');
+    $pj = cgAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    $this->actingAs($pj)
+        ->postJson('/admin/pengiriman/bulk-status', [
+            'pengiriman_ids' => [$resiSmg->id, $resiBtl->id],
+            'status_id' => StatusPengiriman::where('slug', 'produksi')->value('id'),
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('data.updated_count', 2);
+});
+
+/** SPV di produksi ikut memegang role manager-repacking. */
+function cgSpvGanda(Gudang $gudang): User
+{
+    $u = User::factory()->create(['is_active' => true, 'gudang_id' => $gudang->id]);
+    $u->syncRoles([RoleEnum::SPV_GUDANG->value, RoleEnum::MANAGER_REPACKING->value]);
+
+    return $u->refresh();
+}
+
+function cgDokumenTransfer(User $pembuat, Gudang $tujuan, string $noResi): TransferMushaf
+{
+    $resi = cgResi('packing', $pembuat->gudang, $noResi);
+
+    test()->actingAs($pembuat)
+        ->postJson('/admin/transfer-mushaf', ['gudang_tujuan_id' => $tujuan->id, 'pengiriman_ids' => [$resi->id]])
+        ->assertSuccessful();
+
+    return TransferMushaf::latest('id')->firstOrFail();
+}
+
+it('SPV yang juga memegang role manager-repacking tidak bisa menerima dokumen ke gudang lain', function () {
+    $spvSmg = cgSpvGanda($this->smg);
+    $dokumen = cgDokumenTransfer($spvSmg, $this->btl, 'EQ-2026-77001');
+
+    $this->actingAs($spvSmg)
+        ->postJson("/admin/transfer-mushaf/{$dokumen->id}/terima")
+        ->assertForbidden();
+
+    expect($dokumen->fresh()->status)->toBe(TransferMushaf::STATUS_DIPROSES);
+});
+
+it('SPV yang juga memegang role manager-repacking tidak bisa membatalkan dokumen gudang lain', function () {
+    $spvBtl = cgSpvGanda($this->btl);
+    $spvSmg = cgSpvGanda($this->smg);
+    $dokumen = cgDokumenTransfer($spvBtl, $this->smg, 'EQ-2026-77002');
+
+    $this->actingAs($spvSmg)
+        ->postJson("/admin/transfer-mushaf/{$dokumen->id}/batalkan")
+        ->assertForbidden();
+
+    expect($dokumen->fresh()->status)->toBe(TransferMushaf::STATUS_DIPROSES);
+});
+
+it('PJ tanpa role spv-gudang tetap bisa menerima dokumen gudang mana pun', function () {
+    $dokumen = cgDokumenTransfer(cgSpvGanda($this->smg), $this->btl, 'EQ-2026-77003');
+    $pj = cgAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    $this->actingAs($pj)
+        ->postJson("/admin/transfer-mushaf/{$dokumen->id}/terima")
+        ->assertSuccessful();
+
+    expect($dokumen->fresh()->status)->toBe(TransferMushaf::STATUS_DITERIMA);
+});
+
+function cgTugas(User $pekerja, ?Gudang $gudang): DailyPackingTask
+{
+    return DailyPackingTask::factory()->create([
+        'user_id' => $pekerja->id,
+        'gudang_id' => $gudang?->id,
+        'tanggal_tugas' => today(),
+        'status' => DailyPackingTask::STATUS_ASSIGNED,
+        'total_selesai' => 0,
+    ]);
+}
+
+it('poling Monitor hanya mengirim tugas dan freelancer gudang SPV', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+    $freelancerSmg = cgAkun(RoleEnum::WAREHOUSE->value, $this->smg);
+    $freelancerBtl = cgAkun(RoleEnum::WAREHOUSE->value, $this->btl);
+    $freelancerBaru = cgAkun(RoleEnum::WAREHOUSE->value);
+    $tugasSmg = cgTugas($freelancerSmg, $this->smg);
+    $tugasBtl = cgTugas($freelancerBtl, $this->btl);
+
+    $data = $this->actingAs($spv)->getJson('/admin/supervisor/warehouse-monitor/data')->assertSuccessful();
+
+    expect(collect($data->json('dailyTasks'))->pluck('id')->all())->toBe([$tugasSmg->id])
+        ->and($data->json('dailyTasks.0.gudang'))->toBe('Gudang Semarang')
+        ->and(collect($data->json('warehouseUsers'))->pluck('id')->sort()->values()->all())
+        ->toBe(collect([$freelancerSmg->id, $freelancerBaru->id])->sort()->values()->all());
+
+    $semua = $this->actingAs(cgAkun(RoleEnum::MANAGER_REPACKING->value))
+        ->getJson('/admin/supervisor/warehouse-monitor/data')
+        ->json('dailyTasks');
+
+    expect(collect($semua)->pluck('id')->sort()->values()->all())
+        ->toBe(collect([$tugasSmg->id, $tugasBtl->id])->sort()->values()->all());
+});
+
+it('SPV tidak bisa menghapus tugas gudang lain, tapi bisa menghapus tugas gudangnya', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+    $tugasBtl = cgTugas(cgAkun(RoleEnum::WAREHOUSE->value, $this->btl), $this->btl);
+    $tugasSmg = cgTugas(cgAkun(RoleEnum::WAREHOUSE->value, $this->smg), $this->smg);
+
+    $this->actingAs($spv)
+        ->deleteJson("/admin/supervisor/warehouse-monitor/task/{$tugasBtl->id}/delete")
+        ->assertForbidden();
+
+    $this->actingAs($spv)
+        ->deleteJson("/admin/supervisor/warehouse-monitor/task/{$tugasSmg->id}/delete")
+        ->assertSuccessful();
+
+    expect(DailyPackingTask::whereKey($tugasBtl->id)->exists())->toBeTrue()
+        ->and(DailyPackingTask::whereKey($tugasSmg->id)->exists())->toBeFalse();
+});
+
+it('SPV tidak bisa menugaskan freelancer gudang lain', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+    $freelancerBtl = cgAkun(RoleEnum::WAREHOUSE->value, $this->btl);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancerBtl->id, 'target' => 10])
+        ->assertForbidden();
+
+    expect(DailyPackingTask::where('user_id', $freelancerBtl->id)->exists())->toBeFalse();
+});
+
+it('SPV tidak bisa menimpa tugas hari ini yang sudah bertagih gudang lain', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+    $freelancer = cgAkun(RoleEnum::WAREHOUSE->value);
+    $tugas = cgTugas($freelancer, $this->btl);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->assertForbidden();
+
+    expect($tugas->fresh()->gudang_id)->toBe($this->btl->id);
+});
+
+it('SPV tetap bisa menugaskan freelancer gudangnya sendiri', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value, $this->smg);
+    $freelancer = cgAkun(RoleEnum::WAREHOUSE->value, $this->smg);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->assertSuccessful();
+
+    expect(DailyPackingTask::where('user_id', $freelancer->id)->value('gudang_id'))->toBe($this->smg->id);
 });

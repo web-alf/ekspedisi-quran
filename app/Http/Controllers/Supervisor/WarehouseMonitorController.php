@@ -36,9 +36,13 @@ class WarehouseMonitorController extends Controller
     public function getData()
     {
         try {
+            // Poling tiap 30 detik memakai cakupan yang sama dengan index(); dulu tidak,
+            // sehingga daftar tugas SPV tertimpa tugas kedua gudang setelah 30 detik.
+            $tercakupGudang = $this->gudangTercakup();
+
             return response()->json([
-                'warehouseUsers' => $this->getWarehouseUsers(),
-                'dailyTasks' => $this->getDailyTasks(),
+                'warehouseUsers' => $this->getWarehouseUsers($tercakupGudang),
+                'dailyTasks' => $this->getDailyTasks($tercakupGudang),
                 'recentActivities' => $this->getRecentActivities(),
                 'summary' => $this->getSummaryStats(),
                 'stockInfo' => $this->getWarehouseStockInfo(),
@@ -114,20 +118,10 @@ class WarehouseMonitorController extends Controller
                 ->with('error', 'Akses ditolak. Halaman ini khusus untuk pengguna yang memiliki izin monitor gudang.');
         }
 
-        // Get today's tasks for all warehouse users
-        $todayTasks = DailyPackingTask::whereDate('tanggal_tugas', today())
-            ->with(['user', 'user.gudang', 'packingBoxes', 'gudang'])
-            ->get();
-
         // Fase 3 revisi: SPV Gudang tercakup ke gudangnya — daftar tugas di
         // Monitor hanya menampilkan tugas gudangnya sendiri (PJ & peran lain
         // melihat kedua gudang). Agregat statistik tetap global.
-        $tercakupGudang = auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value)
-            ? auth()->user()->gudang_id
-            : null;
-        if ($tercakupGudang !== null) {
-            $todayTasks = $todayTasks->filter(fn ($task) => $task->gudang_id === $tercakupGudang)->values();
-        }
+        $tercakupGudang = $this->gudangTercakup();
 
         // Get warehouse users stats
         $warehouseUsers = User::permission('warehouse.dashboard')
@@ -158,32 +152,9 @@ class WarehouseMonitorController extends Controller
         $userPerformance = $bolehLihatPerforma ? $this->getUserPerformanceSummary($currentMonth) : [];
 
         return Inertia::render('Supervisor/WarehouseMonitor', [
-            'dailyTasks' => $todayTasks->map(function ($task) {
-                return [
-                    'id' => $task->id,
-                    'user_id' => $task->user_id,
-                    'user' => [
-                        'id' => $task->user->id,
-                        'name' => $task->user->name,
-                        'email' => $task->user->email,
-                    ],
-                    // Fase 2 rombakan gudang: tugas bertagih gudang penugasa
-                    // (Semarang/Boyolali); null = tidak bertagih.
-                    'gudang' => $task->gudang?->nama,
-                    'target_quantity' => $task->total_target - ($task->sisa_kemarin ?? 0),
-                    'carry_over_quantity' => $task->sisa_kemarin ?? 0,
-                    'total_target' => $task->total_target,
-                    'packed_quantity' => $task->total_selesai ?? 0,
-                    'progress_percentage' => $task->progress_percentage,
-                    'status' => $task->status,
-                    'started_at' => $task->started_at?->format('H:i'),
-                    'completed_at' => $task->completed_at?->format('H:i'),
-                    'total_boxes' => $task->packingBoxes->count(),
-                    'sealed_boxes' => $task->packingBoxes->where('status', 'sealed')->count(),
-                ];
-            }),
+            'dailyTasks' => $this->getDailyTasks($tercakupGudang),
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
-            'warehouseUsers' => $this->getWarehouseUsers(),
+            'warehouseUsers' => $this->getWarehouseUsers($tercakupGudang),
             'recentActivities' => $this->getRecentActivities(),
             'summary' => $this->getSummaryStats(),
             'kartuGudang' => $this->kartuGudang($tercakupGudang),
@@ -538,9 +509,30 @@ class WarehouseMonitorController extends Controller
             'gudang_id' => 'nullable|integer|exists:gudang,id',
         ]);
 
-        try {
-            $user = User::find($request->user_id);
+        $user = User::find($request->user_id);
+        $gudangTercakup = $this->gudangTercakup();
 
+        // SPV tidak boleh menugaskan freelancer gudang lain atau menimpa tugas yang sudah
+        // bertagih gudang lain: tagihannya akan ikut berpindah ke gudang SPV ini, dan kerdus
+        // yang dibuat freelancer itu tercatat di gudang yang salah.
+        if ($gudangTercakup !== null) {
+            $gudangTugasHariIni = DailyPackingTask::where('user_id', $user->id)
+                ->whereDate('tanggal_tugas', today())
+                ->value('gudang_id');
+
+            $gudangLain = collect([$user->gudang_id, $gudangTugasHariIni])
+                ->filter()
+                ->contains(fn ($gudangId) => (int) $gudangId !== $gudangTercakup);
+
+            if ($gudangLain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "{$user->name} terpasang di gudang lain. Hanya SPV gudang tersebut yang boleh menugaskannya.",
+                ], 403);
+            }
+        }
+
+        try {
             // Allow update if task already exists
             $result = $this->assignmentService->assignDailyTaskToUserWithTarget(
                 $user,
@@ -632,6 +624,15 @@ class WarehouseMonitorController extends Controller
      */
     public function deleteTask(DailyPackingTask $task)
     {
+        $gudangTercakup = $this->gudangTercakup();
+
+        if ($gudangTercakup !== null && (int) $task->gudang_id !== $gudangTercakup) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tugas ini milik gudang lain. Hanya SPV gudang tersebut yang boleh menghapusnya.',
+            ], 403);
+        }
+
         try {
             // Check if task can be deleted
             if ($task->total_selesai > 0) {
@@ -785,14 +786,20 @@ class WarehouseMonitorController extends Controller
         ];
     }
 
-    private function getWarehouseUsers()
+    private function getWarehouseUsers(?int $gudangTercakup = null)
     {
         // Daftar KANDIDAT PENUGASAN PACKING: hanya role `warehouse` (freelancer
         // pekerja). Dulu memakai penyaring izin `warehouse.dashboard`, sehingga
         // super-admin (memegang semua izin) dan peran lain ikut tampil di modal
         // Assign Target padahal bukan pekerja packing.
+        //
+        // SPV hanya ditawari freelancer gudangnya + yang belum ditempatkan — sama dengan
+        // yang diterima assignTargetToUser().
         return User::role(RoleEnum::WAREHOUSE->value)
             ->where('is_active', true)
+            ->when($gudangTercakup !== null, fn ($q) => $q->where(fn ($q2) => $q2
+                ->where('gudang_id', $gudangTercakup)
+                ->orWhereNull('gudang_id')))
             ->with([
                 'dailyPackingTasks' => function ($query) {
                     $query->whereDate('tanggal_tugas', today());
@@ -813,12 +820,13 @@ class WarehouseMonitorController extends Controller
     }
 
     /**
-     * Helper method to get daily tasks
+     * Tugas hari ini untuk daftar di Monitor — dipakai index() dan poling getData().
      */
-    private function getDailyTasks()
+    private function getDailyTasks(?int $gudangTercakup = null)
     {
         return DailyPackingTask::whereDate('tanggal_tugas', today())
-            ->with(['user', 'packingBoxes'])
+            ->when($gudangTercakup !== null, fn ($q) => $q->where('gudang_id', $gudangTercakup))
+            ->with(['user', 'packingBoxes', 'gudang'])
             ->get()
             ->map(function ($task) {
                 return [
@@ -829,7 +837,10 @@ class WarehouseMonitorController extends Controller
                         'name' => $task->user->name,
                         'email' => $task->user->email,
                     ],
-                    'target_quantity' => $task->total_target - $task->sisa_kemarin,
+                    // Fase 2 rombakan gudang: tugas bertagih gudang penugasa
+                    // (Semarang/Boyolali); null = tidak bertagih.
+                    'gudang' => $task->gudang?->nama,
+                    'target_quantity' => $task->total_target - ($task->sisa_kemarin ?? 0),
                     'carry_over_quantity' => $task->sisa_kemarin ?? 0,
                     'total_target' => $task->total_target,
                     'packed_quantity' => $task->total_selesai ?? 0,
@@ -840,7 +851,21 @@ class WarehouseMonitorController extends Controller
                     'total_boxes' => $task->packingBoxes->count(),
                     'sealed_boxes' => $task->packingBoxes->where('status', 'sealed')->count(),
                 ];
-            });
+            })
+            ->values();
+    }
+
+    /**
+     * Gudang yang membatasi akun ini di Monitor: gudang SPV, atau null (PJ/super-admin
+     * dan SPV yang belum ditempatkan melihat kedua gudang).
+     */
+    private function gudangTercakup(): ?int
+    {
+        $user = auth()->user();
+
+        return $user->hasRole(RoleEnum::SPV_GUDANG->value) && $user->gudang_id
+            ? (int) $user->gudang_id
+            : null;
     }
 
     /**
