@@ -149,3 +149,23 @@ it('manager hanya menerima nama freelancer yang sudah mulai kerja hari ini, sama
         ->and($smg['staf_belum_mulai'])->toBe(1)
         ->and($smg)->not->toHaveKey('belum_nama');
 });
+
+it('angka gabungan sama dengan jumlah per gudang; tugas tanpa gudang disebut terpisah', function () {
+    $pj = drAkun(['warehouse', 'manager-repacking']);
+    $stafSmg = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
+    $stafBtl = drAkun([RoleEnum::WAREHOUSE->value], $this->btl);
+    $stafLepas = drAkun([RoleEnum::WAREHOUSE->value]);
+
+    DailyPackingTask::create(['user_id' => $stafSmg->id, 'gudang_id' => $this->smg->id, 'tanggal_tugas' => today(), 'total_target' => 40, 'total_selesai' => 20, 'status' => 'in_progress', 'assigned_at' => now(), 'started_at' => now()]);
+    DailyPackingTask::create(['user_id' => $stafBtl->id, 'gudang_id' => $this->btl->id, 'tanggal_tugas' => today(), 'total_target' => 30, 'total_selesai' => 10, 'status' => 'assigned', 'assigned_at' => now()]);
+    DailyPackingTask::create(['user_id' => $stafLepas->id, 'gudang_id' => null, 'tanggal_tugas' => today(), 'total_target' => 50, 'total_selesai' => 5, 'status' => 'assigned', 'assigned_at' => now()]);
+
+    $m = $this->actingAs($pj)->get('/admin/warehouse')->assertOk()->viewData('page')['props']['ringkasanManager'];
+    $perGudang = collect($m['per_gudang']);
+
+    expect($m['gabungan']['target'])->toBe($perGudang->sum('target'))->toBe(70)
+        ->and($m['gabungan']['selesai'])->toBe($perGudang->sum('selesai'))->toBe(30)
+        ->and($m['gabungan']['staf_bertugas'])->toBe($perGudang->sum('staf_total'))->toBe(2)
+        ->and($m['gabungan']['staf_belum_mulai'])->toBe($perGudang->sum('staf_belum_mulai'))->toBe(1)
+        ->and($m['gabungan']['tugas_tanpa_gudang'])->toBe(1);
+});

@@ -315,12 +315,17 @@ it('menolak mushaf yang tidak bisa dipindahkan dengan alasan yang bisa dibaca', 
         ->assertStatus(422);
 })->group('lokasi-mushaf');
 
-it('membuka halaman perpindahan untuk SPV yang tidak punya warehouse.dashboard', function () {
+it('membuka halaman perpindahan untuk pemegang mushaf.transfer tanpa warehouse.dashboard', function () {
     // Kalau halamannya ditaruh di dalam grup rute bergerbang warehouse.dashboard, pemegang
     // izin mushaf.transfer justru kena 403. Diuji langsung supaya tidak diam-diam kembali.
-    expect($this->spvSmg->hasPermissionTo('warehouse.dashboard'))->toBeFalse();
+    // Sejak migrasi 2026_10_25_165257 role spv-gudang memegang warehouse.dashboard, jadi
+    // yang diuji adalah akun dengan izin langsung tanpa role.
+    $pemegangTransfer = User::factory()->create(['is_active' => true, 'gudang_id' => $this->smg->id]);
+    $pemegangTransfer->givePermissionTo('mushaf.transfer', 'shipments.read');
 
-    $this->actingAs($this->spvSmg)->get('/admin/transfer-mushaf')->assertSuccessful();
+    expect($pemegangTransfer->hasPermissionTo('warehouse.dashboard'))->toBeFalse();
+
+    $this->actingAs($pemegangTransfer)->get('/admin/transfer-mushaf')->assertSuccessful();
     $this->actingAs($this->superAdmin)->get('/admin/transfer-mushaf')->assertSuccessful();
 })->group('lokasi-mushaf');
 

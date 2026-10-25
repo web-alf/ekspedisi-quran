@@ -10,6 +10,8 @@
   export let dailyTasks = []
   export let kartuGudang = null
   export let pilihGudang = false
+  // SPV yang belum ditempatkan di gudang: tidak melihat tugas dan tidak bisa menugaskan.
+  export let spvBelumDitempatkan = false
   export let recentActivities = []
   export let summary = {
     total_active_tasks: 0,
@@ -220,6 +222,10 @@
 
   let gudangKerja = ''
   function openAssignModal(userId = null) {
+    if (spvBelumDitempatkan) {
+      toast.error('Akun SPV Anda belum ditempatkan di gudang. Minta Manager Gudang menempatkan akun Anda.')
+      return
+    }
     if (userId) {
       assignTarget.user_id = userId.toString()
     }
@@ -304,6 +310,12 @@
 </script>
 
 <AdminLayout>
+  {#if spvBelumDitempatkan}
+    <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" data-spv-belum-ditempatkan>
+      Akun SPV Anda belum ditempatkan di gudang, jadi tugas packing tidak ditampilkan dan penugasan dinonaktifkan.
+      Minta Manager Gudang menempatkan akun Anda lewat menu Penempatan Gudang.
+    </div>
+  {/if}
   <!-- Page Header with consistent styling -->
   <div class="mb-6 sm:mb-8">
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">

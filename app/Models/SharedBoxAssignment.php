@@ -557,7 +557,14 @@ class SharedBoxAssignment extends Model
             'total_contributors' => $totalContributors,
             'completion_percentage' => $totalContributors > 0 ? round(($completedContributors / $totalContributors) * 100, 2) : 0,
             'capacity_filled' => $box->kapasitas > 0 ? round(($totalCompleted / $box->kapasitas) * 100, 2) : 0,
-            'can_proceed_to_seal' => $readyToSeal && $box->status === 'filling',
+            // Dulu hanya `filling`: begitu triggerCompletionWorkflow mengubah status ke
+            // ready_to_seal, kerdusnya justru tidak bisa diminta segel maupun disegel.
+            'can_proceed_to_seal' => $readyToSeal && in_array($box->status, [
+                PackingBox::STATUS_FILLING,
+                PackingBox::STATUS_FULL,
+                PackingBox::STATUS_READY_TO_SEAL,
+                PackingBox::STATUS_SEAL_REQUESTED,
+            ], true),
         ];
     }
 
@@ -572,7 +579,7 @@ class SharedBoxAssignment extends Model
         if ($completionStatus['ready_to_seal']) {
             // Update box status to ready for sealing
             $box->update([
-                'status' => 'ready_to_seal',
+                'status' => PackingBox::STATUS_READY_TO_SEAL,
                 'completion_triggered_at' => now(),
             ]);
 
@@ -619,7 +626,7 @@ class SharedBoxAssignment extends Model
      */
     private static function notifySupervitorsBoxCompletion(PackingBox $box, $assignments): void
     {
-        $supervisors = \App\Models\User::permission('supervisor.warehouse.monitor')->get();
+        $supervisors = User::permission('supervisor.warehouse.monitor')->get();
 
         foreach ($supervisors as $supervisor) {
             PackingNotification::create([

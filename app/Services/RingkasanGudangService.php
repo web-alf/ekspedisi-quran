@@ -70,40 +70,50 @@ class RingkasanGudangService
 
         $gudangList = Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']);
 
+        $perGudang = $gudangList->map(function (Gudang $g) {
+            $packing = $this->packingHariIni($g->id);
+
+            return [
+                'id' => $g->id, 'nama' => $g->nama, 'kode' => $g->kode,
+                'target' => $packing['target'], 'selesai' => $packing['selesai'],
+                'kerdus_tersegel' => $packing['kerdus_tersegel'],
+                'staf_total' => $packing['jumlah_staf'],
+                'staf_belum_mulai' => $packing['staf_belum_mulai'],
+                // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya.
+                'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)
+                    ->map(fn (array $s) => ['nama' => $s['nama'], 'selesai' => $s['selesai'], 'target' => $s['target']])
+                    ->values()->all(),
+                // Hitungan miring saat pusat membeku; buat selalu betul:
+                'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
+                'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),
+                'beban' => $this->bebanGudang($g->id),
+                'stok_kartu' => $this->stokKartu($g->id),
+            ];
+        })->values();
+
         return [
             'gudangList' => $gudangList->map(fn (Gudang $g) => [
                 'id' => $g->id, 'kode' => $g->kode, 'nama' => $g->nama,
             ])->values()->all(),
 
-            // Gabungan seluruh tugas kedua gudang ini hari ini.
+            // Gabungan = JUMLAH kartu per gudang (25/10/2026). Dulu dihitung terpisah dari
+            // seluruh tugas hari ini, termasuk yang belum bertagih gudang, sehingga total
+            // tidak sama dengan Semarang + Boyolali dan bar bertumpuknya tidak pernah penuh.
             'gabungan' => [
-                'target' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->sum('total_target'),
-                'selesai' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->sum('total_selesai'),
-                'kerdus_tersegel' => PackingBox::query()->whereDate('sealed_at', today())->count(),
-                'staf_bertugas' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->count(),
-                'staf_belum_mulai' => DailyPackingTask::query()->whereDate('tanggal_tugas', today())->whereNull('started_at')->count(),
+                'target' => (int) $perGudang->sum('target'),
+                'selesai' => (int) $perGudang->sum('selesai'),
+                'kerdus_tersegel' => (int) $perGudang->sum('kerdus_tersegel'),
+                'staf_bertugas' => (int) $perGudang->sum('staf_total'),
+                'staf_belum_mulai' => (int) $perGudang->sum('staf_belum_mulai'),
+                // Tugas hari ini yang tidak masuk gudang aktif mana pun — disebut terpisah
+                // supaya tidak hilang dari pandangan PJ.
+                'tugas_tanpa_gudang' => DailyPackingTask::query()
+                    ->whereDate('tanggal_tugas', today())
+                    ->where(fn (Builder $q) => $q->whereNull('gudang_id')->orWhereNotIn('gudang_id', $gudangList->pluck('id')))
+                    ->count(),
             ],
 
-            'per_gudang' => $gudangList->map(function (Gudang $g) {
-                $packing = $this->packingHariIni($g->id);
-
-                return [
-                    'id' => $g->id, 'nama' => $g->nama, 'kode' => $g->kode,
-                    'target' => $packing['target'], 'selesai' => $packing['selesai'],
-                    'kerdus_tersegel' => $packing['kerdus_tersegel'],
-                    'staf_total' => $packing['jumlah_staf'],
-                    'staf_belum_mulai' => $packing['staf_belum_mulai'],
-                    // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya.
-                    'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)
-                        ->map(fn (array $s) => ['nama' => $s['nama'], 'selesai' => $s['selesai'], 'target' => $s['target']])
-                        ->values()->all(),
-                    // Hitungan miring saat pusat membeku; buat selalu betul:
-                    'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
-                    'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),
-                    'beban' => $this->bebanGudang($g->id),
-                    'stok_kartu' => $this->stokKartu($g->id),
-                ];
-            })->values()->all(),
+            'per_gudang' => $perGudang->all(),
 
             // Dokumen perpindahan yang menunggu diterima di gudang MANA PUN di bawah,
             // dengan arah asal → tujuan begitu jelas.
@@ -209,10 +219,22 @@ class RingkasanGudangService
         return $tugas->started_at ? 'mulai' : 'tidak_mulai';
     }
 
-    /** Hitungan kerdus penuh/tersegel yang belum dimuat — diekstrak dari perluTindakan supaya juga dipakai manager. */
+    /**
+     * Kerdus penuh/tersegel milik gudang ini yang isinya belum masuk muatan kurir —
+     * rumus yang sama dengan PindaiKerdusService::kerdusSiap (satu aturan angka).
+     */
     private function hitungKerdusMenungguMuat(int $gudangId): int
     {
-        return $this->perluTindakan($gudangId)['kerdus_menunggu_muat'];
+        return PackingBox::query()
+            ->where('gudang_id', $gudangId)
+            ->whereIn('status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED])
+            ->where(fn (Builder $q) => $q->doesntHave('packingItems')
+                ->orWhereHas('packingItems', fn (Builder $isi) => $isi->whereNotExists(
+                    fn ($muatan) => $muatan->selectRaw('1')
+                        ->from('muatan_items')
+                        ->whereColumn('muatan_items.pengiriman_id', 'packing_items.pengiriman_id')
+                )))
+            ->count();
     }
 
     /**
@@ -267,19 +289,6 @@ class RingkasanGudangService
             ->limit(10)
             ->get();
 
-        // Kerdus penuh/tersegel milik gudang ini yang isinya belum masuk muatan kurir —
-        // rumus yang sama dengan PindaiKerdusService::kerdusSiap (satu aturan angka).
-        $kerdusMenunggu = PackingBox::query()
-            ->where('gudang_id', $gudangId)
-            ->whereIn('status', [PackingBox::STATUS_FULL, PackingBox::STATUS_SEALED])
-            ->where(fn (Builder $q) => $q->doesntHave('packingItems')
-                ->orWhereHas('packingItems', fn (Builder $isi) => $isi->whereNotExists(
-                    fn ($muatan) => $muatan->selectRaw('1')
-                        ->from('muatan_items')
-                        ->whereColumn('muatan_items.pengiriman_id', 'packing_items.pengiriman_id')
-                )))
-            ->count();
-
         return [
             'transfer_menunggu' => $menunggu->map(fn (TransferMushaf $t) => [
                 'kode' => $t->kode,
@@ -288,7 +297,7 @@ class RingkasanGudangService
                 'jumlah_eks' => (int) $t->jumlah_eks,
                 'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
             ])->values()->all(),
-            'kerdus_menunggu_muat' => $kerdusMenunggu,
+            'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($gudangId),
         ];
     }
 

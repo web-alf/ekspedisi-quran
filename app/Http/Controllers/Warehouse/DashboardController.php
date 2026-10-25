@@ -834,7 +834,7 @@ class DashboardController extends Controller
 
             // Update box status to seal requested
             $box->update([
-                'status' => 'seal_requested',
+                'status' => PackingBox::STATUS_SEAL_REQUESTED,
                 'seal_requested_at' => now(),
                 'seal_requested_by' => $user->id,
             ]);
@@ -890,7 +890,7 @@ class DashboardController extends Controller
         try {
             // Get boxes that are ready for sealing based on user role
             $query = CakupanGudang::terapkan(PackingBox::query(), $user)
-                ->whereIn('status', ['ready_to_seal', 'seal_requested'])
+                ->whereIn('status', [PackingBox::STATUS_READY_TO_SEAL, PackingBox::STATUS_SEAL_REQUESTED])
                 ->with(['jenisQuran:id,nama_jenis,kode_jenis', 'sharedBoxAssignments.user:id,name']);
 
             // Filter based on user permissions - supervisors can see all boxes

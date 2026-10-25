@@ -651,15 +651,15 @@ Route::middleware(['auth'])->group(function () {
         // 🔀 Perpindahan MUSHAAF BER-RESI antar gudang (LOKASI MUSHAF, 2026-10-15).
         //
         // SENGAJA DI LUAR grup `warehouse` di atas. Grup itu bergerbang
-        // `permission:warehouse.dashboard`, sedangkan pemegang izin di sini adalah
-        // Manager Repacking & SPV Gudang — di produksi keduanya TIDAK memegang
-        // warehouse.dashboard (hanya role `warehouse` yang memegangnya). Menaruhnya di
-        // dalam grup itu membuat halaman ini 403 untuk orang yang justru berhak.
+        // `permission:warehouse.dashboard`; halaman ini cukup dijaga izinnya sendiri
+        // (`mushaf.transfer`/`stok.read`). Dulu produksi belum memasang warehouse.dashboard
+        // ke Manager Repacking & SPV Gudang — sejak migrasi 2026_10_25_165257 izin
+        // operasional keduanya diselaraskan dengan seeder.
         //
         // Bedanya dari /admin/warehouse/stok: yang ini satuannya RESI (mushaf wakaf yang
         // sudah punya wujud & tujuan kirim), bukan stok tanpa muwakif dalam satuan eks.
         // Penempatan Gudang (16/10/2026): akun SPV/staf → Semarang/Boyolali. Di luar grup
-        // `warehouse` karena manager gudang tidak memegang warehouse.dashboard; SPV yang ikut
+        // `warehouse` karena dijaga izinnya sendiri (gudang.penempatan); SPV yang ikut
         // memegang izin ini ditolak di User::bolehAturPenempatanGudang().
         Route::middleware('permission:gudang.penempatan')->prefix('penempatan-gudang')->name('penempatan-gudang.')->group(function () {
             Route::get('/', [PenempatanGudangController::class, 'index'])->name('index');

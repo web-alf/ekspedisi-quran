@@ -18,6 +18,7 @@
   export let pengiriman = [];
   // Nama gudang bila akun dibatasi ke satu gudang (SPV); null untuk PJ/super-admin.
   export let cakupanGudang = null;
+  export let cakupanBelumDitempatkan = false;
   export let filters = {};
   export let statusList = [];
   export let jenisQuranList = [];
@@ -810,7 +811,12 @@
       <div>
         <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">Data Resi</h2>
         <p class="text-sm md:text-base text-gray-600">Kelola resi Al-Qur'an wakaf — dari pemesanan sampai diterima</p>
-        {#if cakupanGudang}
+        {#if cakupanBelumDitempatkan}
+          <p class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs text-amber-800" data-cakupan>
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Akun Anda belum ditempatkan di gudang — hanya menampilkan resi yang belum berlabel gudang
+          </p>
+        {:else if cakupanGudang}
           <p class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-gray-100 text-xs text-gray-700" data-cakupan>
             <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
             Menampilkan {cakupanGudang} + resi yang belum berlabel gudang

@@ -814,7 +814,12 @@ class PackingController extends Controller
             }
 
             // Check if box status is appropriate for sealing
-            $validStatuses = ['ready_to_seal', 'seal_requested', 'filling'];
+            $validStatuses = [
+                PackingBox::STATUS_READY_TO_SEAL,
+                PackingBox::STATUS_SEAL_REQUESTED,
+                PackingBox::STATUS_FILLING,
+                PackingBox::STATUS_FULL,
+            ];
             if (! in_array($box->status, $validStatuses)) {
                 return response()->json([
                     'success' => false,

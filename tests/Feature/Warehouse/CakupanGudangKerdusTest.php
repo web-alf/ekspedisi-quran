@@ -183,3 +183,15 @@ it('progres kerdus bersama gudang sendiri tetap bisa dibuka', function () {
         ->assertSuccessful()
         ->assertJsonPath('box.id', $milikSaya->id);
 });
+
+it('SPV yang belum ditempatkan hanya bisa menyegel kerdus tanpa gudang', function () {
+    $spvLepas = kerdusAkun(RoleEnum::SPV_GUDANG->value);
+    $kerdusSmg = kerdusDi($this->smg);
+    $kerdusLepas = kerdusDi(null);
+
+    $this->actingAs($spvLepas)->postJson("/admin/warehouse/packing/box/{$kerdusSmg->id}/seal")->assertForbidden();
+    $this->actingAs($spvLepas)->postJson("/admin/warehouse/packing/box/{$kerdusLepas->id}/seal")->assertSuccessful();
+
+    expect($kerdusSmg->fresh()->status)->toBe(PackingBox::STATUS_FILLING)
+        ->and($kerdusLepas->fresh()->status)->toBe(PackingBox::STATUS_SEALED);
+});

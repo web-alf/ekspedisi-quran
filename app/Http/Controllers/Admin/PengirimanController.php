@@ -272,6 +272,7 @@ class PengirimanController extends Controller
             'jenisQuranList' => JenisQuran::active()->select('id', 'nama_jenis', 'kode_jenis')->get(),
             'donaturList' => Donatur::select('id', 'nama_donatur', 'kode_donatur')->orderBy('nama_donatur')->get(),
             'cakupanGudang' => CakupanGudang::berlaku($request->user()) ? $request->user()->gudang?->nama : null,
+            'cakupanBelumDitempatkan' => CakupanGudang::belumDitempatkan($request->user()),
             'stats' => $this->getOptimizedPengirimanStats($request->user()),
             'stageVisibility' => PengirimanStageVisibility::frontendContext($request->user()),
         ]);

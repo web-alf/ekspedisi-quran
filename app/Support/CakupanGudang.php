@@ -15,16 +15,24 @@ use Illuminate\Database\Eloquent\Builder;
  * (26.100 resi). Menyembunyikannya akan membuat halaman SPV kosong dan memblokir
  * packing, padahal pemindaian itulah cara memberi labelnya.
  *
+ * SPV yang BELUM DITEMPATKAN (gudang_id NULL) tetap dibatasi — hanya ke data yang belum
+ * berlabel. Dulu akun seperti ini lolos dari pembatasan dan justru melihat kedua gudang
+ * (25/10/2026).
+ *
  * Peran lain (PJ/manager-repacking, super-admin) tidak dibatasi sama sekali.
  */
 class CakupanGudang
 {
-    /** Apakah pengguna ini dibatasi ke satu gudang. */
+    /** Apakah pengguna ini dibatasi cakupan gudang (semua SPV, ditempatkan atau belum). */
     public static function berlaku(?User $user): bool
     {
-        return $user !== null
-            && $user->gudang_id
-            && $user->hasRole(RoleEnum::SPV_GUDANG->value);
+        return $user !== null && $user->hasRole(RoleEnum::SPV_GUDANG->value);
+    }
+
+    /** SPV yang belum ditempatkan di gudang mana pun. */
+    public static function belumDitempatkan(?User $user): bool
+    {
+        return self::berlaku($user) && ! $user->gudang_id;
     }
 
     /**
@@ -41,6 +49,10 @@ class CakupanGudang
             return $query;
         }
 
+        if (! $user->gudang_id) {
+            return $query->whereNull($kolom);
+        }
+
         return $query->where(function (Builder $q) use ($user, $kolom) {
             $q->where($kolom, $user->gudang_id)->orWhereNull($kolom);
         });
@@ -54,7 +66,8 @@ class CakupanGudang
         }
 
         // Belum berlabel = boleh (barang belum diklaim gudang mana pun).
-        return $gudangBaris === null || (int) $gudangBaris === (int) $user->gudang_id;
+        return $gudangBaris === null
+            || ($user->gudang_id && (int) $gudangBaris === (int) $user->gudang_id);
     }
 
     /** Pesan penolakan yang sama di semua jalur. */

@@ -499,6 +499,11 @@
             {/each}
             <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-300 flex-none"></span>Sisa {sisaGabungan}</span>
           </div>
+          {#if ringkasanManager.gabungan.tugas_tanpa_gudang > 0}
+            <p class="mt-2 text-xs text-amber-700" data-tugas-tanpa-gudang>
+              {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
+            </p>
+          {/if}
 
           <FreelancerKerjaHariIni staf={stafKerjaManager} />
         </RingkasanSection>

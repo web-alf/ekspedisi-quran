@@ -874,7 +874,7 @@ class BoxScannerController extends Controller
         }
 
         return $query->whereNotNull('gudang_id')
-            ->where('gudang_id', '!=', $user->gudang_id)
+            ->when($user->gudang_id, fn (Builder $q) => $q->where('gudang_id', '!=', $user->gudang_id))
             ->pluck('kode_kerdus')
             ->all();
     }

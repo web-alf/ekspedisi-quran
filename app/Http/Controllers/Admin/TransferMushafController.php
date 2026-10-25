@@ -9,6 +9,7 @@ use App\Models\Gudang;
 use App\Models\Pengiriman;
 use App\Models\TransferMushaf;
 use App\Models\User;
+use App\Support\CakupanGudang;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +125,15 @@ class TransferMushafController extends Controller
 
         $user = $request->user();
         $asalId = $user->gudang_id;
+
+        // SPV tanpa penempatan tidak boleh memilih gudang asal sendiri — itu sama saja
+        // dengan memindahkan mushaf dari gudang mana pun.
+        if (CakupanGudang::belumDitempatkan($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akun SPV Anda belum ditempatkan di gudang. Minta Manager Gudang menempatkan akun Anda.',
+            ], 403);
+        }
 
         // Gudang asal = gudang pelaku. Akun tanpa gudang (mis. super-admin) harus memilih
         // sendiri, kalau tidak dokumennya tidak punya titik awal yang bisa diterima tujuan.

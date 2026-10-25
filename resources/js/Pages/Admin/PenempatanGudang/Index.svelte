@@ -101,7 +101,9 @@
                       aria-label="Gudang {orang.nama}"
                       class="w-full min-w-[9.5rem] px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-50 {orang.gudang_id ? '' : 'text-gray-500'}"
                     >
-                      <option value="">Belum ditempatkan</option>
+                      <!-- SPV wajib bergudang (PenempatanGudangRequest): opsi kosong
+                           dinonaktifkan untuk SPV yang sudah ditempatkan. -->
+                      <option value="" disabled={orang.adalah_spv && orang.gudang_id}>Belum ditempatkan</option>
                       {#each gudangList as g (g.id)}
                         <option value={g.id}>{g.nama}</option>
                       {/each}

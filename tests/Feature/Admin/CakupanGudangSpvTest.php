@@ -342,3 +342,69 @@ it('SPV tetap bisa menugaskan freelancer gudangnya sendiri', function () {
 
     expect(DailyPackingTask::where('user_id', $freelancer->id)->value('gudang_id'))->toBe($this->smg->id);
 });
+
+it('SPV yang belum ditempatkan hanya melihat resi tanpa gudang, bukan kedua gudang', function () {
+    cgResi('pemesanan', $this->smg, 'EQ-2026-78001');
+    cgResi('pemesanan', $this->btl, 'EQ-2026-78002');
+    cgResi('pemesanan', null, 'EQ-2026-78003');
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value);
+
+    $props = $this->actingAs($spv)->get('/admin/pengiriman')->assertOk()->viewData('page')['props'];
+
+    expect(collect($props['pengiriman']['data'])->pluck('no_resi')->all())->toBe(['EQ-2026-78003'])
+        ->and($props['cakupanBelumDitempatkan'])->toBeTrue();
+});
+
+it('SPV yang belum ditempatkan tidak bisa mengubah status resi bergudang', function () {
+    $resiSmg = cgResi('pemesanan', $this->smg, 'EQ-2026-78011');
+    $resiLepas = cgResi('pemesanan', null, 'EQ-2026-78012');
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/pengiriman/bulk-status', [
+            'pengiriman_ids' => [$resiSmg->id, $resiLepas->id],
+            'status_id' => StatusPengiriman::where('slug', 'produksi')->value('id'),
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('data.outside_gudang_count', 1);
+
+    expect($resiSmg->fresh()->status->slug)->toBe('pemesanan')
+        ->and($resiLepas->fresh()->status->slug)->toBe('produksi');
+});
+
+it('SPV yang belum ditempatkan tidak melihat dan tidak menugaskan apa pun di Monitor', function () {
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value);
+    $freelancer = cgAkun(RoleEnum::WAREHOUSE->value);
+    $tugasSmg = cgTugas(cgAkun(RoleEnum::WAREHOUSE->value, $this->smg), $this->smg);
+
+    $data = $this->actingAs($spv)->getJson('/admin/supervisor/warehouse-monitor/data')->assertSuccessful();
+
+    expect($data->json('dailyTasks'))->toBe([])
+        ->and($data->json('warehouseUsers'))->toBe([])
+        ->and($data->json('spvBelumDitempatkan'))->toBeTrue();
+
+    $this->actingAs($spv)
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->assertForbidden();
+    $this->actingAs($spv)
+        ->deleteJson("/admin/supervisor/warehouse-monitor/task/{$tugasSmg->id}/delete")
+        ->assertForbidden();
+
+    expect(DailyPackingTask::where('user_id', $freelancer->id)->exists())->toBeFalse()
+        ->and(DailyPackingTask::whereKey($tugasSmg->id)->exists())->toBeTrue();
+});
+
+it('SPV yang belum ditempatkan tidak bisa membuat dokumen perpindahan dari gudang mana pun', function () {
+    $resi = cgResi('packing', $this->smg, 'EQ-2026-78021');
+    $spv = cgAkun(RoleEnum::SPV_GUDANG->value);
+
+    $this->actingAs($spv)
+        ->postJson('/admin/transfer-mushaf', [
+            'gudang_asal_id' => $this->smg->id,
+            'gudang_tujuan_id' => $this->btl->id,
+            'pengiriman_ids' => [$resi->id],
+        ])
+        ->assertForbidden();
+
+    expect(TransferMushaf::count())->toBe(0);
+});

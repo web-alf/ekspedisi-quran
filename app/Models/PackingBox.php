@@ -54,6 +54,12 @@ class PackingBox extends Model
 
     const STATUS_SEALED = 'sealed';
 
+    /** Kerdus bersama yang semua kontributornya selesai dan menunggu disegel. */
+    const STATUS_READY_TO_SEAL = 'ready_to_seal';
+
+    /** Kerdus bersama yang sudah dimintakan segel ke supervisor. */
+    const STATUS_SEAL_REQUESTED = 'seal_requested';
+
     /**
      * Relationships
      */
@@ -233,6 +239,12 @@ class PackingBox extends Model
 
             if ($this->is_sealed) {
                 throw new \Exception('Kerdus sudah disegel');
+            }
+
+            // Kerdus bersama yang sudah dinyatakan selesai tidak menerima isi baru: hitungan
+            // kontributornya sudah dikunci untuk penyegelan.
+            if (in_array($this->status, [self::STATUS_READY_TO_SEAL, self::STATUS_SEAL_REQUESTED], true)) {
+                throw new \Exception('Kerdus sudah ditandai siap disegel');
             }
 
             // Resi yang sedang dalam dokumen perpindahan gudang belum boleh dikemas: saat

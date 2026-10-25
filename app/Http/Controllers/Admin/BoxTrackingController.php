@@ -168,6 +168,7 @@ class BoxTrackingController extends Controller
             'perPage' => PerPage::resolve($request),
             'perPageOptions' => PerPage::OPTIONS,
             'cakupanGudang' => CakupanGudang::berlaku($request->user()) ? $request->user()->gudang?->nama : null,
+            'cakupanBelumDitempatkan' => CakupanGudang::belumDitempatkan($request->user()),
             'boxes' => $boxesData,
             'filters' => $request->only(['search', 'status', 'jenis_quran_id', 'user_id', 'start_date', 'end_date', 'selesai_packing']),
             'jenisQuranList' => $jenisQuranList,

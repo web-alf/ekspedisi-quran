@@ -14,7 +14,9 @@ use App\Models\StokMushaf;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use App\Services\PackingAssignmentService;
+use App\Support\CakupanGudang;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -43,6 +45,7 @@ class WarehouseMonitorController extends Controller
             return response()->json([
                 'warehouseUsers' => $this->getWarehouseUsers($tercakupGudang),
                 'dailyTasks' => $this->getDailyTasks($tercakupGudang),
+                'spvBelumDitempatkan' => CakupanGudang::belumDitempatkan(auth()->user()),
                 'recentActivities' => $this->getRecentActivities(),
                 'summary' => $this->getSummaryStats(),
                 'stockInfo' => $this->getWarehouseStockInfo(),
@@ -153,6 +156,9 @@ class WarehouseMonitorController extends Controller
 
         return Inertia::render('Supervisor/WarehouseMonitor', [
             'dailyTasks' => $this->getDailyTasks($tercakupGudang),
+            // SPV tanpa penempatan tidak melihat tugas mana pun dan tidak bisa menugaskan
+            // sampai Manager Gudang menempatkannya.
+            'spvBelumDitempatkan' => CakupanGudang::belumDitempatkan($user),
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
             'warehouseUsers' => $this->getWarehouseUsers($tercakupGudang),
             'recentActivities' => $this->getRecentActivities(),
@@ -160,7 +166,7 @@ class WarehouseMonitorController extends Controller
             'kartuGudang' => $this->kartuGudang($tercakupGudang),
             // PJ/admin boleh MEMILIH gudang saat assign (SPV tidak — otomatis
             // gudangnya).
-            'pilihGudang' => ! $tercakupGudang,
+            'pilihGudang' => ! $tercakupGudang && ! CakupanGudang::belumDitempatkan($user),
             'availablePengirimanCount' => $availablePengirimanCount,
             'stockInfo' => $stockInfo,
             // Add performance data to initial load
@@ -509,6 +515,10 @@ class WarehouseMonitorController extends Controller
             'gudang_id' => 'nullable|integer|exists:gudang,id',
         ]);
 
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return $this->tolakSpvBelumDitempatkan();
+        }
+
         $user = User::find($request->user_id);
         $gudangTercakup = $this->gudangTercakup();
 
@@ -624,6 +634,10 @@ class WarehouseMonitorController extends Controller
      */
     public function deleteTask(DailyPackingTask $task)
     {
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return $this->tolakSpvBelumDitempatkan();
+        }
+
         $gudangTercakup = $this->gudangTercakup();
 
         if ($gudangTercakup !== null && (int) $task->gudang_id !== $gudangTercakup) {
@@ -788,6 +802,10 @@ class WarehouseMonitorController extends Controller
 
     private function getWarehouseUsers(?int $gudangTercakup = null)
     {
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return collect();
+        }
+
         // Daftar KANDIDAT PENUGASAN PACKING: hanya role `warehouse` (freelancer
         // pekerja). Dulu memakai penyaring izin `warehouse.dashboard`, sehingga
         // super-admin (memegang semua izin) dan peran lain ikut tampil di modal
@@ -824,6 +842,10 @@ class WarehouseMonitorController extends Controller
      */
     private function getDailyTasks(?int $gudangTercakup = null)
     {
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return collect();
+        }
+
         return DailyPackingTask::whereDate('tanggal_tugas', today())
             ->when($gudangTercakup !== null, fn ($q) => $q->where('gudang_id', $gudangTercakup))
             ->with(['user', 'packingBoxes', 'gudang'])
@@ -856,8 +878,9 @@ class WarehouseMonitorController extends Controller
     }
 
     /**
-     * Gudang yang membatasi akun ini di Monitor: gudang SPV, atau null (PJ/super-admin
-     * dan SPV yang belum ditempatkan melihat kedua gudang).
+     * Gudang yang membatasi akun ini di Monitor: gudang SPV, atau null untuk PJ/super-admin
+     * (kedua gudang). SPV yang belum ditempatkan ditangani lewat
+     * CakupanGudang::belumDitempatkan() — tidak melihat dan tidak menugaskan apa pun.
      */
     private function gudangTercakup(): ?int
     {
@@ -866,6 +889,14 @@ class WarehouseMonitorController extends Controller
         return $user->hasRole(RoleEnum::SPV_GUDANG->value) && $user->gudang_id
             ? (int) $user->gudang_id
             : null;
+    }
+
+    private function tolakSpvBelumDitempatkan(): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'Akun SPV Anda belum ditempatkan di gudang. Minta Manager Gudang menempatkan akun Anda di Penempatan Gudang.',
+        ], 403);
     }
 
     /**

@@ -150,3 +150,17 @@ it('pindah gudang tidak mengubah gudang tugas yang sudah ada', function () {
 
     expect($tugas->fresh()->gudang_id)->toBe($this->smg->id);
 });
+
+it('SPV tidak boleh dilepas dari gudang, staf tetap boleh', function () {
+    $pj = pgAkun([RoleEnum::MANAGER_REPACKING->value, RoleEnum::WAREHOUSE->value]);
+    $spv = pgAkun([RoleEnum::MANAGER_REPACKING->value, RoleEnum::SPV_GUDANG->value], ['gudang_id' => $this->smg->id]);
+    $staf = pgAkun([RoleEnum::WAREHOUSE->value], ['gudang_id' => $this->smg->id]);
+
+    $this->actingAs($pj)->patch(route('admin.penempatan-gudang.update', $spv), ['gudang_id' => null])
+        ->assertSessionHasErrors(['gudang_id' => 'SPV Gudang wajib ditempatkan di salah satu gudang.']);
+    $this->actingAs($pj)->patch(route('admin.penempatan-gudang.update', $staf), ['gudang_id' => null])
+        ->assertSessionHasNoErrors();
+
+    expect($spv->fresh()->gudang_id)->toBe($this->smg->id)
+        ->and($staf->fresh()->gudang_id)->toBeNull();
+});
