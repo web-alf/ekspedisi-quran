@@ -13,7 +13,10 @@ use App\Models\Pengiriman;
 use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Services\Cache\StatusPengirimanCache;
+use App\Support\CakupanGudang;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -111,6 +114,13 @@ class BoxScannerController extends Controller
                 ], 404);
             }
 
+            if (! CakupanGudang::bolehSentuh(auth()->user(), $box->gudang_id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => CakupanGudang::pesanTolakKerdus(),
+                ], 403);
+            }
+
             // Check if user has authorization to access this specific box
             Gate::authorize('accessBox', $box);
 
@@ -203,6 +213,15 @@ class BoxScannerController extends Controller
             // tidak ada resi baru yang masuk dan tertinggal berstatus lama.
             $box = PackingBox::lockForUpdate()->find($request->box_id);
             $box->load('packingItems');
+
+            if (! CakupanGudang::bolehSentuh(auth()->user(), $box->gudang_id)) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => CakupanGudang::pesanTolakKerdus(),
+                ], 403);
+            }
 
             // Respect granular permission for sealed boxes: only block if sealed AND user lacks override
             $isSealed = (bool) ($box->is_sealed ?? false);
@@ -414,6 +433,11 @@ class BoxScannerController extends Controller
             ],
         ]);
 
+        $diluarCakupan = $this->kerdusDiluarCakupan(PackingBox::whereIn('id', $request->box_ids));
+        if ($diluarCakupan !== []) {
+            return $this->tolakKerdusDiluarCakupan($diluarCakupan);
+        }
+
         try {
             // Handle file upload if provided
             $documentationPath = null;
@@ -468,6 +492,11 @@ class BoxScannerController extends Controller
             'operation' => 'required|string|in:seal,unseal,validate,archive',
             'parameters' => 'nullable|array',
         ]);
+
+        $diluarCakupan = $this->kerdusDiluarCakupan(PackingBox::whereIn('kode_kerdus', $request->box_codes));
+        if ($diluarCakupan !== []) {
+            return $this->tolakKerdusDiluarCakupan($diluarCakupan);
+        }
 
         try {
             // Dispatch job
@@ -824,5 +853,43 @@ class BoxScannerController extends Controller
         $pretty = str_replace(['-', '_'], ' ', strtolower($status));
 
         return ucwords($pretty);
+    }
+
+    /**
+     * Kode kerdus yang tercatat di gudang lain dari sudut pandang SPV yang login.
+     *
+     * Operasi massal dijalankan job tanpa pemeriksaan per kerdus, jadi cakupan gudang
+     * harus ditegakkan sebelum job dijadwalkan — seluruh permintaan ditolak, bukan
+     * diproses sebagian, supaya hasil job tidak diam-diam berbeda dari yang dipilih.
+     *
+     * @param  Builder<PackingBox>  $query
+     * @return array<int, string>
+     */
+    private function kerdusDiluarCakupan(Builder $query): array
+    {
+        $user = auth()->user();
+
+        if (! CakupanGudang::berlaku($user)) {
+            return [];
+        }
+
+        return $query->whereNotNull('gudang_id')
+            ->where('gudang_id', '!=', $user->gudang_id)
+            ->pluck('kode_kerdus')
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $kodeKerdus
+     */
+    private function tolakKerdusDiluarCakupan(array $kodeKerdus): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'Kerdus '.implode(', ', array_slice($kodeKerdus, 0, 5))
+                .(count($kodeKerdus) > 5 ? ' dan lainnya' : '')
+                .' tercatat di gudang lain. Hanya SPV gudang tersebut yang boleh mengubahnya.',
+            'data' => ['kerdus_gudang_lain' => $kodeKerdus],
+        ], 403);
     }
 }

@@ -2,9 +2,9 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\PackingBox;
-use App\Models\DailyPackingTask;
+use App\Models\User;
+use App\Support\CakupanGudang;
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Support\Facades\Log;
 
@@ -22,18 +22,18 @@ class WarehousePolicy
             || $user->can('warehouse.tasks.view')
             || $user->can('warehouse.boxes.view')
             || $user->can('supervisor.warehouse.monitor');
-        
+
         // Log access attempts for security audit
-        if (!$canAccess) {
+        if (! $canAccess) {
             Log::warning('Unauthorized warehouse access attempt', [
                 'user_id' => $user->id,
                 'user_email' => $user->email,
                 'user_role' => $user->role,
                 'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent()
+                'user_agent' => request()->userAgent(),
             ]);
         }
-        
+
         return $canAccess;
     }
 
@@ -55,17 +55,17 @@ class WarehousePolicy
         // Additional check: operational users must have active task
         if ($canScan && $user->can('warehouse.packing.scan')) {
             $todayTask = $user->getTodayTask();
-            $canScan = $todayTask && !$todayTask->is_completed;
-            
-            if (!$canScan) {
+            $canScan = $todayTask && ! $todayTask->is_completed;
+
+            if (! $canScan) {
                 Log::info('Warehouse user attempted to scan without active task', [
                     'user_id' => $user->id,
                     'has_task' => $todayTask ? true : false,
-                    'task_completed' => $todayTask?->is_completed
+                    'task_completed' => $todayTask?->is_completed,
                 ]);
             }
         }
-        
+
         return $canScan;
     }
 
@@ -74,6 +74,13 @@ class WarehousePolicy
      */
     public function accessBox(User $user, PackingBox $box): bool
     {
+        // Cakupan gudang (25/10/2026): izin override di bawah tidak berlaku lintas gudang.
+        // SPV memegang warehouse.box.update_any dan supervisor.warehouse.monitor, jadi
+        // tanpa pemeriksaan ini SPV Semarang bisa menyegel kerdus Boyolali.
+        if (! CakupanGudang::bolehSentuh($user, $box->gudang_id)) {
+            return false;
+        }
+
         // Explicit permission can override box ownership
         if ($user->can('warehouse.box.update_any') || $user->can('supervisor.warehouse.monitor')) {
             return true;
@@ -83,19 +90,19 @@ class WarehousePolicy
         if ($user->can('warehouse.boxes.view')) {
             $userTask = $user->getTodayTask();
             $canAccess = $userTask && $userTask->packingBoxes()->where('id', $box->id)->exists();
-            
-            if (!$canAccess) {
+
+            if (! $canAccess) {
                 Log::warning('Unauthorized box access attempt', [
                     'user_id' => $user->id,
                     'box_id' => $box->id,
                     'box_code' => $box->kode_kerdus,
-                    'user_has_task' => $userTask ? true : false
+                    'user_has_task' => $userTask ? true : false,
                 ]);
             }
-            
+
             return $canAccess;
         }
-        
+
         return false;
     }
 
@@ -104,31 +111,36 @@ class WarehousePolicy
      */
     public function updateBoxStatus(User $user, PackingBox $box): bool
     {
+        if (! CakupanGudang::bolehSentuh($user, $box->gudang_id)) {
+            return false;
+        }
+
         // Global override for users granted explicit permission
         if ($user->can('warehouse.box.update_any')) {
             return true;
         }
 
         // Must be able to access the box first
-        if (!$this->accessBox($user, $box)) {
+        if (! $this->accessBox($user, $box)) {
             return false;
         }
-        
+
         // Additional business rule: can't update sealed boxes (unless supervisor)
         $isSealed = (bool) ($box->is_sealed ?? false);
-        if (!$isSealed && isset($box->status)) {
+        if (! $isSealed && isset($box->status)) {
             $isSealed = $box->status === 'sealed';
         }
-        if ($isSealed && !$user->can('warehouse.box.update_sealed') && !$user->can('warehouse.box.update_any') && !$user->can('supervisor.warehouse.monitor')) {
+        if ($isSealed && ! $user->can('warehouse.box.update_sealed') && ! $user->can('warehouse.box.update_any') && ! $user->can('supervisor.warehouse.monitor')) {
             Log::warning('Attempt to update sealed box status', [
                 'user_id' => $user->id,
                 'box_id' => $box->id,
                 'box_code' => $box->kode_kerdus,
-                'box_status' => $box->status
+                'box_status' => $box->status,
             ]);
+
             return false;
         }
-        
+
         return true;
     }
 
@@ -158,15 +170,15 @@ class WarehousePolicy
             || $user->can('warehouse.qr.scan')
             || $user->can('warehouse.box.update_any')
             || $user->can('supervisor.warehouse.monitor');
-        
+
         // Log all upload attempts for security audit
         Log::info('Documentation upload authorization check', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'authorized' => $canUpload,
-            'ip_address' => request()->ip()
+            'ip_address' => request()->ip(),
         ]);
-        
+
         return $canUpload;
     }
 

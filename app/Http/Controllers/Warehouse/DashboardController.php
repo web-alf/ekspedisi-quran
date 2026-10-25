@@ -10,6 +10,7 @@ use App\Models\SharedBoxAssignment;
 use App\Models\User;
 use App\Services\PackingAssignmentService;
 use App\Services\RingkasanGudangService;
+use App\Support\CakupanGudang;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -465,7 +466,8 @@ class DashboardController extends Controller
         // halaman ini selalu gagal 500 saat dibuka.
         $lihatSemua = $user->can('supervisor.warehouse.monitor');
 
-        $sharedBoxes = PackingBox::where('assignment_type', 'shared')
+        $sharedBoxes = CakupanGudang::terapkan(PackingBox::query(), $user)
+            ->where('assignment_type', 'shared')
             ->where('status', '!=', 'sealed')
             ->when(! $lihatSemua, function ($query) use ($user) {
                 $query->whereHas('sharedBoxAssignments', function ($q) use ($user) {
@@ -640,6 +642,14 @@ class DashboardController extends Controller
                 ], 404);
             }
 
+            // Cakupan gudang: izin monitor tidak berlaku untuk kerdus gudang lain.
+            if (! CakupanGudang::bolehSentuh($user, $box->gudang_id)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => CakupanGudang::pesanTolakKerdus(),
+                ], 403);
+            }
+
             // Check if user has access to this box
             $hasAccess = false;
             if ($box->assignment_type === 'individual' && $box->assigned_user_id === $user->id) {
@@ -732,6 +742,14 @@ class DashboardController extends Controller
                 ], 404);
             }
 
+            // Cakupan gudang: izin monitor tidak berlaku untuk kerdus gudang lain.
+            if (! CakupanGudang::bolehSentuh($user, $box->gudang_id)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => CakupanGudang::pesanTolakKerdus(),
+                ], 403);
+            }
+
             // Check if user has access
             if ($box->assignment_type === 'shared') {
                 $hasAccess = $box->sharedBoxAssignments()->where('user_id', $user->id)->exists() ||
@@ -782,6 +800,14 @@ class DashboardController extends Controller
                     'success' => false,
                     'error' => 'Box not found',
                 ], 404);
+            }
+
+            // Cakupan gudang: izin monitor tidak berlaku untuk kerdus gudang lain.
+            if (! CakupanGudang::bolehSentuh($user, $box->gudang_id)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => CakupanGudang::pesanTolakKerdus(),
+                ], 403);
             }
 
             // Check permissions
@@ -863,7 +889,8 @@ class DashboardController extends Controller
 
         try {
             // Get boxes that are ready for sealing based on user role
-            $query = PackingBox::whereIn('status', ['ready_to_seal', 'seal_requested'])
+            $query = CakupanGudang::terapkan(PackingBox::query(), $user)
+                ->whereIn('status', ['ready_to_seal', 'seal_requested'])
                 ->with(['jenisQuran:id,nama_jenis,kode_jenis', 'sharedBoxAssignments.user:id,name']);
 
             // Filter based on user permissions - supervisors can see all boxes

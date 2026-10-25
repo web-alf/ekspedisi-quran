@@ -62,4 +62,10 @@ class CakupanGudang
     {
         return 'Resi ini tercatat di gudang lain. Hanya SPV gudang tersebut yang boleh mengubahnya.';
     }
+
+    /** Pesan penolakan untuk kerdus — sama di semua jalur kerdus. */
+    public static function pesanTolakKerdus(): string
+    {
+        return 'Kerdus ini tercatat di gudang lain. Hanya SPV gudang tersebut yang boleh mengubahnya.';
+    }
 }
