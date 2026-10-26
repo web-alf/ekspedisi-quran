@@ -7,6 +7,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PerformanceMonitoring;
 use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\RateLimitHandler;
+use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\RoleMiddleware;
 use App\Http\Middleware\WarehouseAccess;
 use Illuminate\Auth\AuthenticationException;
@@ -42,6 +43,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            // 'guest' WAJIB didaftarkan di sini: alias dari app/Http/Kernel.php
+            // tidak terpakai lagi (aplikasi memakai bootstrap/app.php Laravel 12),
+            // sehingga tanpa baris ini Laravel memakai middleware bawaan yang
+            // melempar pengguna yang sudah login ke '/' — bukan ke beranda
+            // perannya (26/10/2026: SPV membuka /login mendarat di landing page).
+            'guest' => RedirectIfAuthenticated::class,
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'active' => EnsureUserIsActive::class,

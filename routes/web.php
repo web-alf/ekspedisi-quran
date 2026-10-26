@@ -57,6 +57,8 @@ use App\Models\Setting;
 use App\Models\Testimonial;
 use App\Models\Video;
 use App\Services\LandingSectionRegistry;
+use App\Support\BerandaPeran;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -241,9 +243,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout.get');
 
-    // Main dashboard route - redirect to admin dashboard
+    // Main dashboard route - redirect ke beranda peran (dashboard umum, atau
+    // dashboard gudang untuk peran gudang)
     Route::get('/dashboard', function () {
-        return redirect('/admin/dashboard');
+        return redirect(BerandaPeran::dariAuth(Auth::user()));
     });
 
     // Admin specific routes - now using permission-based access

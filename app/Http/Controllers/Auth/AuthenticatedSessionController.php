@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\BerandaPeran;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -69,7 +71,7 @@ class AuthenticatedSessionController extends Controller
         ]);
 
         // Redirect based on role
-        return $this->redirectBasedOnRole($user);
+        return $this->redirectBasedOnRole($user, $request);
     }
 
     /**
@@ -93,11 +95,25 @@ class AuthenticatedSessionController extends Controller
      * (/admin/warehouse/dashboard) — rute /dashboard tidak ada untuk mereka dan
      * membuat login SPV tiba-tiba berakhir di 404 padahal kredensialnya benar.
      * Peran lain tetap ke /dashboard (kontennya render sesuai peran di sana).
+     *
+     * (25/10/2026) url.intended yang menunjuk dashboard umum kini DIBUANG untuk
+     * peran gudang. Biasanya itu artefak bookmark/riwayat browser lama, dan
+     * dialah yang membuat SPV "berhasil login" tapi mendarat di /admin/dashboard
+     * padahal menu Dashboard mereka adalah /admin/warehouse. Intended ke halaman
+     * kerja sungguhan (packing, stok, data resi) tetap dihormati.
      */
-    private function redirectBasedOnRole($user)
+    private function redirectBasedOnRole(User $user, Request $request): RedirectResponse
     {
-        if ($user->hasAnyRole(['warehouse', 'manager-repacking', 'spv-gudang'])) {
-            return redirect()->intended(route('admin.warehouse.dashboard'));
+        if (BerandaPeran::adalahPeranGudang($user)) {
+            $intended = $request->session()->get('url.intended');
+
+            if ($intended !== null && ! BerandaPeran::adalahUrlDashboardUmum($intended)) {
+                return redirect()->intended(route('admin.warehouse.dashboard'));
+            }
+
+            $request->session()->forget('url.intended');
+
+            return redirect(route('admin.warehouse.dashboard'));
         }
 
         return redirect()->intended('/dashboard');

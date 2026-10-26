@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\AnalyticsService;
 use App\Services\Cache\DashboardCacheService;
 use App\Services\Cache\ReferenceDataCacheService;
+use App\Support\BerandaPeran;
 use App\Support\PengirimanStageVisibility;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +40,15 @@ class DashboardController extends Controller
         $startTime = microtime(true);
 
         $user = auth()->user();
+
+        // Peran gudang: dashboard umum bukan halaman mereka — tidak ada di menu
+        // sidebar-nya. Dialihkan ke dashboard gudang supaya semua jalur masuk
+        // (login, bookmark lama /admin/dashboard, link /dashboard) bermuara di
+        // satu tempat yang sama dengan menu "Dashboard Gudang" mereka.
+        if (BerandaPeran::adalahPeranGudang($user)) {
+            return redirect(BerandaPeran::url($user));
+        }
+
         $role = $user->getRoleNames()->first() ?? 'super-admin';
 
         try {
