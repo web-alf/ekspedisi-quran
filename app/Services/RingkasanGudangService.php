@@ -79,10 +79,10 @@ class RingkasanGudangService
                 'kerdus_tersegel' => $packing['kerdus_tersegel'],
                 'staf_total' => $packing['jumlah_staf'],
                 'staf_belum_mulai' => $packing['staf_belum_mulai'],
-                // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya.
-                'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)
-                    ->map(fn (array $s) => ['nama' => $s['nama'], 'selesai' => $s['selesai'], 'target' => $s['target']])
-                    ->values()->all(),
+                // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya,
+                // dengan bentuk baris yang sama (status, jam, kerdus, persen) — dashboard PJ
+                // memakai komponen FreelancerKerjaHariIni yang sama.
+                'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)->values()->all(),
                 // Hitungan miring saat pusat membeku; buat selalu betul:
                 'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
                 'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),
@@ -248,6 +248,7 @@ class RingkasanGudangService
             ->whereDate('tanggal_tugas', today())
             ->where('gudang_id', $gudangId)
             ->with('user:id,name')
+            ->withCount('packingBoxes')
             ->get();
 
         return [
@@ -262,10 +263,19 @@ class RingkasanGudangService
             'per_staf' => $tugas
                 ->sortBy(fn (DailyPackingTask $t) => [$t->started_at ? 0 : 1, $t->user?->name ?? ''])
                 ->map(fn (DailyPackingTask $t) => [
+                    'id' => $t->id,
                     'nama' => $t->user?->name ?? '-',
                     'selesai' => (int) $t->total_selesai,
                     'target' => (int) $t->total_target,
                     'mulai' => (bool) $t->started_at,
+                    // Baris "Freelancer yang kerja hari ini" di dashboard memakai susunan
+                    // yang sama dengan daftar di halaman Performa Kerja (status, jam, kerdus,
+                    // bar progress), jadi keempat nilai itu ikut dikirim dari sini.
+                    'status' => $this->statusKerja($t),
+                    'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
+                    'jam_mulai' => $t->started_at?->format('H:i'),
+                    'jam_selesai' => $t->completed_at?->format('H:i'),
+                    'kerdus' => (int) $t->packing_boxes_count,
                 ])
                 ->values()
                 ->all(),

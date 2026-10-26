@@ -145,7 +145,12 @@ it('manager hanya menerima nama freelancer yang sudah mulai kerja hari ini, sama
     $smg = collect($this->actingAs($pj)->get('/admin/warehouse')->assertOk()->viewData('page')['props']['ringkasanManager']['per_gudang'])
         ->firstWhere('kode', 'SMG');
 
-    expect($smg['staf_kerja'])->toBe([['nama' => 'Andi', 'selesai' => 12, 'target' => 20]])
+    // Bentuk barisnya kini sama dengan dashboard SPV (status, jam, kerdus, persen dipakai
+    // komponen FreelancerKerjaHariIni), jadi yang dikunci: hanya Andi yang disebut, dan
+    // nilai intinya tetap 12/20.
+    expect(collect($smg['staf_kerja'])->pluck('nama')->all())->toBe(['Andi'])
+        ->and($smg['staf_kerja'][0])->toMatchArray(['nama' => 'Andi', 'selesai' => 12, 'target' => 20, 'status' => 'mulai', 'persen' => 60])
+        ->and($smg['staf_kerja'][0])->toHaveKeys(['jam_mulai', 'jam_selesai', 'kerdus'])
         ->and($smg['staf_belum_mulai'])->toBe(1)
         ->and($smg)->not->toHaveKey('belum_nama');
 });
