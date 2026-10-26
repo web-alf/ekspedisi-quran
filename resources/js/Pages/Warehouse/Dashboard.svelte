@@ -421,6 +421,7 @@
         >
           <PerluTindakan
             transfer={ringkasanGudang.perlu_tindakan.transfer_menunggu}
+            transferStok={ringkasanGudang.perlu_tindakan.transfer_stok_menunggu}
             muat={[{ ...ringkasanGudang.gudang, kerdus_menunggu_muat: ringkasanGudang.perlu_tindakan.kerdus_menunggu_muat }]}
           />
         </RingkasanSection>
@@ -567,6 +568,7 @@
         >
           <PerluTindakan
             transfer={ringkasanManager.transfer_menunggu}
+            transferStok={ringkasanManager.transfer_stok_menunggu}
             muat={ringkasanManager.per_gudang}
             tampilTujuan
           />

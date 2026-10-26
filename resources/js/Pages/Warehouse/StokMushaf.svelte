@@ -1,19 +1,19 @@
 <script>
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
-  import { gudangUntukEntri, gudangTujuanTransfer, gudangAwal } from '../../utils/pilihanGudang.js';
+  import { gudangUntukEntri } from '../../utils/pilihanGudang.js';
   import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian } from '../../utils/stokPratinjau.js';
 
-  // Fase 3: stok mushaf tanpa muwakif per gudang + dokumen transfer antar gudang.
+  // Fase 3: stok mushaf tanpa muwakif per gudang. Dokumen transfer antar gudang sejak
+  // 26/10/2026 hidup di halaman Perpindahan Mushaf (tab "Stok tanpa muwakif") — halaman ini
+  // menyisakan isi stok, pencatatan pergerakan, dan tautan ke sana.
   // Temuan lapangan 19/10/2026: A5/A6 punya varian ber-terjemahan dan tanpa, jadi
   // setiap pergerakan stok WAJIB menyebut variannya (dua tumpukan terpisah).
   export let gudangList = [];
   export let jenisList = [];
   export let stokList = [];
-  export let transferList = [];
   export let pergerakanList = [];
   export let bolehKelola = false;
-  export let bolehTransfer = false;
   export let gudangSaya = null;
   export let tercakupGudang = false;
 
@@ -46,22 +46,9 @@
   // pernah ditawarkan — server juga menolak (403), tapi menawarkan opsi yang pasti ditolak
   // membuat pengguna baru tahu setelah menekan Simpan.
   $: gudangEntri = gudangUntukEntri(gudangList, { gudangSaya, tercakupGudang });
-  $: transferAsalTerkunci = tercakupGudang ? gudangAwal({ gudangSaya, tercakupGudang }) : '';
-  $: gudangTujuan = gudangTujuanTransfer(gudangList, tercakupGudang ? gudangSaya : transferAsal);
   $: if (tercakupGudang && gudangSaya !== null && String(entriGudang) !== String(gudangSaya)) {
       entriGudang = String(gudangSaya);
   }
-  $: if (tercakupGudang && gudangSaya !== null && String(transferAsal) !== String(gudangSaya)) {
-      transferAsal = String(gudangSaya);
-  }
-
-  // Form transfer
-  let transferAsal = '';
-  let transferTujuan = '';
-  let transferJenis = '';
-  let transferTerjemahan = '';
-  let transferJumlah = 1;
-  let transferCatatan = '';
 
   function kapasitasJenis(id) {
     const jenis = jenisList.find((item) => String(item.id) === String(id));
@@ -321,124 +308,22 @@
       </section>
     {/if}
 
-    {#if bolehTransfer}
-      <section class="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 class="font-semibold text-gray-900 mb-1">Dokumen Transfer Antar Gudang</h2>
-        <p class="text-xs text-gray-500 mb-3">
-          {#if tercakupGudang}Dari <span class="font-medium text-gray-700">{gudangEntri[0]?.nama ?? 'gudang Anda'}</span>. {/if}Dibuat dulu; stok berpindah saat SPV gudang TUJUAN menerima (barang fisik sudah tiba). Varian harus sama dari asal ke tujuan.</p>
-        <div class="grid grid-cols-2 gap-3 items-end {tercakupGudang ? 'sm:grid-cols-5' : 'sm:grid-cols-6'}">
-          {#if !tercakupGudang}
-            <label class="block text-sm">
-              <span class="block text-gray-700 mb-1">Dari</span>
-              <select bind:value={transferAsal} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                <option value="">Gudang asal...</option>
-                {#each gudangList as gudang}
-                  <option value={gudang.id}>{gudang.nama}</option>
-                {/each}
-              </select>
-            </label>
-          {/if}
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Ke
-</span>
-            <select bind:value={transferTujuan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Gudang tujuan...</option>
-              {#each gudangTujuan as gudang}
-                <option value={gudang.id}>{gudang.nama}</option>
-              {/each}
-            </select>
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Jenis
-</span>
-            <select bind:value={transferJenis} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Pilih jenis...</option>
-              {#each jenisList as jenis}
-                <option value={jenis.id}>{jenis.kode_jenis}</option>
-              {/each}
-            </select>
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Varian <span class="text-gray-500">*</span>
-</span>
-            <select bind:value={transferTerjemahan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Pilih varian...</option>
-              <option value={1}>Ada terjemahan</option>
-              <option value={0}>Tanpa terjemahan</option>
-            </select>
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Jumlah eks
-</span>
-            <input type="number" min="1" max="500" bind:value={transferJumlah} class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-          </label>
-          <label class="block text-sm">
-            <span class="block text-gray-700 mb-1">Catatan
-</span>
-            <input type="text" bind:value={transferCatatan} class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-          </label>
-        </div>
-        <p class="text-xs text-gray-500 mt-2">
-          {#if transferJenis && transferJumlah}{Number(transferJumlah) || 0} eks = {padananDus(transferJumlah, transferJenis)}{/if}
-        </p>
-        <button
-          type="button"
-          disabled={!transferAsal || !transferTujuan || !transferJenis || transferTerjemahan === '' || transferAsal === transferTujuan || sibuk}
-          on:click={() => kirimJson('/admin/warehouse/stok/transfer', { gudang_asal_id: transferAsal, gudang_tujuan_id: transferTujuan, jenis_quran_id: transferJenis, terjemahan: Number(transferTerjemahan), jumlah_eks: Number(transferJumlah) || 0, catatan: transferCatatan }, () => { router.reload({ only: ['transferList'] }); })}
-          class="mt-3 w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#eb3434] hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >Buat Dokumen Transfer</button>
-      </section>
-    {/if}
-
     <section class="bg-white rounded-lg border border-gray-200 p-5">
-      <h2 class="font-semibold text-gray-900 mb-3">Daftar Dokumen Transfer</h2>
-      {#if transferList.length === 0}
-        <p class="text-sm text-gray-500">Belum ada dokumen.</p>
-      {:else}
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-200 text-left text-gray-600">
-                <th class="py-2 pr-4">Kode</th>
-                <th class="py-2 pr-4">Dari → Ke</th>
-                <th class="py-2 pr-4">Jenis</th>
-                <th class="py-2 pr-4">Varian</th>
-                <th class="py-2 pr-4 text-right">Eks</th>
-                <th class="py-2 pr-4">Status</th>
-                <th class="py-2">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each transferList as transfer}
-                <tr class="border-b border-gray-100">
-                  <td class="py-2 pr-4 font-mono text-gray-800">{transfer.kode}</td>
-                  <td class="py-2 pr-4 text-gray-800">{transfer.asal} → {transfer.tujuan}</td>
-                  <td class="py-2 pr-4 text-gray-800">{transfer.jenis}</td>
-                  <td class="py-2 pr-4 text-gray-800">{transfer.terjemahan}</td>
-                  <td class="py-2 pr-4 text-right text-gray-900">{transfer.jumlah_eks}</td>
-                  <td class="py-2 pr-4">
-                    <span class="px-2 py-0.5 rounded-full text-xs font-medium {transfer.status === 'diterima' ? 'bg-gray-900 text-white' : transfer.status === 'dibatalkan' ? 'bg-gray-100 text-gray-500 line-through' : 'bg-gray-100 text-gray-800 border border-gray-200'}">{transfer.status}</span>
-                  </td>
-                  <td class="py-2 flex gap-2">
-                    {#if bolehTransfer && transfer.status === 'diproses'}
-                      <button
-                        type="button"
-                        on:click={() => kirimJson(`/admin/warehouse/stok/transfer/${transfer.id}/terima`, {}, () => { router.reload({ only: ['transferList', 'stokList', 'pergerakanList'] }); })}
-                        class="px-3 py-1 border border-gray-300 rounded-lg text-xs text-gray-800 hover:bg-gray-100"
-                      >Terima</button>
-                      <button
-                        type="button"
-                        on:click={() => kirimJson(`/admin/warehouse/stok/transfer/${transfer.id}/batalkan`, {}, () => { router.reload({ only: ['transferList'] }); })}
-                        class="px-3 py-1 rounded-lg text-xs text-gray-600 hover:text-gray-900"
-                      >Batalkan</button>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <h2 class="font-semibold text-gray-900">Dokumen Transfer Antar Gudang</h2>
+          <p class="text-xs text-gray-500 mt-1">
+            Form dan daftar dokumen transfer pindah ke halaman
+            <span class="font-medium text-gray-700">Perpindahan Mushaf</span> (tab &quot;Stok tanpa muwakif&quot;),
+            supaya kedua jenis dokumen perpindahan ada di satu tempat — dan dokumen yang menunggu diterima
+            ikut muncul di kartu &quot;Perlu Tindakan&quot; dashboard.
+          </p>
         </div>
-      {/if}
+        <a href="/admin/transfer-mushaf"
+          class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-800 hover:bg-gray-50 flex-none">
+          Buka Perpindahan Mushaf
+        </a>
+      </div>
     </section>
 
     <section class="bg-white rounded-lg border border-gray-200 p-5">

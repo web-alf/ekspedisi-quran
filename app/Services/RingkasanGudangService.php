@@ -9,6 +9,7 @@ use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\StokMushaf;
 use App\Models\TransferMushaf;
+use App\Models\TransferStok;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -132,6 +133,10 @@ class RingkasanGudangService
                     'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
                 ])
                 ->values()->all(),
+
+            // Dokumen transfer STOK yang menunggu diterima gudang mana pun di bawah PJ —
+            // bentuknya sama dengan kartu "Perlu Tindakan" di dashboard SPV.
+            'transfer_stok_menunggu' => $this->transferStokMenunggu(null),
         ];
     }
 
@@ -307,8 +312,37 @@ class RingkasanGudangService
                 'jumlah_eks' => (int) $t->jumlah_eks,
                 'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
             ])->values()->all(),
+            // Dokumen transfer STOK (tanpa muwakif) yang menunggu diterima gudang ini.
+            // Sebelumnya hanya daftar di halaman Stok Mushaf yang tahu, sehingga dokumen
+            // bisa menggantung tanpa terlihat siapa pun (26/10/2026).
+            'transfer_stok_menunggu' => $this->transferStokMenunggu($gudangId),
             'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($gudangId),
         ];
+    }
+
+    /**
+     * Dokumen transfer stok berstatus `diproses` yang menunggu diterima.
+     *
+     * $gudangId null = semua gudang (dipakai dashboard PJ).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function transferStokMenunggu(?int $gudangId): array
+    {
+        return TransferStok::query()
+            ->where('status', TransferStok::STATUS_DIPROSES)
+            ->when($gudangId !== null, fn ($q) => $q->where('gudang_tujuan_id', $gudangId))
+            ->with(['gudangAsal:id,nama', 'gudangTujuan:id,nama', 'jenisQuran:id,nama_jenis'])
+            ->orderByDesc('id')->limit(10)->get()
+            ->map(fn (TransferStok $t) => [
+                'kode' => $t->kode,
+                'asal' => $t->gudangAsal?->nama,
+                'tujuan' => $t->gudangTujuan?->nama,
+                'jenis' => $t->jenisQuran?->nama_jenis,
+                'varian' => $t->terjemahan ? 'Ada terjemahan' : 'Tanpa terjemahan',
+                'jumlah_eks' => (int) $t->jumlah_eks,
+                'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
+            ])->values()->all();
     }
 
     /**

@@ -6,9 +6,11 @@ use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
 use App\Models\Gudang;
+use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 use App\Models\TransferMushaf;
 use App\Models\User;
+use App\Services\StokMushafService;
 use App\Support\CakupanGudang;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -33,10 +35,18 @@ use Inertia\Inertia;
  */
 class TransferMushafController extends Controller
 {
+    public function __construct(private StokMushafService $stokMushaf) {}
+
     public function index(Request $request)
     {
         $user = $request->user();
         $tercakupGudang = $user->hasRole(RoleEnum::SPV_GUDANG->value);
+
+        // Dua dokumen dalam satu halaman (keputusan pemilik 26/10/2026): mushaf BER-RESI
+        // (tab pertama) dan STOK TANPA MUWAKIF (tab kedua). Dua-duanya "perpindahan antar
+        // gudang" bagi pengguna, dan halaman stok dulu menyimpan form + daftar dokumen
+        // stok sehingga dokumen yang menunggu diterima tidak pernah terlihat di sini.
+        $bolehStok = $user->can(PermissionEnum::STOK_READ->value);
 
         return Inertia::render('Admin/TransferMushaf/Index', [
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
@@ -69,6 +79,18 @@ class TransferMushafController extends Controller
             'gudangSaya' => $user->gudang_id,
             'tercakupGudang' => $tercakupGudang,
             'peranSuperAdmin' => $user->hasRole(RoleEnum::SUPER_ADMIN->value),
+            // PJ murni (manager-repacking tanpa spv-gudang) boleh menerima/membatalkan
+            // dokumen transfer stok gudang mana pun — aturan yang sama dengan server.
+            'peranPjGudang' => $user->hasRole(RoleEnum::MANAGER_REPACKING->value) && ! $tercakupGudang,
+
+            // --- Tab "Stok tanpa muwakif" ---
+            'penggunaId' => $user->id,
+            'bolehTransferStok' => $user->can(PermissionEnum::STOK_TRANSFER->value),
+            'jenisList' => $bolehStok
+                ? JenisQuran::active()->orderBy('id')->get(['id', 'kode_jenis', 'nama_jenis', 'default_capacity'])
+                : [],
+            'stokList' => $bolehStok ? $this->stokMushaf->ringkasanStok($user) : [],
+            'transferStokList' => $bolehStok ? $this->stokMushaf->daftarTransfer($user) : [],
         ]);
     }
 

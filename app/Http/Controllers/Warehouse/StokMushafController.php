@@ -51,25 +51,9 @@ class StokMushafController extends Controller
                     'dus' => $stok->jumlahDus(),
                     'sisaEks' => $stok->sisaEksDiLuarDus(),
                 ]),
-            'transferList' => TransferStok::with(['gudangAsal', 'gudangTujuan', 'jenisQuran', 'pembuat'])
-                ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q
-                    ->where(function ($q2) {
-                        $q2->where('gudang_asal_id', auth()->user()->gudang_id)
-                            ->orWhere('gudang_tujuan_id', auth()->user()->gudang_id);
-                    }))
-                ->orderBy('id', 'desc')->limit(50)->get()
-                ->map(fn (TransferStok $transfer) => [
-                    'id' => $transfer->id,
-                    'kode' => $transfer->kode,
-                    'asal' => $transfer->gudangAsal->nama,
-                    'tujuan' => $transfer->gudangTujuan->nama,
-                    'jenis' => $transfer->jenisQuran->nama_jenis,
-                    'terjemahan' => $this->labelVarian((bool) $transfer->terjemahan),
-                    'jumlah_eks' => $transfer->jumlah_eks,
-                    'status' => $transfer->status,
-                    'catatan' => $transfer->catatan,
-                    'dibuat_oleh' => $transfer->pembuat->name,
-                ]),
+            // transferList tidak lagi dikirim: form + daftar dokumen transfer pindah ke halaman
+            // Perpindahan Mushaf (tab "Stok tanpa muwakif") supaya kedua jenis dokumen
+            // perpindahan berada di satu tempat. Halaman ini menyisakan tautan ke sana.
             'pergerakanList' => StokMushafPergerakan::with(['gudang', 'jenisQuran', 'pelaku'])
                 ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', auth()->user()->gudang_id))
                 ->orderBy('id', 'desc')->limit(30)->get()
@@ -85,7 +69,6 @@ class StokMushafController extends Controller
                     'waktu' => $baris->created_at->format('d/m H:i'),
                 ]),
             'bolehKelola' => auth()->user()->can(PermissionEnum::STOK_UPDATE->value),
-            'bolehTransfer' => auth()->user()->can(PermissionEnum::STOK_TRANSFER->value),
             'gudangSaya' => auth()->user()->gudang_id,
             // Fase 3 revisi: SPV Gudang tercakup ke gudangnya saja; PJ (gudang@)
             // dan peran selain spv-gudang melihat kedua gudang.

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\RoleEnum;
 use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\KodeSequence;
@@ -192,6 +193,65 @@ class StokMushafService
             'created_by' => $pelaku->id,
             'transfer_id' => $transferId,
         ]);
+    }
+
+    /**
+     * Baris stok ringkas untuk form dokumen transfer (tab "Stok tanpa muwakif" di halaman
+     * Perpindahan Mushaf, 26/10/2026): satu baris per gudang × jenis × varian, dengan sisa
+     * eks supaya orang yang membuat dokumen melihat stok yang benar-benar ada.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function ringkasanStok(User $user): array
+    {
+        return StokMushaf::query()
+            ->with(['gudang:id,nama', 'jenisQuran:id,kode_jenis,nama_jenis,default_capacity'])
+            ->when($user->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', $user->gudang_id))
+            ->orderBy('gudang_id')->orderBy('jenis_quran_id')->get()
+            ->map(fn (StokMushaf $stok) => [
+                'gudang_id' => $stok->gudang_id,
+                'gudang' => $stok->gudang?->nama,
+                'jenis_id' => $stok->jenis_quran_id,
+                'kode_jenis' => $stok->jenisQuran?->kode_jenis,
+                'jenis' => $stok->jenisQuran?->nama_jenis,
+                'kapasitas' => (int) ($stok->jenisQuran?->default_capacity ?? 0),
+                'terjemahan' => (bool) $stok->terjemahan,
+                'varian' => $stok->terjemahan ? 'Ada terjemahan' : 'Tanpa terjemahan',
+                'eks' => (int) $stok->jumlah_eks,
+            ])->values()->all();
+    }
+
+    /**
+     * Dokumen transfer stok terakhir — satu sumber untuk halaman Stok Mushaf dan tab
+     * "Stok tanpa muwakif" di halaman Perpindahan Mushaf, supaya kedua layar menampilkan
+     * daftar yang sama (dulu daftar ini hanya ada di halaman stok).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function daftarTransfer(User $user, int $limit = 50): array
+    {
+        return TransferStok::query()
+            ->with(['gudangAsal:id,nama', 'gudangTujuan:id,nama', 'jenisQuran:id,nama_jenis', 'pembuat:id,name'])
+            ->when($user->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where(fn ($q2) => $q2
+                ->where('gudang_asal_id', $user->gudang_id)
+                ->orWhere('gudang_tujuan_id', $user->gudang_id)))
+            ->orderByDesc('id')->limit($limit)->get()
+            ->map(fn (TransferStok $t) => [
+                'id' => $t->id,
+                'kode' => $t->kode,
+                'asal_id' => $t->gudang_asal_id,
+                'asal' => $t->gudangAsal?->nama,
+                'tujuan_id' => $t->gudang_tujuan_id,
+                'tujuan' => $t->gudangTujuan?->nama,
+                'jenis' => $t->jenisQuran?->nama_jenis,
+                'terjemahan' => $t->terjemahan ? 'Ada terjemahan' : 'Tanpa terjemahan',
+                'jumlah_eks' => (int) $t->jumlah_eks,
+                'status' => $t->status,
+                'catatan' => $t->catatan,
+                'dibuat_oleh' => $t->pembuat?->name,
+                'dibuat_oleh_id' => $t->created_by,
+                'dibuat_pada' => $t->created_at?->format('d/m/Y H:i'),
+            ])->values()->all();
     }
 
     /**
