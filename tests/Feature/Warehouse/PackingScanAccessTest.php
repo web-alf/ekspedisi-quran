@@ -119,11 +119,16 @@ it('memastikan setiap penerima tugas benar-benar boleh memulai pemindaian', func
     }
 });
 
-it('tidak menugasi super-admin walau ia memegang semua izin, tetapi SPV Gudang tetap ditugasi', function () {
+it('tidak menugasi super-admin maupun SPV Gudang — tugas otomatis milik freelancer', function () {
     // Di produksi peran super-admin memegang SELURUH izin, termasuk
     // warehouse.packing.scan, sehingga saringan berbasis izin ikut menarik akun pemilik
     // (Zabar, Administrator System). Tugasnya selalu berakhir tanpa satu pun mushaf
     // dikemas, tetapi targetnya tetap masuk hitungan harian dan pemantauan SPV.
+    //
+    // 26/10/2026 keputusan pemilik diperluas: SPV/PJ juga TIDAK ditugasi otomatis walau
+    // mereka memegang izin memindai dan memang "harus bisa mengerjakan". Di produksi
+    // tugas mereka membuat target gudang Semarang tercatat 800 padahal 8 freelancer ×
+    // 80 = 640. Mereka menugasi MANUAL ke freelancer dari Monitor & Penugasan.
     $hariKerja = today()->isWeekend() ? today()->next(Carbon::MONDAY) : today();
 
     $pemilik = User::factory()->create(['is_active' => true]);
@@ -132,7 +137,7 @@ it('tidak menugasi super-admin walau ia memegang semua izin, tetapi SPV Gudang t
     $petugas = User::factory()->create(['is_active' => true]);
     $petugas->assignRole(RoleEnum::WAREHOUSE->value);
 
-    // SPV Gudang memindai sendiri di lapangan, jadi tugasnya harus tetap lahir.
+    // SPV Gudang boleh memindai sendiri, tetapi tidak menerima tugas otomatis.
     $spv = User::factory()->create(['is_active' => true]);
     $spv->assignRole([RoleEnum::SPV_GUDANG->value, RoleEnum::MANAGER_REPACKING->value]);
 
@@ -144,8 +149,9 @@ it('tidak menugasi super-admin walau ia memegang semua izin, tetapi SPV Gudang t
         ->whereDate('tanggal_tugas', $hariKerja)->pluck('user_id');
 
     expect($penerima)->toContain($petugas->id)
-        ->and($penerima)->toContain($spv->id)
+        ->and($penerima)->not->toContain($spv->id)
         ->and($penerima)->not->toContain($pemilik->id)
-        // Super-admin tetap boleh memindai sendiri; yang dihapus hanya tugas otomatisnya.
+        // Keduanya tetap boleh memindai sendiri; yang dihapus hanya tugas otomatisnya.
+        ->and($spv->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeTrue()
         ->and($pemilik->can(PermissionEnum::WAREHOUSE_PACKING_SCAN->value))->toBeTrue();
 });

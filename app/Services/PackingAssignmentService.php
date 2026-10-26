@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
 use App\Models\JenisQuran;
@@ -44,27 +43,17 @@ class PackingAssignmentService
         DB::beginTransaction();
 
         try {
-            // Hanya user yang BENAR-BENAR boleh memindai yang diberi tugas harian.
+            // Hanya FREELANCER MURNI yang diberi tugas harian otomatis.
             //
-            // Sebelumnya di sini dipakai `warehouse.dashboard`, padahal izin itu
-            // adalah tiket masuk SELURUH area gudang (termasuk halaman pemantauan
-            // untuk manager). Akibatnya manager distribusi ikut menerima tugas
-            // packing setiap hari, lengkap dengan tombol "Mulai Packing" di
-            // dasbornya — padahal endpoint start-scanning menolak mereka dengan 403.
-            // Tugas yang tidak bisa dikerjakan bukan tugas; gate-nya adalah izin
-            // memindai, bukan izin melihat.
-            $warehouseUsers = User::permission('warehouse.packing.scan')
+            // Dulu penyaringnya izin `warehouse.packing.scan`, sehingga akun SPV dan PJ
+            // (yang memang harus "bisa mengerjakan") ikut ditugasi setiap pagi. Di
+            // produksi 26/10/2026 itu membuat target gudang Semarang tercatat 800 padahal
+            // 8 freelancer × 80 = 640 — sisanya tugas PJ dan SPV yang tidak dikerjakan
+            // sebagai pekerja packing. Keputusan pemilik: tugas otomatis untuk freelancer;
+            // PJ/SPV menugasi manual ke freelancer dari Monitor & Penugasan.
+            $warehouseUsers = User::query()
+                ->freelancerMurni()
                 ->where('is_active', true)
-                // Super-admin TIDAK menerima tugas harian otomatis (keputusan pemilik, 19/10/2026).
-                //
-                // Saringan ini berbasis IZIN, dan peran super-admin memegang SELURUH izin di
-                // tabel — termasuk warehouse.packing.scan. Di produksi akibatnya akun pemilik
-                // (Zabar, Administrator System) ikut ditugasi setiap pagi: 18 tugas terakhir
-                // selesai 0 dan tidak satu pun mushaf dikemas, tetapi targetnya tetap masuk
-                // hitungan harian dan pemantauan SPV. Tugas yang tidak mungkin dikerjakan
-                // bukan tugas. Super-admin tetap boleh memindai sendiri — yang dihapus hanya
-                // penugasan otomatisnya.
-                ->whereDoesntHave('roles', fn ($query) => $query->where('name', RoleEnum::SUPER_ADMIN->value))
                 ->get();
 
             $results = [];

@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\RoleEnum;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -237,6 +238,39 @@ class User extends Authenticatable
         return $this->roles
             ->sortBy(fn (Role $role) => $urutan[$role->name] ?? PHP_INT_MAX)
             ->first();
+    }
+
+    /**
+     * Freelancer MURNI: pekerja packing yang tidak memegang role pengawas gudang.
+     *
+     * Akun SPV dan PJ juga memegang izin `warehouse.packing.scan` (mereka "harus bisa
+     * mengerjakan"), tetapi mereka bukan pekerja packing. Penugasan otomatis dan daftar
+     * kandidat penugasan memakai aturan ini supaya target harian gudang tidak
+     * menggelembung oleh tugas yang tak akan dikerjakan (produksi 26/10/2026: 21 tugas
+     * dengan target 800 padahal 8 freelancer × 80 = 640).
+     */
+    public function isFreelancerMurni(): bool
+    {
+        return $this->hasRole(RoleEnum::WAREHOUSE->value)
+            && ! $this->hasAnyRole([
+                RoleEnum::SPV_GUDANG->value,
+                RoleEnum::MANAGER_REPACKING->value,
+                RoleEnum::SUPER_ADMIN->value,
+            ]);
+    }
+
+    /**
+     * Query pembatas untuk freelancer murni (lihat isFreelancerMurni()).
+     */
+    public function scopeFreelancerMurni(Builder $query): Builder
+    {
+        return $query
+            ->role(RoleEnum::WAREHOUSE->value)
+            ->whereDoesntHave('roles', fn (Builder $roles) => $roles->whereIn('name', [
+                RoleEnum::SPV_GUDANG->value,
+                RoleEnum::MANAGER_REPACKING->value,
+                RoleEnum::SUPER_ADMIN->value,
+            ]));
     }
 
     /**

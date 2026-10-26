@@ -522,6 +522,17 @@ class WarehouseMonitorController extends Controller
         $user = User::find($request->user_id);
         $gudangTercakup = $this->gudangTercakup();
 
+        // Tugas packing hanya untuk freelancer murni. Akun SPV/PJ memegang izin memindai
+        // (mereka "harus bisa mengerjakan") tetapi bukan pekerja packing: menugasi mereka
+        // membuat target gudang menggelembung oleh pekerjaan yang tak akan dilakukan
+        // (keputusan pemilik 26/10/2026 — PJ/SPV menugasi MANUAL ke freelancer).
+        if (! $user || ! $user->isFreelancerMurni()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tugas packing hanya bisa diberikan ke freelancer gudang (role Freelancer Gudang). Akun SPV/PJ tidak menerima tugas packing — tugaskan ke freelancer-nya.',
+            ], 422);
+        }
+
         // SPV tidak boleh menugaskan freelancer gudang lain atau menimpa tugas yang sudah
         // bertagih gudang lain: tagihannya akan ikut berpindah ke gudang SPV ini, dan kerdus
         // yang dibuat freelancer itu tercatat di gudang yang salah.
@@ -806,14 +817,15 @@ class WarehouseMonitorController extends Controller
             return collect();
         }
 
-        // Daftar KANDIDAT PENUGASAN PACKING: hanya role `warehouse` (freelancer
-        // pekerja). Dulu memakai penyaring izin `warehouse.dashboard`, sehingga
-        // super-admin (memegang semua izin) dan peran lain ikut tampil di modal
-        // Assign Target padahal bukan pekerja packing.
+        // Daftar KANDIDAT PENUGASAN PACKING: hanya FREELANCER MURNI (role `warehouse`
+        // tanpa spv-gudang/manager-repacking). Dulu penyaringnya role `warehouse` saja,
+        // sehingga akun PJ yang juga memegang role itu (gudang@) ikut ditawarkan sebagai
+        // pekerja packing — dan tugasnya menggelembungkan target gudang.
         //
         // SPV hanya ditawari freelancer gudangnya + yang belum ditempatkan — sama dengan
         // yang diterima assignTargetToUser().
-        return User::role(RoleEnum::WAREHOUSE->value)
+        return User::query()
+            ->freelancerMurni()
             ->where('is_active', true)
             ->when($gudangTercakup !== null, fn ($q) => $q->where(fn ($q2) => $q2
                 ->where('gudang_id', $gudangTercakup)
