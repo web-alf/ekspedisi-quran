@@ -210,9 +210,12 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // Warehouse Role - includes granular warehouse permissions
+        // Label "Freelancer Gudang": role ini adalah pekerja lepas yang ditugasi SPV
+        // (bukan staf tetap) — label lamanya "Staff Gudang" membuat pemilik sistem
+        // mencari opsi "Freelancer" yang tidak pernah ada di form pengguna (26/10/2026).
         $warehouse = Role::firstOrCreate(
             ['name' => RoleEnum::WAREHOUSE->value],
-            ['display_name' => 'Staff Gudang', 'guard_name' => 'web']
+            ['display_name' => 'Freelancer Gudang', 'guard_name' => 'web']
         );
         $warehouse->syncPermissions([
             PermissionEnum::DASHBOARD_VIEW->value,

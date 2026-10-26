@@ -8,6 +8,7 @@
   
   export let user;
   export let roles = {};
+  export let roleGroups = [];
   export let managerList = [];
   export let auth = {};
   export const errors = {};
@@ -162,8 +163,12 @@
             class:border-red-500={$form.errors.role}
           >
             <option value="">Pilih Role</option>
-            {#each Object.entries(roles) as [value, label]}
-              <option {value}>{label}</option>
+            {#each roleGroups as grup}
+              <optgroup label={grup.label}>
+                {#each grup.roles as opsi}
+                  <option value={opsi.value}>{opsi.label}</option>
+                {/each}
+              </optgroup>
             {/each}
           </select>
           {#if $form.errors.role}

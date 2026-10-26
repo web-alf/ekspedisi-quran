@@ -6,6 +6,7 @@
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let roles = {};
+  export let roleGroups = [];
   export let managerList = [];
   export const auth = {};
   export const errors = {};
@@ -127,10 +128,19 @@
             class:border-red-500={$form.errors.role}
           >
             <option value="">Pilih Role</option>
-            {#each Object.entries(roles) as [value, label]}
-              <option {value}>{label}</option>
+            {#each roleGroups as grup}
+              <optgroup label={grup.label}>
+                {#each grup.roles as opsi}
+                  <option value={opsi.value}>{opsi.label}</option>
+                {/each}
+              </optgroup>
             {/each}
           </select>
+          <p class="mt-2 text-xs text-gray-500">
+            Freelancer gudang memakai role <span class="font-medium">Freelancer Gudang</span>. Setelah akun dibuat,
+            PJ gudang menempatkannya ke Semarang/Boyolali di menu Penempatan Gudang — sebelum itu akun belum muncul
+            sebagai kandidat penugasan SPV.
+          </p>
           {#if $form.errors.role}
             <p class="mt-2 text-sm text-red-600 flex items-center">
               <HeroIcon name="exclamation-circle" class="w-4 h-4 mr-1 text-red-600" />

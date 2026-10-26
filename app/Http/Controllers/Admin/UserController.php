@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Sertifikat;
 use App\Models\User;
 use App\Support\PerPage;
+use App\Support\PilihanRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
@@ -85,6 +86,10 @@ class UserController extends Controller
             'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
             }),
+            // Daftar role berkelompok untuk dropdown (Gudang / Distribusi / Kantor).
+            // Lihat App\Support\PilihanRole — daftar mentah membingungkan: urutannya
+            // urutan id, dan role lama yang tak dipakai ikut ditawarkan.
+            'roleGroups' => PilihanRole::kelompok(),
             'managerList' => User::daftarManager(),
         ]);
     }
@@ -146,6 +151,9 @@ class UserController extends Controller
             'roles' => Role::all()->mapWithKeys(function ($role) {
                 return [$role->name => $role->display_name ?? $role->name];
             }),
+            // Role yang sedang dipegang selalu ikut tampil, termasuk yang disembunyikan
+            // dari form (mis. `distribusi` pada akun lama).
+            'roleGroups' => PilihanRole::kelompok($user->role),
             'managerList' => User::daftarManager(),
             'auth' => [
                 'user' => [
