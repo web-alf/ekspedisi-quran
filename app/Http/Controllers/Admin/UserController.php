@@ -55,7 +55,7 @@ class UserController extends Controller
 
         // Transform users to include proper role information
         $users->getCollection()->transform(function ($user) {
-            $user->spatie_role = $user->roles->first()?->name;
+            $user->spatie_role = $user->roleUtama()?->name;
             $user->role_display = $user->getRoleDisplayAttribute();
 
             return $user;

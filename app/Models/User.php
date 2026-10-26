@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -182,7 +183,10 @@ class User extends Authenticatable
      */
     public function getRoleDisplayAttribute()
     {
-        $role = $this->roles->first();
+        // Role UTAMA (paling luas wewenangnya), bukan baris pivot pertama: akun yang
+        // memegang beberapa role (mis. PJ gudang yang juga memegang role warehouse sejak
+        // data lama) tidak boleh tampil sebagai freelancer.
+        $role = $this->roleUtama();
         if (! $role) {
             return 'No Role';
         }
@@ -190,6 +194,49 @@ class User extends Authenticatable
         // Use role's name directly from database
         // For custom display names, add 'display_name' column to roles table
         return $role->display_name ?? $role->name;
+    }
+
+    /**
+     * Role yang MEWAKILI akun di tabel/daftar pengguna.
+     *
+     * Satu akun bisa memegang beberapa role (mis. akun PJ gudang yang juga punya role
+     * `warehouse` sejak data lama), dan `$this->roles->first()` mengikuti urutan baris
+     * pivot — bukan wewenang. 26/10/2026: label `warehouse` berganti menjadi
+     * "Freelancer Gudang" dan akun gudang@ (PJ) yang memegang dua role langsung tampil
+     * sebagai freelancer di daftar pengguna. Urutan di bawah menaruh role terluas lebih
+     * dulu, jadi yang tampil adalah role yang benar-benar mewakili akun itu.
+     *
+     * @var array<int, string>
+     */
+    public const URUTAN_TAMPIL_ROLE = [
+        RoleEnum::SUPER_ADMIN->value,
+        RoleEnum::MANAGER->value,
+        // SPV di ATAS PJ: akun SPV Semarang/Boyolali memegang DUA role (spv-gudang +
+        // manager-repacking), dan identitas kerjanya adalah SPV per gudang — menampilkan
+        // "Manager Repacking" di akun bernama "SPV Semarang" justru mengaburkan siapa dia.
+        RoleEnum::SPV_GUDANG->value,
+        RoleEnum::MANAGER_REPACKING->value,
+        RoleEnum::SUPERVISOR->value,
+        RoleEnum::CUSTOMER_SERVICE->value,
+        RoleEnum::DISTRIBUSI->value,
+        RoleEnum::COURIER->value,
+        RoleEnum::WAREHOUSE->value,
+    ];
+
+    /**
+     * Role utama akun (paling luas wewenangnya), atau null bila belum punya role.
+     */
+    public function roleUtama(): ?Role
+    {
+        if ($this->roles->isEmpty()) {
+            return null;
+        }
+
+        $urutan = array_flip(self::URUTAN_TAMPIL_ROLE);
+
+        return $this->roles
+            ->sortBy(fn (Role $role) => $urutan[$role->name] ?? PHP_INT_MAX)
+            ->first();
     }
 
     /**

@@ -252,7 +252,9 @@ class RingkasanGudangService
         $tugas = DailyPackingTask::query()
             ->whereDate('tanggal_tugas', today())
             ->where('gudang_id', $gudangId)
-            ->with('user:id,name')
+            // roles ikut dimuat: baris daftar memakai label PERAN pemilik tugas, supaya
+            // akun PJ/SPV yang juga punya tugas tidak tampil seolah-olah freelancer.
+            ->with(['user:id,name', 'user.roles'])
             ->withCount('packingBoxes')
             ->get();
 
@@ -270,6 +272,10 @@ class RingkasanGudangService
                 ->map(fn (DailyPackingTask $t) => [
                     'id' => $t->id,
                     'nama' => $t->user?->name ?? '-',
+                    // Label PERAN (role terluas akun itu): PJ dan SPV memang bisa ikut
+                    // memegang tugas packing, dan tanpa label ini baris mereka terbaca
+                    // sebagai freelancer biasa.
+                    'peran' => $t->user?->role_display,
                     'selesai' => (int) $t->total_selesai,
                     'target' => (int) $t->total_target,
                     'mulai' => (bool) $t->started_at,

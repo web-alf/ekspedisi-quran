@@ -94,3 +94,21 @@ it('tidak membagi nol saat target freelancer kosong', function () {
 
     expect($staf['persen'])->toBe(0);
 });
+
+it('memberi label peran pada baris, supaya akun PJ/SPV tidak terbaca sebagai freelancer', function () {
+    // Akun PJ yang juga memegang role warehouse (seperti gudang@ di produksi) tetap punya
+    // tugas harian; label perannya yang membedakan dia dari freelancer.
+    $pj = User::factory()->create(['is_active' => true, 'gudang_id' => $this->smg->id, 'name' => 'PJ Gudang']);
+    $pj->syncRoles(['warehouse', 'manager-repacking']);
+    fkTask($pj, 80, 10);
+    fkTask($this->staf, 80, 12);
+
+    $perStaf = $this->actingAs($this->spv)->get('/admin/warehouse')->assertOk()
+        ->viewData('page')['props']['ringkasanGudang']['packing']['per_staf'];
+
+    $barisPj = collect($perStaf)->firstWhere('nama', 'PJ Gudang');
+    $barisFreelancer = collect($perStaf)->firstWhere('nama', 'Qanita Nadya');
+
+    expect($barisPj['peran'])->toBe('Manager Repacking (PJ Gudang)')
+        ->and($barisFreelancer['peran'])->toBe('Freelancer Gudang');
+});

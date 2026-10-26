@@ -13,7 +13,7 @@
   import PilTitik from './PilTitik.svelte';
   import { hasPermission } from '../../utils/permissions.js';
 
-  /** @type {Array<{id?: number, nama: string, selesai: number, target: number, kode?: string, status?: string, persen?: number, jam_mulai?: string|null, jam_selesai?: string|null, kerdus?: number}>} */
+  /** @type {Array<{id?: number, nama: string, peran?: string, selesai: number, target: number, kode?: string, status?: string, persen?: number, jam_mulai?: string|null, jam_selesai?: string|null, kerdus?: number}>} */
   export let staf = [];
 
   $: bolehLihatPerforma = hasPermission('warehouse.performance.view');
@@ -54,6 +54,9 @@
               <p class="font-semibold text-gray-900 truncate">{s.nama}</p>
               {#if s.kode}
                 <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border border-gray-200 text-gray-500">{s.kode}</span>
+              {/if}
+              {#if s.peran && s.peran !== 'Freelancer Gudang'}
+                <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border border-gray-200 text-gray-600 bg-gray-50">{s.peran}</span>
               {/if}
               <PilTitik warna={tampilanStatus(s.status).warna}>{tampilanStatus(s.status).label}</PilTitik>
             </div>
