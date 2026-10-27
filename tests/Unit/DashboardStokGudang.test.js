@@ -29,47 +29,56 @@ describe('Seksi Stok dashboard gudang', () => {
         expect(blokManager).toMatch(/<KartuAlur\b/);
     });
 
-    it('memuat empat kartu tahap resi dan lima kartu muwakif di kedua blok', () => {
-        for (const blok of [blokSpv, blokManager]) {
-            for (const label of ['Proses Pesan', 'Proses Packing', 'Selesai Packing', 'Sudah Dikarduskan · Siap Distribusi']) {
-                expect(blok).toContain(`label="${label}"`);
-            }
-            // Kartu muwakif dirender dari props (lima baris tetap dari server).
-            expect(blok).toContain('{#each ');
-            expect(blok).toMatch(/stok\.muwakif as baris/);
-            expect(blok).toContain('Mushaf belum ada muwakif');
+    it('SPV memuat empat kartu tahap resi dan lima kartu muwakif', () => {
+        for (const label of ['Proses Pesan', 'Proses Packing', 'Selesai Packing', 'Sudah Dikarduskan · Siap Distribusi']) {
+            expect(blokSpv).toContain(`label="${label}"`);
         }
+        // Kartu muwakif dirender dari props (lima baris tetap dari server).
+        expect(blokSpv).toMatch(/stok\.muwakif as baris/);
+        expect(blokSpv).toContain('Mushaf belum ada muwakif');
     });
 
-    it('Manager memakai tiga seksi: total lalu per gudang; SPV satu seksi gudangnya', () => {
-        // Seksi 1: total semua gudang.
-        expect(blokManager).toContain('judul="Stok Seluruh Gudang"');
-        // Seksi 2 & 3: satu RingkasanSection per gudang, ditulis sekali lalu diulang {#each}.
-        expect(blokManager).toContain('{#each ringkasanManager.per_gudang as g (g.id)}');
-        expect(blokManager).toContain('judul="Stok {g.nama}"');
-        expect(blokManager).toMatch(/per_gudang[\s\S]*?judul="Stok \{g\.nama\}"/);
+    it('Manager memuat lima kartu alur dengan label dan satuan yang disepakati klien', () => {
+        const kartuAlur = [
+            ['Sedang Dipesan', 'eks'],
+            ['Stok Siap, Belum Ada Wakif', 'eks'],
+            ['Sedang Dikemas', 'resi'],
+            ['Selesai Dikemas', 'resi'],
+            // Dihitung per KERDUS tersegel, bukan per eks (keputusan 27/10/2026).
+            ['Siap Dikirim', 'kerdus'],
+        ];
+        for (const [label, satuan] of kartuAlur) {
+            expect(blokManager).toMatch(new RegExp(`label="${label}"[\\s\\S]*?satuan="${satuan}"`));
+        }
+        expect(blokManager).toMatch(/label="Siap Dikirim"\s+nilai=\{numberId\(g\.stok\.kerdus\.jumlah\)\}/);
+        // Stok tanpa resi bukan tahap alur — dibedakan dengan garis putus.
+        expect(blokManager).toMatch(/label="Stok Siap, Belum Ada Wakif"[\s\S]*?nada="cadangan"/);
+    });
 
-        // SPV: satu seksi saja, judul gudangnya sendiri.
+    it('Manager: satu seksi alur per gudang; SPV satu seksi gudangnya', () => {
+        expect(blokManager).toContain('{#each gudangManager as g (g.id)}');
+        expect(blokManager).toContain('judul="Alur Mushaf — {g.nama}"');
+        expect(blokManager).not.toContain('judul="Stok Seluruh Gudang"');
+
         expect(blokSpv).toContain('judul="Stok {ringkasanGudang.gudang.nama}"');
-        expect(blokSpv).not.toContain('judul="Stok Seluruh Gudang"');
     });
 
-    it('seksi total menyebut resi yang belum bertagih gudang', () => {
-        // Angka total memuat resi lama tanpa gudang; tanpa catatan ini pembaca akan
-        // menjumlah seksi per gudang dan menyimpulkan angkanya salah.
-        expect(blokManager).toContain('stok.tanpa_gudang');
-        expect(blokManager).toContain('belum bertagih gudang');
+    it('Manager menyebut resi yang belum punya gudang di luar seksi per gudang', () => {
+        // Resi tanpa gudang tidak masuk Semarang maupun Boyolali; tanpa catatan ini angkanya
+        // hilang dari pandangan PJ.
+        expect(blokManager).toMatch(/\{#if adaTanpaGudang\}[\s\S]*?tanpaGudang\.pemesanan[\s\S]*?tanpaGudang\.pemesanan_eks/);
+        expect(blokManager).toContain('Belum punya gudang tujuan');
     });
 
     it('seksi stok tidak memakai tabel', () => {
-        for (const blok of [blokSpv, blokManager]) {
-            const seksi = blok.slice(blok.indexOf('judul="Stok'), blok.indexOf('</RingkasanSection>', blok.indexOf('judul="Stok')));
-            expect(seksi).not.toContain('<table');
-        }
+        expect(blokManager).not.toContain('<table');
+        const seksi = blokSpv.slice(blokSpv.indexOf('judul="Stok'), blokSpv.indexOf('</RingkasanSection>', blokSpv.indexOf('judul="Stok')));
+        expect(seksi).not.toContain('<table');
     });
 
     it('komponen kartu memakai kelas kotak angka yang sudah ada', () => {
-        expect(kartu).toContain('border border-gray-200 rounded-xl p-3');
+        expect(kartu).toContain('rounded-xl p-3');
+        expect(kartu).toMatch(/biasa: 'border-gray-200'/);
         expect(kartu).toContain('text-[10px] font-semibold uppercase tracking-wide text-gray-500');
         expect(kartu).toContain('text-2xl font-bold text-gray-900');
     });

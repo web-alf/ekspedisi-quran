@@ -16,6 +16,16 @@
   import FreelancerKerjaHariIni from '../../Components/Warehouse/FreelancerKerjaHariIni.svelte';
   import { hasPermission } from '../../utils/permissions.js';
   import { can } from '../../utils/permissions.js';
+  import {
+    SEMUA_GUDANG,
+    gudangTampil,
+    totalBelumAdaWakif,
+    packingCakupan,
+    stokPerJenis,
+    stokHabisDiSatuGudang,
+    urutkanStafBelumMulaiDulu,
+    dokumenTerkait,
+  } from '../../utils/ringkasanManagerGudang.js';
 
   // Boleh memulai/melanjutkan packing? Endpoint /start-scanning dijaga izin
   // warehouse.packing.scan, jadi tanpa izin itu tombolnya hanya akan menghasilkan
@@ -51,8 +61,8 @@
   export let ringkasanGudang = null;
   export let ringkasanManager = null;
 
-  // Status aktif kartu stok (manager): 'semua' / id gudang.
-  let stokAktif = 'semua';
+  // Filter gudang dashboard Manager: 'semua' / id gudang (string).
+  let stokAktif = SEMUA_GUDANG;
 
   // Urutan tahap beban gudang — sama untuk SPV dan Manager.
   const TAHAP_BEBAN = [
@@ -65,10 +75,6 @@
   /** 1.284 → "1.284" (pemisah ribuan Indonesia). */
   function numberId(angka) {
     return new Intl.NumberFormat('id-ID').format(Number(angka) || 0);
-  }
-
-  function totalBeban(kunci) {
-    return (ringkasanManager?.per_gudang ?? []).reduce((n, g) => n + (g.beban?.[kunci] ?? 0), 0);
   }
 
   // SPV & Manager hanya memantau: kartu pribadi staf (tugas, kerdus, performa)
@@ -86,50 +92,25 @@
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
     : 0;
 
-  // ===== Turunan ringkasan dua gudang (Manager / PJ, 22/10/2026) =====
-  // Nilai untuk kartu "Ringkasan Packing Hari Ini" (gabungan) dan "Performa
-  // Gudang" (per gudang). Gudang diurut dari persen tertinggi supaya orang
-  // gudang langsung melihat yang terdepan, bukan urutan dari database.
-  const DONUT_KELILING = 2 * Math.PI * 27; // keliling donut SVG r=27
-
-  $: gabunganTarget = ringkasanManager?.gabungan?.target ?? 0;
-  $: gabunganSelesai = ringkasanManager?.gabungan?.selesai ?? 0;
-  $: pctGabungan = gabunganTarget > 0 ? Math.round((gabunganSelesai / gabunganTarget) * 100) : 0;
-  $: sisaGabungan = Math.max(0, gabunganTarget - gabunganSelesai);
-  $: perGudangUrut = ringkasanManager
-    ? [...ringkasanManager.per_gudang].sort(
-        (a, b) => (b.persen - a.persen) || (b.selesai - a.selesai) || a.nama.localeCompare(b.nama)
-      )
-    : [];
-  // Bar bertumpuk kartu gabungan: kontribusi tiap gudang terhadap target
-  // gabungan, di-clamp supaya hasil di atas target tidak meluber.
-  $: segGabungan = (() => {
-    if (gabunganTarget <= 0) return [0, 0];
-    const segA = Math.max(0, Math.min(100, ((perGudangUrut[0]?.selesai ?? 0) / gabunganTarget) * 100));
-    const segB = Math.max(0, Math.min(100 - segA, ((perGudangUrut[1]?.selesai ?? 0) / gabunganTarget) * 100));
-    return [segA, segB];
-  })();
-  // Sama dengan SPV: seluruh freelancer yang ditugaskan hari ini, diberi kode gudangnya.
-  $: stafKerjaManager = perGudangUrut.flatMap((g) => (g.staf_kerja || []).map((st) => ({ ...st, kode: st.kode ?? g.kode })));
-
-  // Palet Tailwind (bukan hex lepas) supaya seragam dengan halaman lain.
-  // Ditulis utuh agar tidak dibuang purge Tailwind.
-  function warnaGudang(i) {
-    return i === 0
-      ? { bg: 'bg-indigo-500', stroke: 'stroke-indigo-500' }
-      : { bg: 'bg-indigo-300', stroke: 'stroke-indigo-300' };
-  }
-
-  function donutOffset(persen) {
-    const p = Math.max(0, Math.min(100, persen || 0));
-    return DONUT_KELILING * (1 - p / 100);
-  }
-
-  // "Terdepan hari ini" hanya bila persennya beda dan memang di atas 0.
-  function tampilTerdepan(i) {
-    if (i !== 0 || perGudangUrut.length < 2) return false;
-    return perGudangUrut[0].persen > 0 && perGudangUrut[0].persen !== perGudangUrut[1].persen;
-  }
+  // ===== Turunan ringkasan dua gudang (Manager / PJ, desain 27/10/2026) =====
+  // Setiap seksi mengikuti filter gudang; rumusnya di utils/ringkasanManagerGudang.js.
+  $: gudangManager = gudangTampil(ringkasanManager?.per_gudang ?? [], stokAktif);
+  $: semuaGudang = stokAktif === SEMUA_GUDANG;
+  $: namaCakupan = semuaGudang ? 'Semua Gudang' : (gudangManager[0]?.nama ?? '');
+  $: packingManager = packingCakupan(ringkasanManager, stokAktif);
+  $: stokJenisManager = stokPerJenis(gudangManager);
+  $: stokHabisManager = stokHabisDiSatuGudang(ringkasanManager?.per_gudang ?? [])
+    .filter((s) => semuaGudang || s.gudang === gudangManager[0]?.nama);
+  // Resi tanpa gudang tidak masuk alur gudang mana pun; ditulis sebagai catatan di
+  // tampilan semua gudang supaya tidak hilang dari pandangan PJ.
+  $: tanpaGudang = ringkasanManager?.stok?.tanpa_gudang ?? {};
+  $: adaTanpaGudang = semuaGudang
+    && ((tanpaGudang.pemesanan ?? 0) + (tanpaGudang.packing ?? 0) + (tanpaGudang.selesai ?? 0)) > 0;
+  // Sama dengan SPV: seluruh freelancer yang ditugaskan hari ini, diberi kode gudangnya —
+  // yang belum mulai paling atas karena itulah yang perlu ditindaklanjuti.
+  $: stafKerjaManager = urutkanStafBelumMulaiDulu(
+    gudangManager.flatMap((g) => (g.staf_kerja || []).map((st) => ({ ...st, kode: st.kode ?? g.kode })))
+  );
   
   // State
   let showNotifications = false;
@@ -381,9 +362,10 @@
         </div>
     </div>
     
-      <!-- Ringkasan SPV (satu gudang) dan Manager (dua gudang) memakai komponen
-           yang sama dengan urutan yang sama: Packing → (Performa, manager) →
-           Perlu Tindakan → Beban → Stok. Ubah komponennya, bukan salah satu blok. -->
+      <!-- Ringkasan SPV (satu gudang) dan Manager (dua gudang) memakai komponen yang
+           sama (RingkasanSection, StatTile, KartuAlur, PilTitik, PerluTindakan, ...);
+           gaya diubah di komponennya, bukan di salah satu blok. Susunan seksi Manager
+           sendiri sejak desain 27/10/2026 (lihat komentar di bloknya). -->
       {#if ringkasanGudang}
         <RingkasanSection
           icon="cube"
@@ -501,186 +483,163 @@
       {/if}
 
       {#if ringkasanManager}
+        <!-- Desain Manager Gudang 27/10/2026: satu filter gudang menggantikan seksi stok
+             yang diulang per gudang. Urutan: Alur Mushaf per gudang → Packing → Stok per
+             jenis → Freelancer → Perlu Tindakan (paling bawah, keputusan pemilik). -->
+        <div class="flex sm:inline-flex gap-1 p-1 bg-gray-100 rounded-lg mb-6" role="tablist" aria-label="Pilih gudang">
+          <button type="button" role="tab" aria-selected={stokAktif === SEMUA_GUDANG} on:click={() => (stokAktif = SEMUA_GUDANG)}
+            class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap {stokAktif === SEMUA_GUDANG ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua gudang</button>
+          {#each ringkasanManager.per_gudang as g (g.id)}
+            <button type="button" role="tab" aria-selected={stokAktif === String(g.id)} on:click={() => (stokAktif = String(g.id))}
+              class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap {stokAktif === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
+          {/each}
+        </div>
+
+        {#each gudangManager as g (g.id)}
+          <RingkasanSection
+            icon="archive-box"
+            warna="green"
+            judul="Alur Mushaf — {g.nama}"
+            keterangan="Dari pemesanan sampai siap dikirim"
+          >
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+              <KartuAlur
+                label="Sedang Dipesan"
+                nilai={numberId(g.stok.pemesanan.eks)}
+                satuan="eks"
+                keterangan="{numberId(g.stok.pemesanan.resi)} resi · belum tiba di gudang"
+              />
+              <KartuAlur
+                label="Stok Siap, Belum Ada Wakif"
+                nilai={numberId(totalBelumAdaWakif(g.stok))}
+                satuan="eks"
+                keterangan="Sudah di gudang, menunggu wakif"
+                nada="cadangan"
+              />
+              <KartuAlur
+                label="Sedang Dikemas"
+                nilai={numberId(g.stok.packing)}
+                satuan="resi"
+                keterangan="Mushaf sedang dimasukkan ke kerdus"
+              />
+              <KartuAlur
+                label="Selesai Dikemas"
+                nilai={numberId(g.stok.selesai)}
+                satuan="resi"
+                keterangan="Semua mushaf dalam pesanan sudah dikemas"
+              />
+              <KartuAlur
+                label="Siap Dikirim"
+                nilai={numberId(g.stok.kerdus.jumlah)}
+                satuan="kerdus"
+                keterangan="Tersegel, berisi {numberId(g.stok.kerdus.eks)} eks"
+                nada="siap"
+              />
+            </div>
+          </RingkasanSection>
+        {/each}
+
+        {#if adaTanpaGudang}
+          <p class="-mt-2 sm:-mt-4 mb-6 sm:mb-8 flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600" data-tanpa-gudang>
+            <HeroIcon name="information-circle" class="w-5 h-5 text-amber-600 flex-none" />
+            <span>
+              Belum punya gudang tujuan, jadi tidak masuk alur Semarang maupun Boyolali:
+              <b class="text-gray-900">{numberId(tanpaGudang.pemesanan)} resi dipesan</b> ({numberId(tanpaGudang.pemesanan_eks)} eks)
+              {#if tanpaGudang.packing > 0} · {numberId(tanpaGudang.packing)} sedang dikemas{/if}
+              {#if tanpaGudang.selesai > 0} · {numberId(tanpaGudang.selesai)} selesai dikemas{/if}.
+            </span>
+          </p>
+        {/if}
+
         <RingkasanSection
           icon="cube"
-          judul="Packing Hari Ini — Semua Gudang"
-          keterangan="Gabungan target & hasil {perGudangUrut.map((g) => g.nama).join(' + ')}"
+          judul="Packing Hari Ini — {namaCakupan}"
+          keterangan="{packingManager.selesai} dari {packingManager.target} mushaf sudah dikemas"
         >
           <div slot="kanan" class="text-right flex-none">
-            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{pctGabungan}%</p>
+            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{packingManager.persen}%</p>
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
 
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatTile label="Target hari ini" nilai={gabunganTarget} satuan="mushaf" />
-            <StatTile label="Sudah dikemas" nilai={gabunganSelesai} satuan="mushaf">
-              <PilTitik class="mt-2">{pctGabungan}%</PilTitik>
+            <StatTile label="Target hari ini" nilai={packingManager.target} satuan="mushaf" />
+            <StatTile label="Sudah dikemas" nilai={packingManager.selesai} satuan="mushaf">
+              <PilTitik class="mt-2">{packingManager.persen}%</PilTitik>
             </StatTile>
-            <StatTile label="Kerdus tersegel" nilai={ringkasanManager.gabungan.kerdus_tersegel} satuan="kerdus" />
+            <StatTile label="Kerdus tersegel" nilai={packingManager.kerdus} satuan="kerdus" />
             <StatTile
               label="Staf belum mulai"
-              nilai={ringkasanManager.gabungan.staf_belum_mulai}
+              nilai={packingManager.belumMulai}
               satuan="staf"
-              peringatan={ringkasanManager.gabungan.staf_belum_mulai > 0}
+              peringatan={packingManager.belumMulai > 0}
             />
           </div>
 
-          <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
-            <span>Progress kemas gabungan</span>
-            <span><b class="text-gray-900">{gabunganSelesai}</b> / {gabunganTarget} mushaf · {ringkasanManager.gabungan.staf_bertugas} staf bertugas</span>
+          <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+            <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, packingManager.persen)}%"></div>
           </div>
-          <!-- Setiap segmen = kontribusi satu gudang terhadap target gabungan
-               (segmen pertama = gudang terdepan, warnanya sama dengan kartu
-               Performa Gudang di bawah); lihat legendanya. -->
-          <div class="flex h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            {#each segGabungan as lebar, i}
-              {#if lebar > 0}
-                <span class="h-full transition-all duration-500 {warnaGudang(i).bg}" style="width: {lebar}%"></span>
-              {/if}
-            {/each}
-          </div>
-          <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
-            {#each perGudangUrut as g, i (g.id)}
-              <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full flex-none {warnaGudang(i).bg}"></span>{g.nama} · {g.selesai}</span>
-            {/each}
-            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-300 flex-none"></span>Sisa {sisaGabungan}</span>
-          </div>
-          {#if ringkasanManager.gabungan.tugas_tanpa_gudang > 0}
-            <p class="mt-2 text-xs text-amber-700" data-tugas-tanpa-gudang>
-              {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
-            </p>
+
+          {#if semuaGudang}
+            <div class="mt-5 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {#each ringkasanManager.per_gudang as g (g.id)}
+                <div>
+                  <div class="mb-1 flex justify-between items-baseline gap-2 text-sm">
+                    <span class="font-medium text-gray-900">{g.nama}</span>
+                    <span class="text-gray-500">{g.selesai} / {g.target} · <b class="text-gray-900">{g.persen}%</b></span>
+                  </div>
+                  <div class="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, g.persen)}%"></div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+            {#if ringkasanManager.gabungan.tugas_tanpa_gudang > 0}
+              <p class="mt-3 text-xs text-amber-700" data-tugas-tanpa-gudang>
+                {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
+              </p>
+            {/if}
           {/if}
         </RingkasanSection>
 
         <RingkasanSection
           icon="archive-box"
           warna="green"
-          judul="Stok Seluruh Gudang"
-          keterangan="{perGudangUrut.map((g) => g.nama).join(' + ')}"
+          judul="Stok Belum Ada Wakif — per Jenis"
+          keterangan="Eksemplar siap di gudang yang belum masuk resi · {namaCakupan}"
         >
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KartuAlur
-              label="Proses Pesan"
-              nilai={numberId(ringkasanManager.stok.pemesanan.resi)}
-              satuan="resi"
-              keterangan="{numberId(ringkasanManager.stok.pemesanan.eks)} eks dipesan"
-            />
-            <KartuAlur label="Proses Packing" nilai={numberId(ringkasanManager.stok.packing)} satuan="resi" />
-            <KartuAlur label="Selesai Packing" nilai={numberId(ringkasanManager.stok.selesai)} satuan="resi" />
-            <KartuAlur
-              label="Sudah Dikarduskan · Siap Distribusi"
-              nilai={numberId(ringkasanManager.stok.kerdus.eks)}
-              satuan="eks"
-              keterangan="{ringkasanManager.stok.kerdus.jumlah} kerdus tersegel"
-            />
-          </div>
-
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {#each ringkasanManager.stok.muwakif as baris (baris.label)}
-              <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
-            {/each}
-          </div>
-
-          {#if ringkasanManager.stok.tanpa_gudang.pemesanan > 0 || ringkasanManager.stok.tanpa_gudang.packing > 0 || ringkasanManager.stok.tanpa_gudang.selesai > 0}
-            <p class="text-xs text-gray-400 mt-3">
-              Termasuk {numberId(ringkasanManager.stok.tanpa_gudang.pemesanan)} resi pemesanan ·
-              {numberId(ringkasanManager.stok.tanpa_gudang.packing)} packing ·
-              {numberId(ringkasanManager.stok.tanpa_gudang.selesai)} selesai packing yang belum bertagih gudang.
-            </p>
-          {/if}
-        </RingkasanSection>
-
-        {#each ringkasanManager.per_gudang as g (g.id)}
-          <RingkasanSection
-            icon="archive-box"
-            warna="green"
-            judul="Stok {g.nama}"
-            keterangan="Gudang ini saja"
-          >
-            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KartuAlur
-                label="Proses Pesan"
-                nilai={numberId(g.stok.pemesanan.resi)}
-                satuan="resi"
-                keterangan={g.stok.pemesanan.resi === 0 ? 'belum ada resi bertagih gudang ini' : ''}
-              />
-              <KartuAlur label="Proses Packing" nilai={numberId(g.stok.packing)} satuan="resi" />
-              <KartuAlur label="Selesai Packing" nilai={numberId(g.stok.selesai)} satuan="resi" />
-              <KartuAlur
-                label="Sudah Dikarduskan · Siap Distribusi"
-                nilai={numberId(g.stok.kerdus.eks)}
-                satuan="eks"
-                keterangan="{g.stok.kerdus.jumlah} kerdus tersegel"
-              />
-            </div>
-
-            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
-            <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              {#each g.stok.muwakif as baris (baris.label)}
-                <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
-              {/each}
-            </div>
-          </RingkasanSection>
-        {/each}
-
-        <RingkasanSection
-          icon="chart-pie"
-          judul="Performa Gudang"
-          keterangan="Capaian tiap gudang hari ini, diurut dari yang terdepan"
-        >
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {#each perGudangUrut as g, i (g.id)}
-              <div class="border border-gray-200 rounded-xl p-4">
-                <div class="flex items-start justify-between gap-3 mb-3">
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <p class="font-semibold text-gray-900">{g.nama}</p>
-                      <span class="inline-flex px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border border-gray-200 text-gray-500">{g.kode}</span>
-                    </div>
-                    {#if tampilTerdepan(i)}
-                      <PilTitik warna="green" class="mt-1.5">Terdepan hari ini</PilTitik>
-                    {/if}
-                  </div>
-                  <div class="relative w-16 h-16 flex-none">
-                    <svg viewBox="0 0 64 64" class="w-16 h-16">
-                      <circle cx="32" cy="32" r="27" fill="none" class="stroke-gray-200" stroke-width="7"></circle>
-                      <circle cx="32" cy="32" r="27" fill="none" class={warnaGudang(i).stroke} stroke-width="7" stroke-linecap="round"
-                        stroke-dasharray={DONUT_KELILING} stroke-dashoffset={donutOffset(g.persen)} transform="rotate(-90 32 32)"></circle>
-                    </svg>
-                    <span class="absolute inset-0 flex items-center justify-center text-[15px] font-bold text-gray-900">{g.persen}%</span>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-y-2 text-sm border-t border-gray-100 pt-3">
-                  <span class="text-gray-500">Target</span><span class="text-right font-medium text-gray-900">{g.target} mushaf</span>
-                  <span class="text-gray-500">Sudah dikemas</span><span class="text-right font-medium text-gray-900">{g.selesai} mushaf</span>
-                  <span class="text-gray-500">Kerdus tersegel</span><span class="text-right font-medium text-gray-900">{g.kerdus_tersegel} kerdus</span>
-                  <span class="text-gray-500">Staf bertugas</span><span class="text-right font-medium text-gray-900">{g.staf_total} staf</span>
-                  <span class="text-gray-500">Menunggu dimuat</span><span class="text-right font-medium text-gray-900">{g.kerdus_menunggu_muat} kerdus penuh</span>
-                </div>
-
-                <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200">
-                  {#if g.staf_belum_mulai > 0}
-                    <PilTitik warna="amber">{g.staf_belum_mulai} staf belum mulai</PilTitik>
-                  {:else}
-                    <PilTitik warna="green">Semua staf sudah mulai</PilTitik>
-                  {/if}
-                  <span class="w-14 h-1.5 rounded-full bg-gray-200 overflow-hidden flex-none">
-                    <span class="block h-full rounded-full {warnaGudang(i).bg}" style="width: {Math.min(100, g.persen)}%"></span>
-                  </span>
-                </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            {#each stokJenisManager as jenis (jenis.label)}
+              <div class="border border-gray-200 rounded-xl p-3 min-w-0">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">{jenis.label}</p>
+                <p class="text-2xl font-bold text-gray-900 leading-none">
+                  {numberId(jenis.total)} <span class="text-xs font-medium text-gray-400">eks</span>
+                </p>
+                {#if semuaGudang}
+                  <ul class="mt-3 space-y-1.5 border-t border-gray-100 pt-2">
+                    {#each jenis.gudang as baris (baris.id)}
+                      <li class="flex items-center justify-between gap-2 text-xs">
+                        <span class="text-gray-500 truncate">{baris.nama.replace('Gudang ', '')}</span>
+                        {#if baris.status === 'normal'}
+                          <span class="font-semibold text-gray-900">{numberId(baris.eks)}</span>
+                        {:else}
+                          <PilTitik warna="amber">{baris.status === 'habis' ? 'Habis' : 'Rendah · ' + numberId(baris.eks)}</PilTitik>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                {:else if jenis.gudang[0] && jenis.gudang[0].status !== 'normal'}
+                  <PilTitik warna="amber" class="mt-2">{jenis.gudang[0].status === 'habis' ? 'Habis' : 'Rendah'}</PilTitik>
+                {/if}
               </div>
             {/each}
           </div>
+          <p class="text-xs text-gray-400 mt-3">"Rendah" = kurang dari satu dus di gudang itu.</p>
         </RingkasanSection>
 
         <RingkasanSection
           icon="users"
-          judul="Freelancer yang Kerja Hari Ini — Semua Gudang"
-          keterangan="Capaian dan progres seluruh staf yang ditugaskan hari ini"
+          judul="Freelancer yang Kerja Hari Ini — {namaCakupan}"
+          keterangan="Yang belum mulai ditampilkan paling atas"
         >
           <FreelancerKerjaHariIni staf={stafKerjaManager} />
         </RingkasanSection>
@@ -692,54 +651,13 @@
           keterangan="Yang menunggu keputusan manager gudang"
         >
           <PerluTindakan
-            transfer={ringkasanManager.transfer_menunggu}
-            transferStok={ringkasanManager.transfer_stok_menunggu}
-            muat={ringkasanManager.per_gudang}
+            transfer={dokumenTerkait(ringkasanManager.transfer_menunggu, gudangManager, stokAktif)}
+            transferStok={dokumenTerkait(ringkasanManager.transfer_stok_menunggu, gudangManager, stokAktif)}
+            muat={gudangManager}
+            stafBelumMulai={gudangManager.map((g) => ({ nama: g.nama, jumlah: g.staf_belum_mulai }))}
+            stokHabis={stokHabisManager}
             tampilTujuan
           />
-        </RingkasanSection>
-
-        <RingkasanSection
-          icon="clipboard-document-list"
-          warna="blue"
-          judul="Beban Gudang"
-          keterangan="Resi yang tercatat sedang dikerjakan — gabungan dengan rincian per gudang"
-        >
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {#each TAHAP_BEBAN as [kunci, label] (kunci)}
-              <StatTile {label} nilai={totalBeban(kunci)} satuan="resi">
-                <p class="text-[11px] text-gray-500 mt-1 truncate">
-                  {ringkasanManager.per_gudang.map((g) => g.kode + ' ' + (g.beban[kunci] ?? 0)).join(' · ')}
-                </p>
-              </StatTile>
-            {/each}
-          </div>
-          <p class="text-xs text-gray-400 mt-3">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
-        </RingkasanSection>
-
-        <RingkasanSection
-          icon="archive-box"
-          warna="green"
-          judul="Stok Mushaf"
-          keterangan="Stok tanpa muwakif — A5, A6, dan IQRA dipisah varian terjemahannya, per gudang"
-        >
-          <div slot="kanan" class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Saring kartu stok per gudang">
-            <button type="button" role="tab" aria-selected={stokAktif === 'semua'} on:click={() => (stokAktif = 'semua')}
-              class="px-3 py-1.5 rounded-md text-sm font-medium {stokAktif === 'semua' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua</button>
-            {#each ringkasanManager.per_gudang as g (g.id)}
-              <button type="button" role="tab" aria-selected={stokAktif === String(g.id)} on:click={() => (stokAktif = String(g.id))}
-                class="px-3 py-1.5 rounded-md text-sm font-medium {stokAktif === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
-            {/each}
-          </div>
-
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            {#each ringkasanManager.per_gudang.filter((g) => stokAktif === 'semua' || stokAktif === String(g.id)) as g (g.id)}
-              {#each g.stok_kartu as baris (g.id + baris.kode_jenis + (baris.varian || 'x'))}
-                <KartuStok {baris} gudang={g.nama} />
-              {/each}
-            {/each}
-          </div>
-          <p class="text-xs text-gray-400 mt-3">Resi lama tanpa lokasi tidak dihitung di sini.</p>
         </RingkasanSection>
       {/if}
 

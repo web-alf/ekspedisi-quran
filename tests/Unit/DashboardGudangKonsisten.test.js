@@ -9,6 +9,10 @@
  * Components/Warehouse; tes ini memastikan tidak ada yang kembali menulis
  * markupnya sendiri.
  *
+ * 27/10/2026: SUSUNAN seksi Manager berbeda dari SPV (desain Manager Gudang: filter
+ * gudang, Alur Mushaf per gudang, Perlu Tindakan paling bawah). Yang tetap dijaga
+ * adalah gayanya — komponen yang sama, ikon terdaftar, tanpa hex lepas.
+ *
  * Seperti DashboardGudangKerdus.test.js, tes membaca sumber berkas (Vitest repo
  * ini mengompilasi Svelte ke mode SSR).
  */
@@ -52,10 +56,7 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(blokManager).not.toBe('');
     });
 
-    it('memakai ikon dan urutan bagian yang sama; Manager hanya menambah Performa Gudang', () => {
-        const manager = bagian(blokManager);
-        const managerTanpaPerforma = manager.filter(([, judul]) => judul !== 'Performa Gudang');
-
+    it('SPV mempertahankan urutan bagiannya', () => {
         expect(bagian(blokSpv)).toEqual([
             ['cube', 'Packing Hari Ini'],
             // 27/10/2026: satu seksi "Stok" (tahap resi + mushaf belum ada muwakif).
@@ -65,25 +66,29 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
             ['clipboard-document-list', 'Beban Gudang'],
             ['archive-box', 'Stok Mushaf'],
         ]);
-        // Manager punya seksi "Alur Mushaf" per gudang (2), SPV hanya gudangnya (1) —
-        // jadi yang dibandingkan adalah JENIS seksi (gudang berulang diringkas).
-        const ringkas = (daftar) => daftar
-            .map(([ikon, judul]) => {
-                const seksiStok = judul === 'Stok Seluruh Gudang' || judul.startsWith('Stok ')
-                    ? judul.replace(/^Stok (Seluruh Gudang|\{.*\})$/, 'Stok')
-                    : judul;
+    });
 
-                return [ikon, seksiStok];
-            })
-            .filter(([, judul], i, arr) => i === 0 || judul !== arr[i - 1][1]);
+    it('Manager: alur per gudang, lalu packing, stok per jenis, freelancer, dan Perlu Tindakan paling bawah', () => {
+        expect(bagian(blokManager)).toEqual([
+            ['archive-box', 'Alur Mushaf'],
+            ['cube', 'Packing Hari Ini'],
+            ['archive-box', 'Stok Belum Ada Wakif'],
+            ['users', 'Freelancer yang Kerja Hari Ini'],
+            ['exclamation-circle', 'Perlu Tindakan'],
+        ]);
+        // Satu seksi Alur Mushaf per gudang yang tampil (ditulis sekali, diulang).
+        expect(blokManager).toMatch(/\{#each gudangManager as g \(g\.id\)\}\s*<RingkasanSection[\s\S]*?judul="Alur Mushaf — \{g\.nama\}"/);
+        // Seksi lama yang angkanya kembar dengan alur per gudang sudah tidak ada.
+        for (const judul of ['Stok Seluruh Gudang', 'Performa Gudang', 'Beban Gudang', 'Stok Mushaf']) {
+            expect(blokManager).not.toContain(`judul="${judul}"`);
+        }
+    });
 
-        expect(ringkas(managerTanpaPerforma)).toEqual(ringkas(bagian(blokSpv)));
-
-        // Seksi "Stok" berdiri sendiri: SPV memakai judul gudangnya, Manager judul gabungan.
-        expect(ringkas(managerTanpaPerforma)).toHaveLength(ringkas(bagian(blokSpv)).length);
-        expect(manager[1]).toEqual(['archive-box', 'Stok Seluruh Gudang']);
-        expect(manager[2]).toEqual(['archive-box', 'Stok {g.nama}']);
-        expect(manager).toContainEqual(['chart-pie', 'Performa Gudang']);
+    it('Manager punya satu filter gudang yang dipakai semua seksi', () => {
+        expect(blokManager).toMatch(/role="tablist" aria-label="Pilih gudang"/);
+        expect(blokManager).toMatch(/stokAktif = SEMUA_GUDANG/);
+        expect(skrip).toMatch(/gudangManager = gudangTampil\(ringkasanManager\?\.per_gudang \?\? \[\], stokAktif\)/);
+        expect(skrip).toMatch(/packingManager = packingCakupan\(ringkasanManager, stokAktif\)/);
     });
 
     it('tidak lagi menulis kerangka section sendiri di dalam blok ringkasan', () => {
@@ -91,18 +96,20 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(blokManager).not.toMatch(/<section/);
     });
 
-    it('menampilkan beban sebagai kotak di kedua peran tanpa tahap Produksi', () => {
+    it('menampilkan beban SPV sebagai kotak tanpa tahap Produksi; Manager tanpa tabel', () => {
         // "Proses Produksi" dinonaktifkan 27/10/2026: tahap itu tidak pernah dipakai alur.
         expect(skrip).not.toMatch(/\['produksi',\s*'Produksi'\]/);
         expect(skrip).toMatch(/\['pemesanan',\s*'Pemesanan'\]/);
         expect(blokSpv).toMatch(/\{#each TAHAP_BEBAN as/);
-        expect(blokManager).toMatch(/\{#each TAHAP_BEBAN as/);
+        // Beban Manager kembar dengan Alur Mushaf per gudang (query yang sama), jadi dibuang.
+        expect(blokManager).not.toMatch(/TAHAP_BEBAN/);
         expect(blokManager).not.toMatch(/<table/);
     });
 
-    it('memakai komponen kartu stok dan perlu tindakan yang sama', () => {
+    it('memakai komponen kartu, perlu tindakan, dan kotak angka yang sama', () => {
+        expect(blokSpv).toMatch(/<KartuStok\b/);
+        expect(blokManager).toMatch(/<KartuAlur\b/);
         for (const blok of [blokSpv, blokManager]) {
-            expect(blok).toMatch(/<KartuStok\b/);
             expect(blok).toMatch(/<PerluTindakan\b/);
             expect(blok).toMatch(/<StatTile\b/);
         }
@@ -137,6 +144,13 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(isi).toMatch(/hasPermission\('muatan\.read'\)/);
         expect(isi).toMatch(/\{#if bolehBukaTransfer\}[\s\S]*?\/admin\/transfer-mushaf[\s\S]*?\{\/if\}/);
         expect(isi).toMatch(/\{#if bolehBukaMuatan\}[\s\S]*?\/admin\/muatan[\s\S]*?\{\/if\}/);
+        expect(isi).toMatch(/hasPermission\('supervisor\.warehouse\.monitor'\)/);
+        expect(isi).toMatch(/\{#if bolehBukaPenugasan\}[\s\S]*?\/admin\/supervisor\/warehouse-monitor[\s\S]*?\{\/if\}/);
+    });
+
+    it('Perlu Tindakan Manager memuat staf belum mulai dan stok habis; SPV tidak', () => {
+        expect(blokManager).toMatch(/<PerluTindakan[\s\S]*?stafBelumMulai=[\s\S]*?stokHabis=\{stokHabisManager\}/);
+        expect(blokSpv).not.toMatch(/stafBelumMulai=|stokHabis=/);
     });
 
     it('SPV dan Manager menampilkan freelancer yang ditugaskan hari ini', () => {

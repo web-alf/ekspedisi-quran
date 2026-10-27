@@ -21,16 +21,62 @@
   export let muat = [];
   // false untuk SPV: semua dokumen pasti menuju gudangnya sendiri.
   export let tampilTujuan = false;
+  // Manager: staf yang belum mulai, per gudang. Kosong untuk SPV (kartu packing-nya sudah menyebut).
+  /** @type {Array<{nama: string, jumlah: number}>} */
+  export let stafBelumMulai = [];
+  // Manager: jenis yang habis di satu gudang padahal gudang lain masih punya.
+  /** @type {Array<{label: string, gudang: string, sumber: string, eksSumber: number}>} */
+  export let stokHabis = [];
 
   $: bolehBukaTransfer = hasPermission('mushaf.transfer');
   $: bolehBukaTransferStok = hasPermission('stok.transfer');
   $: bolehBukaMuatan = hasPermission('muatan.read');
+  $: bolehBukaPenugasan = hasPermission('supervisor.warehouse.monitor');
+  $: totalBelumMulai = stafBelumMulai.reduce((n, g) => n + g.jumlah, 0);
 </script>
+
+{#if totalBelumMulai > 0}
+  <div class="border border-gray-200 rounded-xl p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
+    <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 flex-none">
+      <HeroIcon name="users" class="w-5 h-5" />
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="font-semibold text-gray-900">{totalBelumMulai} staf belum mulai kerja</p>
+      <p class="text-sm text-gray-600 mt-0.5">
+        {stafBelumMulai.filter((g) => g.jumlah > 0).map((g) => g.nama + ' ' + g.jumlah).join(' · ')}
+      </p>
+    </div>
+    {#if bolehBukaPenugasan}
+      <a href="/admin/supervisor/warehouse-monitor" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 text-center flex-none">
+        Buka Penugasan
+      </a>
+    {/if}
+  </div>
+{/if}
+
+{#each stokHabis as s (s.label + s.gudang)}
+  <div class="border border-amber-200 bg-amber-50 rounded-xl p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
+    <div class="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-amber-600 flex-none">
+      <HeroIcon name="exclamation-triangle" class="w-5 h-5" />
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="font-semibold text-gray-900">Stok {s.label} habis di {s.gudang}</p>
+      <p class="text-sm text-gray-600 mt-0.5">{s.sumber} masih punya {s.eksSumber} eks — bisa dipindahkan.</p>
+    </div>
+    {#if bolehBukaTransferStok}
+      <a href="/admin/transfer-mushaf" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 text-center flex-none">
+        Buat Transfer Stok
+      </a>
+    {/if}
+  </div>
+{/each}
 
 {#if transfer.length === 0 && transferStok.length === 0}
   <div class="rounded-xl border border-dashed border-gray-300 p-4 flex items-center gap-3 mb-3">
     <HeroIcon name="check-circle" class="w-5 h-5 text-green-500 flex-none" />
-    <p class="text-sm text-gray-600">Tidak ada kiriman antar gudang yang menunggu. Semua beres.</p>
+    <p class="text-sm text-gray-600">
+      Tidak ada kiriman antar gudang yang menunggu.{#if totalBelumMulai === 0 && stokHabis.length === 0} Semua beres.{/if}
+    </p>
   </div>
 {:else}
   {#each transfer as t (t.kode)}

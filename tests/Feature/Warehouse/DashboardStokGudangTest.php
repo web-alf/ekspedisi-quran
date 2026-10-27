@@ -218,6 +218,46 @@ it('menulis selisih resi tanpa gudang pada angka total, bukan disembunyikan', fu
         ->and($stok['tanpa_gudang']['packing'])->toBe(1);
 });
 
+it('menulis eks pemesanan tanpa gudang untuk catatan di dashboard Manager', function () {
+    stResi('pemesanan', null, 300);
+    stResi('pemesanan', null, 700);
+    stResi('pemesanan', $this->smg, 40);
+
+    $stok = $this->actingAs($this->manager)->get('/admin/warehouse')
+        ->assertOk()->viewData('page')['props']['ringkasanManager']['stok'];
+
+    expect($stok['tanpa_gudang']['pemesanan'])->toBe(2)
+        ->and($stok['tanpa_gudang']['pemesanan_eks'])->toBe(1000);
+});
+
+it('memberi status habis, rendah, atau normal pada stok muwakif tiap gudang', function () {
+    // Kapasitas A5 = 20 eks per dus (beforeEach): 5 eks = rendah, 40 eks = normal.
+    stStok($this->smg, $this->a5, true, 40);
+    stStok($this->btl, $this->a5, true, 5);
+
+    $per = collect($this->actingAs($this->manager)->get('/admin/warehouse')
+        ->assertOk()->viewData('page')['props']['ringkasanManager']['per_gudang'])
+        ->keyBy('kode');
+
+    $status = fn (string $kode, string $label) => collect($per[$kode]['stok']['muwakif'])->firstWhere('label', $label)['status'];
+
+    expect($status('SMG', 'A5 · Terjemahan'))->toBe('normal')
+        ->and($status('BTL', 'A5 · Terjemahan'))->toBe('rendah')
+        ->and($status('SMG', 'A6 · Terjemahan'))->toBe('habis')
+        ->and($status('BTL', 'IQRA'))->toBe('habis');
+});
+
+it('hanya membedakan habis atau ada pada stok muwakif gabungan', function () {
+    stStok($this->btl, $this->a5, true, 5);
+
+    $muwakif = collect($this->actingAs($this->manager)->get('/admin/warehouse')
+        ->assertOk()->viewData('page')['props']['ringkasanManager']['stok']['muwakif'])
+        ->keyBy('label');
+
+    expect($muwakif['A5 · Terjemahan']['status'])->toBe('normal')
+        ->and($muwakif['A6 · Terjemahan']['status'])->toBe('habis');
+});
+
 it('tidak mengirim seksi stok ke peran yang bukan SPV atau Manager', function () {
     $staf = User::factory()->create(['is_active' => true, 'gudang_id' => $this->smg->id]);
     $staf->assignRole('warehouse');

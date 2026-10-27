@@ -12,9 +12,18 @@
   export let satuan = 'resi';
   // Keterangan pendek di bawah angka (mis. "1 kerdus tersegel"). Kosong = tidak dirender.
   export let keterangan = '';
+  // biasa = tahap alur; cadangan = stok tanpa resi (garis putus, bukan tahap alur);
+  // siap = tahap akhir di gudang (siap dikirim).
+  export let nada = 'biasa';
+
+  const NADA = {
+    biasa: 'border-gray-200',
+    cadangan: 'border-dashed border-gray-400',
+    siap: 'border-green-300 bg-green-50',
+  };
 </script>
 
-<div class="border border-gray-200 rounded-xl p-3 min-w-0 flex flex-col">
+<div class="border {NADA[nada] ?? NADA.biasa} rounded-xl p-3 min-w-0 flex flex-col">
   <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1 min-h-[26px]">{label}</p>
   <p class="text-2xl font-bold text-gray-900 leading-none">
     {nilai}

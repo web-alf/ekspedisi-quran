@@ -67,7 +67,14 @@ class RingkasanGudangService
      * justru TERKECUALI: di produksi SPV ikut memegang role manager-repacking, sehingga
      * cakupannya tetap gudangnya sendiri (pakai untukSpv()).
      *
-     * @return array<string, mixed>|null null bila bukan PJ.
+     * @return array{
+     *     gudangList: array<int, array{id: int, kode: string, nama: string}>,
+     *     gabungan: array{target: int, selesai: int, kerdus_tersegel: int, staf_bertugas: int, staf_belum_mulai: int, tugas_tanpa_gudang: int},
+     *     per_gudang: array<int, array{id: int, nama: string, kode: string, target: int, selesai: int, kerdus_tersegel: int, staf_total: int, staf_belum_mulai: int, staf_kerja: array<int, array<string, mixed>>, persen: int, kerdus_menunggu_muat: int, beban: array<string, int>, stok_kartu: array<int, array<string, mixed>>, stok: array<string, mixed>}>,
+     *     stok: array<string, mixed>,
+     *     transfer_menunggu: array<int, array{kode: string, asal: string|null, tujuan: string|null, jumlah_resi: int, jumlah_eks: int, dibuat_pada: string|null}>,
+     *     transfer_stok_menunggu: array<int, array<string, mixed>>,
+     * }|null null bila bukan PJ.
      */
     public function untukManager(User $user): ?array
     {
@@ -119,6 +126,7 @@ class RingkasanGudangService
         // pembaca tidak menyimpulkan "angkanya tidak nyambung".
         $stokTotal['tanpa_gudang'] = [
             'pemesanan' => max(0, $stokTotal['pemesanan']['resi'] - (int) $perGudang->sum(fn ($g) => $g['stok']['pemesanan']['resi'])),
+            'pemesanan_eks' => max(0, $stokTotal['pemesanan']['eks'] - (int) $perGudang->sum(fn ($g) => $g['stok']['pemesanan']['eks'])),
             'packing' => max(0, $stokTotal['packing'] - (int) $perGudang->sum(fn ($g) => $g['stok']['packing'])),
             'selesai' => max(0, $stokTotal['selesai'] - (int) $perGudang->sum(fn ($g) => $g['stok']['selesai'])),
             'kerdus' => max(0, $stokTotal['kerdus']['jumlah'] - (int) $perGudang->sum(fn ($g) => $g['stok']['kerdus']['jumlah'])),
@@ -469,12 +477,18 @@ class RingkasanGudangService
         // Mushaf belum ada muwakif: lima kartu tetap (termasuk yang 0) supaya barisnya tidak
         // berubah-ubah saat stok kosong. IQRA mengikuti kode master `IQRO`.
         $petaStok = [];
+        $petaStatus = [];
         foreach ($perGudang as $g) {
             foreach ($g['stok_kartu'] ?? [] as $baris) {
                 $kunci = ($baris['kode_jenis'] ?? '-').'|'.($baris['varian'] ?? '');
                 $petaStok[$kunci] = ($petaStok[$kunci] ?? 0) + (int) ($baris['eks'] ?? 0);
+                $petaStatus[$kunci] = $baris['status'] ?? 'normal';
             }
         }
+
+        // "Rendah" diukur terhadap satu dus di SATU gudang; untuk gabungan dua gudang
+        // ukuran itu tidak bermakna, jadi gabungan hanya membedakan habis / ada.
+        $satuGudang = count($perGudang) === 1;
 
         $muwakif = [];
         foreach ([
@@ -485,12 +499,22 @@ class RingkasanGudangService
             ['IQRO', '', 'IQRA'],
         ] as [$kode, $varian, $label]) {
             $eks = $petaStok[$kode.'|'.$varian] ?? 0;
+            $status = $petaStatus[$kode.'|'.$varian] ?? null;
 
             if ($kode === 'IQRO') {
                 $eks += $petaStok['IQRA|'] ?? 0;
+                $status ??= $petaStatus['IQRA|'] ?? null;
             }
 
-            $muwakif[] = ['label' => $label, 'eks' => (int) $eks];
+            $muwakif[] = [
+                'label' => $label,
+                'eks' => (int) $eks,
+                'status' => match (true) {
+                    $eks <= 0 => 'habis',
+                    $satuGudang => $status ?? 'normal',
+                    default => 'normal',
+                },
+            ];
         }
 
         return [
