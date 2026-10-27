@@ -68,7 +68,13 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         // Manager punya seksi "Alur Mushaf" per gudang (2), SPV hanya gudangnya (1) —
         // jadi yang dibandingkan adalah JENIS seksi (gudang berulang diringkas).
         const ringkas = (daftar) => daftar
-            .map(([ikon, judul]) => [ikon, judul.startsWith('Stok {') || judul === 'Stok Seluruh Gudang' ? 'Stok' : judul])
+            .map(([ikon, judul]) => {
+                const seksiStok = judul === 'Stok Seluruh Gudang' || judul.startsWith('Stok ')
+                    ? judul.replace(/^Stok (Seluruh Gudang|\{.*\})$/, 'Stok')
+                    : judul;
+
+                return [ikon, seksiStok];
+            })
             .filter(([, judul], i, arr) => i === 0 || judul !== arr[i - 1][1]);
 
         expect(ringkas(managerTanpaPerforma)).toEqual(ringkas(bagian(blokSpv)));
@@ -76,6 +82,7 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         // Seksi "Stok" berdiri sendiri: SPV memakai judul gudangnya, Manager judul gabungan.
         expect(ringkas(managerTanpaPerforma)).toHaveLength(ringkas(bagian(blokSpv)).length);
         expect(manager[1]).toEqual(['archive-box', 'Stok Seluruh Gudang']);
+        expect(manager[2]).toEqual(['archive-box', 'Stok {g.nama}']);
         expect(manager).toContainEqual(['chart-pie', 'Performa Gudang']);
     });
 

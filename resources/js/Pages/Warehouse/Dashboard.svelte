@@ -582,7 +582,49 @@
               <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
             {/each}
           </div>
+
+          {#if ringkasanManager.stok.tanpa_gudang.pemesanan > 0 || ringkasanManager.stok.tanpa_gudang.packing > 0 || ringkasanManager.stok.tanpa_gudang.selesai > 0}
+            <p class="text-xs text-gray-400 mt-3">
+              Termasuk {numberId(ringkasanManager.stok.tanpa_gudang.pemesanan)} resi pemesanan ·
+              {numberId(ringkasanManager.stok.tanpa_gudang.packing)} packing ·
+              {numberId(ringkasanManager.stok.tanpa_gudang.selesai)} selesai packing yang belum bertagih gudang.
+            </p>
+          {/if}
         </RingkasanSection>
+
+        {#each ringkasanManager.per_gudang as g (g.id)}
+          <RingkasanSection
+            icon="archive-box"
+            warna="green"
+            judul="Stok {g.nama}"
+            keterangan="Gudang ini saja"
+          >
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KartuAlur
+                label="Proses Pesan"
+                nilai={numberId(g.stok.pemesanan.resi)}
+                satuan="resi"
+                keterangan={g.stok.pemesanan.resi === 0 ? 'belum ada resi bertagih gudang ini' : ''}
+              />
+              <KartuAlur label="Proses Packing" nilai={numberId(g.stok.packing)} satuan="resi" />
+              <KartuAlur label="Selesai Packing" nilai={numberId(g.stok.selesai)} satuan="resi" />
+              <KartuAlur
+                label="Sudah Dikarduskan · Siap Distribusi"
+                nilai={numberId(g.stok.kerdus.eks)}
+                satuan="eks"
+                keterangan="{g.stok.kerdus.jumlah} kerdus tersegel"
+              />
+            </div>
+
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {#each g.stok.muwakif as baris (baris.label)}
+                <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
+              {/each}
+            </div>
+          </RingkasanSection>
+        {/each}
 
         <RingkasanSection
           icon="chart-pie"

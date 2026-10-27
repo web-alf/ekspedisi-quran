@@ -183,6 +183,41 @@ it('menjumlahkan stok dua gudang untuk Manager dan hanya gudangnya untuk SPV', f
         ->and($milik($spv, 'A6 · Tanpa Terjemahan'))->toBe(90);
 });
 
+it('mengirim stok tiap gudang terpisah untuk seksi per gudang', function () {
+    stStok($this->smg, $this->a5, true, 19);
+    stStok($this->btl, $this->a5, true, 1);
+    stResi('packing', $this->smg);
+    stResi('packing', $this->btl);
+    stResi('packing', $this->btl);
+
+    $per = collect($this->actingAs($this->manager)->get('/admin/warehouse')
+        ->assertOk()->viewData('page')['props']['ringkasanManager']['per_gudang'])
+        ->keyBy('kode');
+
+    // Urutan seksi = urutan gudang (Semarang lalu Boyolali).
+    expect($per->keys()->all())->toContain('SMG', 'BTL')
+        ->and($per['SMG']['stok']['packing'])->toBe(1)
+        ->and($per['BTL']['stok']['packing'])->toBe(2)
+        ->and(collect($per['SMG']['stok']['muwakif'])->firstWhere('label', 'A5 · Terjemahan')['eks'])->toBe(19)
+        ->and(collect($per['BTL']['stok']['muwakif'])->firstWhere('label', 'A5 · Terjemahan')['eks'])->toBe(1);
+});
+
+it('menulis selisih resi tanpa gudang pada angka total, bukan disembunyikan', function () {
+    stResi('pemesanan', null, 300);
+    stResi('pemesanan', null, 700);
+    stResi('pemesanan', $this->smg);
+    stResi('packing', null);
+    stResi('packing', $this->btl);
+
+    $stok = $this->actingAs($this->manager)->get('/admin/warehouse')
+        ->assertOk()->viewData('page')['props']['ringkasanManager']['stok'];
+
+    expect($stok['pemesanan']['resi'])->toBe(3)
+        ->and($stok['tanpa_gudang']['pemesanan'])->toBe(2)
+        ->and($stok['packing'])->toBe(2)
+        ->and($stok['tanpa_gudang']['packing'])->toBe(1);
+});
+
 it('tidak mengirim seksi stok ke peran yang bukan SPV atau Manager', function () {
     $staf = User::factory()->create(['is_active' => true, 'gudang_id' => $this->smg->id]);
     $staf->assignRole('warehouse');

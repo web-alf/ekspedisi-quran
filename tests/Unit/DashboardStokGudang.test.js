@@ -41,9 +41,24 @@ describe('Seksi Stok dashboard gudang', () => {
         }
     });
 
-    it('SPV memakai judul gudangnya, Manager memakai judul seluruh gudang', () => {
-        expect(blokSpv).toContain('judul="Stok {ringkasanGudang.gudang.nama}"');
+    it('Manager memakai tiga seksi: total lalu per gudang; SPV satu seksi gudangnya', () => {
+        // Seksi 1: total semua gudang.
         expect(blokManager).toContain('judul="Stok Seluruh Gudang"');
+        // Seksi 2 & 3: satu RingkasanSection per gudang, ditulis sekali lalu diulang {#each}.
+        expect(blokManager).toContain('{#each ringkasanManager.per_gudang as g (g.id)}');
+        expect(blokManager).toContain('judul="Stok {g.nama}"');
+        expect(blokManager).toMatch(/per_gudang[\s\S]*?judul="Stok \{g\.nama\}"/);
+
+        // SPV: satu seksi saja, judul gudangnya sendiri.
+        expect(blokSpv).toContain('judul="Stok {ringkasanGudang.gudang.nama}"');
+        expect(blokSpv).not.toContain('judul="Stok Seluruh Gudang"');
+    });
+
+    it('seksi total menyebut resi yang belum bertagih gudang', () => {
+        // Angka total memuat resi lama tanpa gudang; tanpa catatan ini pembaca akan
+        // menjumlah seksi per gudang dan menyimpulkan angkanya salah.
+        expect(blokManager).toContain('stok.tanpa_gudang');
+        expect(blokManager).toContain('belum bertagih gudang');
     });
 
     it('seksi stok tidak memakai tabel', () => {

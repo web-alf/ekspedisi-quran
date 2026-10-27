@@ -101,6 +101,29 @@ class RingkasanGudangService
             ];
         })->values();
 
+        // Seksi per gudang (keputusan pemilik 27/10/2026): rincian "Stok" tiap gudang,
+        // dihitung dari baris yang sama dengan seksi total supaya angkanya bisa dijumlah.
+        $perGudang = $perGudang->map(function ($baris) {
+            $baris['stok'] = $this->stokGudang([[
+                'id' => $baris['id'], 'kode' => $baris['kode'], 'nama' => $baris['nama'],
+                'beban' => $baris['beban'], 'stok_kartu' => $baris['stok_kartu'],
+            ]], semuaGudang: false);
+
+            return $baris;
+        });
+
+        $stokTotal = $this->stokGudang($perGudang->all(), semuaGudang: true);
+
+        // Selisih total dengan penjumlahan seksi per gudang = resi/kerdus lama yang belum
+        // bertagih gudang (produksi: 26.079 resi pemesanan). Ditulis di seksi total supaya
+        // pembaca tidak menyimpulkan "angkanya tidak nyambung".
+        $stokTotal['tanpa_gudang'] = [
+            'pemesanan' => max(0, $stokTotal['pemesanan']['resi'] - (int) $perGudang->sum(fn ($g) => $g['stok']['pemesanan']['resi'])),
+            'packing' => max(0, $stokTotal['packing'] - (int) $perGudang->sum(fn ($g) => $g['stok']['packing'])),
+            'selesai' => max(0, $stokTotal['selesai'] - (int) $perGudang->sum(fn ($g) => $g['stok']['selesai'])),
+            'kerdus' => max(0, $stokTotal['kerdus']['jumlah'] - (int) $perGudang->sum(fn ($g) => $g['stok']['kerdus']['jumlah'])),
+        ];
+
         return [
             'gudangList' => $gudangList->map(fn ($g) => [
                 'id' => $g->id, 'kode' => $g->kode, 'nama' => $g->nama,
@@ -128,7 +151,7 @@ class RingkasanGudangService
             // Empat kartu "Alur Mushaf" (keputusan pemilik 27/10/2026): satu bentuk untuk
             // SPV (satu gudang) dan Manager (dua gudang), dihitung dari angka yang SAMA
             // dengan beban & stok per gudang supaya tidak ada dua kebenaran.
-            'stok' => $this->stokGudang($perGudang->all(), semuaGudang: true),
+            'stok' => $stokTotal,
 
             // Dokumen perpindahan yang menunggu diterima di gudang MANA PUN di bawah,
             // dengan arah asal → tujuan begitu jelas.
