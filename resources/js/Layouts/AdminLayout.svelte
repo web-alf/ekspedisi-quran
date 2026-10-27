@@ -713,7 +713,7 @@
             <div class="space-y-1 relative">
               <button 
                 on:click|stopPropagation={(e) => toggleDropdown(item.label, e)}
-                class="group w-full flex items-center {sidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 relative z-20 pointer-events-auto {hasVisibleChildren ? 'text-gray-700 hover:text-gray-900 hover:bg-gray-100' : 'text-gray-400'} {isDropdownActive(item) ? 'bg-gray-100 text-gray-900 shadow-sm' : ''}"
+                class="group w-full flex items-center {sidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 relative z-20 pointer-events-auto {isDropdownActive(item) ? 'bg-gray-100 text-gray-900 shadow-sm' : (hasVisibleChildren ? 'text-gray-700 hover:text-gray-900 hover:bg-gray-100' : 'text-gray-400')}"
                 type="button"
                 title={sidebarCollapsed ? item.label : ''}
               >
@@ -734,7 +734,7 @@
                   {#each visibleChildren as child (child.label)}
                     <a 
                       href={child.route}
-                      class="group flex items-center px-3 py-2 text-sm text-gray-600 rounded-lg hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 {isCurrentRoute(child.route) ? 'bg-[#eb3434] text-white font-semibold shadow-sm' : ''} relative z-20 pointer-events-auto"
+                      class="group flex items-center px-3 py-2 text-sm rounded-lg transition-all duration-200 relative z-20 pointer-events-auto {isCurrentRoute(child.route) ? 'bg-[#eb3434] text-white font-semibold shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}"
                       on:click={closeSidebarOnMobile}
                     >
                       <HeroIcon name={getMenuIcon(child.label)} class="w-4 h-4 mr-2.5 flex-shrink-0 {isCurrentRoute(child.route) ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'}" />
@@ -757,7 +757,7 @@
                     {#each visibleChildren as child (child.label)}
                       <a 
                         href={child.route}
-                        class="block px-4 py-3 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 {isCurrentRoute(child.route) ? 'bg-[#eb3434] text-white font-semibold' : ''}"
+                        class="block px-4 py-3 text-sm transition-all duration-200 {isCurrentRoute(child.route) ? 'bg-[#eb3434] text-white font-semibold' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'}"
                         on:click={() => { closeSidebarOnMobile(); activeDropdown = null; }}
                       >
                         <span class="flex items-center">
@@ -778,7 +778,7 @@
             <!-- Regular Menu Item -->
             <a 
               href={item.route} 
-              class="group flex items-center {sidebarCollapsed ? 'justify-center' : ''} px-4 py-3 text-sm font-medium text-gray-700 rounded-xl hover:text-gray-900 hover:bg-gray-100 transition-all duration-200 {isCurrentRoute(item.route) ? 'bg-[#eb3434] text-white font-semibold shadow-sm' : ''} relative z-20 pointer-events-auto"
+              class="group flex items-center {sidebarCollapsed ? 'justify-center' : ''} px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 relative z-20 pointer-events-auto {isCurrentRoute(item.route) ? 'bg-[#eb3434] text-white font-semibold shadow-sm' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'}"
               on:click={closeSidebarOnMobile}
               title={sidebarCollapsed ? item.label : ''}
             >
