@@ -484,7 +484,7 @@
 
       {#if ringkasanManager}
         <!-- Desain Manager Gudang 27/10/2026: satu filter gudang menggantikan seksi stok
-             yang diulang per gudang. Urutan: Alur Mushaf per gudang → Packing → Stok per
+             yang diulang per gudang. Urutan: seksi per gudang → Packing → Stok per
              jenis → Freelancer → Perlu Tindakan (paling bawah, keputusan pemilik). -->
         <div class="flex sm:inline-flex gap-1 p-1 bg-gray-100 rounded-lg mb-6" role="tablist" aria-label="Pilih gudang">
           <button type="button" role="tab" aria-selected={stokAktif === SEMUA_GUDANG} on:click={() => (stokAktif = SEMUA_GUDANG)}
@@ -499,18 +499,20 @@
           <RingkasanSection
             icon="archive-box"
             warna="green"
-            judul="Alur Mushaf — {g.nama}"
+            judul="{g.nama}"
             keterangan="Dari pemesanan sampai siap dikirim"
           >
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
               <KartuAlur
                 label="Sedang Dipesan"
+                ikon="clipboard-document"
                 nilai={numberId(g.stok.pemesanan.eks)}
                 satuan="eks"
                 keterangan="{numberId(g.stok.pemesanan.resi)} resi · belum tiba di gudang"
               />
               <KartuAlur
                 label="Stok Siap, Belum Ada Wakif"
+                ikon="archive-box"
                 nilai={numberId(totalBelumAdaWakif(g.stok))}
                 satuan="eks"
                 keterangan="Sudah di gudang, menunggu wakif"
@@ -518,18 +520,21 @@
               />
               <KartuAlur
                 label="Sedang Dikemas"
+                ikon="cube"
                 nilai={numberId(g.stok.packing)}
                 satuan="resi"
                 keterangan="Mushaf sedang dimasukkan ke kerdus"
               />
               <KartuAlur
                 label="Selesai Dikemas"
+                ikon="check-circle"
                 nilai={numberId(g.stok.selesai)}
                 satuan="resi"
                 keterangan="Semua mushaf dalam pesanan sudah dikemas"
               />
               <KartuAlur
                 label="Siap Dikirim"
+                ikon="truck"
                 nilai={numberId(g.stok.kerdus.jumlah)}
                 satuan="kerdus"
                 keterangan="Tersegel, berisi {numberId(g.stok.kerdus.eks)} eks"

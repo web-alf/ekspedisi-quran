@@ -50,14 +50,14 @@ describe('Seksi Stok dashboard gudang', () => {
         for (const [label, satuan] of kartuAlur) {
             expect(blokManager).toMatch(new RegExp(`label="${label}"[\\s\\S]*?satuan="${satuan}"`));
         }
-        expect(blokManager).toMatch(/label="Siap Dikirim"\s+nilai=\{numberId\(g\.stok\.kerdus\.jumlah\)\}/);
+        expect(blokManager).toMatch(/label="Siap Dikirim"[^/]*?nilai=\{numberId\(g\.stok\.kerdus\.jumlah\)\}/);
         // Stok tanpa resi bukan tahap alur — dibedakan dengan garis putus.
         expect(blokManager).toMatch(/label="Stok Siap, Belum Ada Wakif"[\s\S]*?nada="cadangan"/);
     });
 
     it('Manager: satu seksi alur per gudang; SPV satu seksi gudangnya', () => {
         expect(blokManager).toContain('{#each gudangManager as g (g.id)}');
-        expect(blokManager).toContain('judul="Alur Mushaf — {g.nama}"');
+        expect(blokManager).toContain('judul="{g.nama}"');
         expect(blokManager).not.toContain('judul="Stok Seluruh Gudang"');
 
         expect(blokSpv).toContain('judul="Stok {ringkasanGudang.gudang.nama}"');
@@ -85,5 +85,28 @@ describe('Seksi Stok dashboard gudang', () => {
 
     it('kartu hanya menampilkan keterangan bila diisi', () => {
         expect(kartu).toMatch(/\{#if keterangan\}/);
+    });
+
+    it('kartu hanya menampilkan ikon bila diisi, sehingga kartu SPV tetap tanpa ikon', () => {
+        expect(kartu).toMatch(/export let ikon = '';/);
+        expect(kartu).toMatch(/\{#if ikon\}\s*<HeroIcon name=\{ikon\}/);
+        expect(blokSpv).not.toMatch(/ikon="/);
+    });
+
+    it('lima kartu alur Manager memakai ikon yang disepakati dan terdaftar di HeroIcon', () => {
+        const heroIcon = readFileSync(resolve(__dirname, '../../resources/js/Components/UI/HeroIcon.svelte'), 'utf8');
+        const terdaftar = new Set([...heroIcon.matchAll(/'([a-z0-9-]+)':\s*Icon/g)].map((m) => m[1]));
+        const ikonKartu = {
+            'Sedang Dipesan': 'clipboard-document',
+            'Stok Siap, Belum Ada Wakif': 'archive-box',
+            'Sedang Dikemas': 'cube',
+            'Selesai Dikemas': 'check-circle',
+            'Siap Dikirim': 'truck',
+        };
+
+        for (const [label, ikon] of Object.entries(ikonKartu)) {
+            expect(blokManager).toMatch(new RegExp(`label="${label}"\\s+ikon="${ikon}"`));
+            expect(terdaftar.has(ikon), `ikon "${ikon}" tidak ada di HeroIcon`).toBe(true);
+        }
     });
 });

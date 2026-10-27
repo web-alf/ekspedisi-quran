@@ -70,14 +70,15 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
 
     it('Manager: alur per gudang, lalu packing, stok per jenis, freelancer, dan Perlu Tindakan paling bawah', () => {
         expect(bagian(blokManager)).toEqual([
-            ['archive-box', 'Alur Mushaf'],
+            ['archive-box', '{g.nama}'],
             ['cube', 'Packing Hari Ini'],
             ['archive-box', 'Stok Belum Ada Wakif'],
             ['users', 'Freelancer yang Kerja Hari Ini'],
             ['exclamation-circle', 'Perlu Tindakan'],
         ]);
         // Satu seksi Alur Mushaf per gudang yang tampil (ditulis sekali, diulang).
-        expect(blokManager).toMatch(/\{#each gudangManager as g \(g\.id\)\}\s*<RingkasanSection[\s\S]*?judul="Alur Mushaf — \{g\.nama\}"/);
+        // Judul seksi = nama gudangnya saja (tanpa awalan "Alur Mushaf — ").
+        expect(blokManager).toMatch(/\{#each gudangManager as g \(g\.id\)\}\s*<RingkasanSection[\s\S]*?judul="\{g\.nama\}"/);
         // Seksi lama yang angkanya kembar dengan alur per gudang sudah tidak ada.
         for (const judul of ['Stok Seluruh Gudang', 'Performa Gudang', 'Beban Gudang', 'Stok Mushaf']) {
             expect(blokManager).not.toContain(`judul="${judul}"`);

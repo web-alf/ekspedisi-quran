@@ -7,6 +7,8 @@
    * Bedanya cuma satu: label boleh dua baris, jadi tingginya dikunci agar semua ANGKA
    * tetap sejajar antar kartu.
    */
+  import HeroIcon from '../UI/HeroIcon.svelte';
+
   export let label;
   export let nilai;
   export let satuan = 'resi';
@@ -15,6 +17,8 @@
   // biasa = tahap alur; cadangan = stok tanpa resi (garis putus, bukan tahap alur);
   // siap = tahap akhir di gudang (siap dikirim).
   export let nada = 'biasa';
+  // Nama ikon HeroIcon di samping label (dipakai kartu Alur Mushaf Manager). Kosong = tanpa ikon.
+  export let ikon = '';
 
   const NADA = {
     biasa: 'border-gray-200',
@@ -24,7 +28,12 @@
 </script>
 
 <div class="border {NADA[nada] ?? NADA.biasa} rounded-xl p-3 min-w-0 flex flex-col">
-  <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1 min-h-[26px]">{label}</p>
+  <div class="flex items-start gap-1.5 mb-1 min-h-[26px]">
+    {#if ikon}
+      <HeroIcon name={ikon} class="w-4 h-4 flex-none {nada === 'siap' ? 'text-green-600' : 'text-gray-500'}" />
+    {/if}
+    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 pt-px">{label}</p>
+  </div>
   <p class="text-2xl font-bold text-gray-900 leading-none">
     {nilai}
     {#if satuan}<span class="text-xs font-medium text-gray-400">{satuan}</span>{/if}
