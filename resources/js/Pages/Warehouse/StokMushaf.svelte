@@ -30,6 +30,39 @@
   let entriCatatan = '';
   let hasilTerakhir = ''; // ringkasan sesudah simpan: "A5 tanpa terjemahan: 12 → 22 eks"
 
+  // Isi stok dikelompokkan per gudang (26/10/2026, keputusan pemilik): tabel diganti kartu,
+  // dan tiap gudang dapat judul + jumlah varian/eks. PJ yang memegang dua gudang langsung
+  // melihat kelompoknya masing-masing; SPV hanya punya satu kelompok.
+  $: kelompokStok = (() => {
+    const perGudang = new Map();
+
+    for (const baris of stokList) {
+      const kunci = String(baris.gudang_id ?? baris.gudang);
+
+      if (!perGudang.has(kunci)) {
+        perGudang.set(kunci, { gudang: baris.gudang, eks: 0, baris: [] });
+      }
+
+      const grup = perGudang.get(kunci);
+      grup.baris.push(baris);
+      grup.eks += Number(baris.eks) || 0;
+    }
+
+    return [...perGudang.values()];
+  })();
+
+  /** Rincian dus dari angka yang sudah dihitung server ("2 dus + 10 eks"). */
+  function rincianDus(baris) {
+    const dus = Number(baris.dus) || 0;
+    const sisa = Number(baris.sisaEks) || 0;
+
+    if (dus === 0) {
+      return `${sisa} eks`;
+    }
+
+    return sisa > 0 ? `${dus} dus + ${sisa} eks` : `${dus} dus utuh`;
+  }
+
   // Pratinjau akibat pergerakan SEBELUM disimpan — satu-satunya cara mencegah pencatatan
   // pengurangan melebihi stok, yang sekarang baru ketahuan setelah server menolak (422).
   $: stokSekarang = stokSaatIni(stokList, {
@@ -149,30 +182,34 @@
     <section class="bg-white rounded-lg border border-gray-200 p-5">
       <h2 class="font-semibold text-gray-900 mb-3">Isi Stok</h2>
       {#if stokList.length > 0}
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-200 text-left text-gray-600">
-                <th class="py-2 pr-4">Gudang</th>
-                <th class="py-2 pr-4">Jenis</th>
-                <th class="py-2 pr-4">Varian</th>
-                <th class="py-2 pr-4 text-right">Eks</th>
-                <th class="py-2 text-right">Jumlah dus</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each stokList as stok}
-                <tr class="border-b border-gray-100">
-                  <td class="py-2 pr-4 text-gray-800">{stok.gudang}</td>
-                  <td class="py-2 pr-4 text-gray-800">{stok.jenis}</td>
-                  <td class="py-2 pr-4 text-gray-800">{stok.terjemahan}</td>
-                  <td class="py-2 pr-4 text-right font-medium text-gray-900">{stok.eks} eks</td>
-                  <td class="py-2 text-right text-gray-600">{stok.dus} dus{stok.sisaEks > 0 ? ` + ${stok.sisaEks} eks` : ''}</td>
-                </tr>
+        {#each kelompokStok as grup, i (grup.gudang)}
+          <div class={i > 0 ? 'mt-5 pt-4 border-t border-dashed border-gray-200' : ''}>
+            <div class="flex items-baseline gap-2 flex-wrap mb-3">
+              <p class="text-sm font-semibold text-gray-900">{grup.gudang}</p>
+              <p class="text-xs text-gray-500">{grup.baris.length} varian · {grup.eks} eks</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {#each grup.baris as stok (stok.id)}
+                <div class="border border-gray-200 rounded-xl p-4">
+                  <div class="flex items-start justify-between gap-2">
+                    <p class="text-sm font-semibold text-gray-900 leading-snug">{stok.jenis}</p>
+                    <span class="flex-none inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border border-gray-200 bg-gray-50 text-gray-600 whitespace-nowrap">{stok.terjemahan}</span>
+                  </div>
+                  <p class="mt-3 flex items-baseline gap-1.5">
+                    <span class="text-2xl font-bold text-gray-900 leading-none">{stok.eks}</span>
+                    <span class="text-xs text-gray-500">eks</span>
+                  </p>
+                  <p class="mt-1.5 text-xs text-gray-500">
+                    <span class="font-semibold text-gray-700">{rincianDus(stok)}</span>
+                    {#if kapasitasJenis(stok.jenis_id)}
+                      · 1 dus = {kapasitasJenis(stok.jenis_id)} eks
+                    {/if}
+                  </p>
+                </div>
               {/each}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </div>
+        {/each}
       {:else}
         <p class="text-sm text-gray-500">Belum ada stok tercatat.</p>
       {/if}

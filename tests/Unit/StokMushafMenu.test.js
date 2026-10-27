@@ -46,6 +46,23 @@ describe('Navigasi halaman Stok Mushaf', () => {
         expect(halamanStok).not.toContain('transferAsal');
     });
 
+    /**
+     * 26/10/2026: tabel isi stok diganti kartu yang dikelompokkan per gudang. Tabel tidak
+     * lagi dipakai di halaman ini (daftar dokumen transfer pun sudah pindah halaman).
+     */
+    it('isi stok ditampilkan sebagai kartu per gudang, bukan tabel', () => {
+        expect(halamanStok).not.toContain('<table');
+        expect(halamanStok).toContain('kelompokStok');
+        expect(halamanStok).toContain('{#each kelompokStok as grup');
+        expect(halamanStok).toContain('{grup.gudang}');
+        expect(halamanStok).toContain('{grup.baris.length} varian · {grup.eks} eks');
+        // Kartu memuat jenis, varian, jumlah eks, dan rincian dus.
+        expect(halamanStok).toContain('{stok.jenis}');
+        expect(halamanStok).toContain('{stok.eks}');
+        expect(halamanStok).toContain('rincianDus(stok)');
+        expect(halamanStok).toContain('1 dus = {kapasitasJenis(stok.jenis_id)} eks');
+    });
+
     it('aksi tulis stok tergantung izin, bukan keterlihatan saja', () => {
         expect(halamanStok).toContain('{#if bolehKelola}');
     });
@@ -69,7 +86,6 @@ describe('Navigasi halaman Stok Mushaf', () => {
      * Gudang dan Jenis tampil KOSONG walau stoknya ada.
      */
     it('membaca props datar yang benar-benar dikirim controller', () => {
-        expect(halamanStok).toContain('{stok.gudang}');
         expect(halamanStok).toContain('{stok.jenis}');
         expect(halamanStok).toContain('{stok.terjemahan}');
         expect(halamanStok).not.toContain('stok.gudang?.nama');
