@@ -58,9 +58,10 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
 
         expect(bagian(blokSpv)).toEqual([
             ['cube', 'Packing Hari Ini'],
+            ['users', 'Freelancer yang Kerja Hari Ini'],
             ['exclamation-circle', 'Perlu Tindakan'],
             ['clipboard-document-list', 'Beban Gudang'],
-            ['archive-box', 'Saldo Stok per Varian'],
+            ['archive-box', 'Stok Mushaf'],
         ]);
         expect(managerTanpaPerforma).toEqual(bagian(blokSpv));
         expect(manager[1]).toEqual(['chart-pie', 'Performa Gudang']);
@@ -117,8 +118,8 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(isi).toMatch(/\{#if bolehBukaMuatan\}[\s\S]*?\/admin\/muatan[\s\S]*?\{\/if\}/);
     });
 
-    it('SPV dan Manager hanya menyebut freelancer yang sudah mulai kerja hari ini', () => {
-        expect(skrip).toMatch(/stafKerjaHariIni\s*=\s*\(ringkasanGudang\?\.packing\?\.per_staf \?\? \[\]\)\.filter\(\(s\) => s\.mulai\)/);
+    it('SPV dan Manager menampilkan freelancer yang ditugaskan hari ini', () => {
+        expect(skrip).toMatch(/stafKerjaHariIni\s*=\s*\(ringkasanGudang\?\.packing\?\.per_staf \?\? \[\]\)/);
         expect(skrip).toMatch(/stafKerjaManager\s*=[\s\S]*?g\.staf_kerja/);
         expect(blokSpv).toMatch(/<FreelancerKerjaHariIni staf=\{stafKerjaHariIni\} \/>/);
         expect(blokManager).toMatch(/<FreelancerKerjaHariIni staf=\{stafKerjaManager\} \/>/);

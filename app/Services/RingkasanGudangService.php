@@ -71,7 +71,7 @@ class RingkasanGudangService
 
         $gudangList = Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']);
 
-        $perGudang = $gudangList->map(function (Gudang $g) {
+        $perGudang = $gudangList->map(function ($g) {
             $packing = $this->packingHariIni($g->id);
 
             return [
@@ -80,10 +80,10 @@ class RingkasanGudangService
                 'kerdus_tersegel' => $packing['kerdus_tersegel'],
                 'staf_total' => $packing['jumlah_staf'],
                 'staf_belum_mulai' => $packing['staf_belum_mulai'],
-                // Sama dengan dashboard SPV: hanya yang sudah mulai kerja yang disebut namanya,
+                // Seluruh freelancer yang ditugaskan hari ini (termasuk yang belum mulai),
                 // dengan bentuk baris yang sama (status, jam, kerdus, persen) — dashboard PJ
                 // memakai komponen FreelancerKerjaHariIni yang sama.
-                'staf_kerja' => collect($packing['per_staf'])->where('mulai', true)->values()->all(),
+                'staf_kerja' => collect($packing['per_staf'])->values()->all(),
                 // Hitungan miring saat pusat membeku; buat selalu betul:
                 'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
                 'kerdus_menunggu_muat' => $this->hitungKerdusMenungguMuat($g->id),
@@ -93,7 +93,7 @@ class RingkasanGudangService
         })->values();
 
         return [
-            'gudangList' => $gudangList->map(fn (Gudang $g) => [
+            'gudangList' => $gudangList->map(fn ($g) => [
                 'id' => $g->id, 'kode' => $g->kode, 'nama' => $g->nama,
             ])->values()->all(),
 
@@ -124,7 +124,7 @@ class RingkasanGudangService
                 ->orderByDesc('id')
                 ->limit(10)
                 ->get()
-                ->map(fn (TransferMushaf $t) => [
+                ->map(fn ($t) => [
                     'kode' => $t->kode,
                     'asal' => $t->gudangAsal?->nama,
                     'tujuan' => $t->gudangTujuan?->nama,
@@ -164,19 +164,22 @@ class RingkasanGudangService
             ->get();
 
         $staf = $tugas
-            ->map(fn (DailyPackingTask $t) => [
-                'id' => $t->id,
-                'nama' => $t->user?->name ?? '-',
-                'gudang_id' => $t->gudang_id,
-                'gudang_kode' => $t->gudang?->kode,
-                'target' => (int) $t->total_target,
-                'selesai' => (int) $t->total_selesai,
-                'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
-                'status' => $this->statusKerja($t),
-                'jam_mulai' => $t->started_at?->format('H:i'),
-                'jam_selesai' => $t->completed_at?->format('H:i'),
-                'kerdus' => (int) $t->packing_boxes_count,
-            ])
+            ->map(function ($t) {
+                /** @var DailyPackingTask $t */
+                return [
+                    'id' => $t->id,
+                    'nama' => $t->user?->name ?? '-',
+                    'gudang_id' => $t->gudang_id,
+                    'gudang_kode' => $t->gudang?->kode,
+                    'target' => (int) $t->total_target,
+                    'selesai' => (int) $t->total_selesai,
+                    'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
+                    'status' => $this->statusKerja($t),
+                    'jam_mulai' => $t->started_at?->format('H:i'),
+                    'jam_selesai' => $t->completed_at?->format('H:i'),
+                    'kerdus' => (int) $t->packing_boxes_count,
+                ];
+            })
             ->sortBy(fn (array $s) => [$s['status'] === 'tidak_mulai' ? 1 : 0, -$s['selesai'], $s['nama']])
             ->values();
 
@@ -215,7 +218,10 @@ class RingkasanGudangService
         return null;
     }
 
-    private function statusKerja(DailyPackingTask $tugas): string
+    /**
+     * @param  DailyPackingTask|mixed  $tugas
+     */
+    private function statusKerja($tugas): string
     {
         if ($tugas->status === 'completed' || ($tugas->total_target > 0 && $tugas->total_selesai >= $tugas->total_target)) {
             return 'selesai';
@@ -249,6 +255,7 @@ class RingkasanGudangService
      */
     private function packingHariIni(int $gudangId): array
     {
+        $gudang = Gudang::find($gudangId);
         $tugas = DailyPackingTask::query()
             ->whereDate('tanggal_tugas', today())
             ->where('gudang_id', $gudangId)
@@ -268,26 +275,30 @@ class RingkasanGudangService
                 ->whereDate('sealed_at', today())
                 ->count(),
             'per_staf' => $tugas
-                ->sortBy(fn (DailyPackingTask $t) => [$t->started_at ? 0 : 1, $t->user?->name ?? ''])
-                ->map(fn (DailyPackingTask $t) => [
-                    'id' => $t->id,
-                    'nama' => $t->user?->name ?? '-',
-                    // Label PERAN (role terluas akun itu): PJ dan SPV memang bisa ikut
-                    // memegang tugas packing, dan tanpa label ini baris mereka terbaca
-                    // sebagai freelancer biasa.
-                    'peran' => $t->user?->role_display,
-                    'selesai' => (int) $t->total_selesai,
-                    'target' => (int) $t->total_target,
-                    'mulai' => (bool) $t->started_at,
-                    // Baris "Freelancer yang kerja hari ini" di dashboard memakai susunan
-                    // yang sama dengan daftar di halaman Performa Kerja (status, jam, kerdus,
-                    // bar progress), jadi keempat nilai itu ikut dikirim dari sini.
-                    'status' => $this->statusKerja($t),
-                    'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
-                    'jam_mulai' => $t->started_at?->format('H:i'),
-                    'jam_selesai' => $t->completed_at?->format('H:i'),
-                    'kerdus' => (int) $t->packing_boxes_count,
-                ])
+                ->sortBy(fn ($t) => [$t->started_at ? 0 : 1, $t->user?->name ?? ''])
+                ->map(function ($t) use ($gudang) {
+                    /** @var DailyPackingTask $t */
+                    return [
+                        'id' => $t->id,
+                        'nama' => $t->user?->name ?? '-',
+                        'kode' => $gudang?->kode,
+                        // Label PERAN (role terluas akun itu): PJ dan SPV memang bisa ikut
+                        // memegang tugas packing, dan tanpa label ini baris mereka terbaca
+                        // sebagai freelancer biasa.
+                        'peran' => $t->user?->role_display,
+                        'selesai' => (int) $t->total_selesai,
+                        'target' => (int) $t->total_target,
+                        'mulai' => (bool) $t->started_at,
+                        // Baris "Freelancer yang kerja hari ini" di dashboard memakai susunan
+                        // yang sama dengan daftar di halaman Performa Kerja (status, jam, kerdus,
+                        // bar progress), jadi keempat nilai itu ikut dikirim dari sini.
+                        'status' => $this->statusKerja($t),
+                        'persen' => $t->total_target > 0 ? (int) round($t->total_selesai / $t->total_target * 100) : 0,
+                        'jam_mulai' => $t->started_at?->format('H:i'),
+                        'jam_selesai' => $t->completed_at?->format('H:i'),
+                        'kerdus' => (int) $t->packing_boxes_count,
+                    ];
+                })
                 ->values()
                 ->all(),
         ];
@@ -311,7 +322,7 @@ class RingkasanGudangService
             ->get();
 
         return [
-            'transfer_menunggu' => $menunggu->map(fn (TransferMushaf $t) => [
+            'transfer_menunggu' => $menunggu->map(fn ($t) => [
                 'kode' => $t->kode,
                 'asal' => $t->gudangAsal?->nama,
                 'jumlah_resi' => (int) $t->jumlah_resi,
@@ -340,7 +351,7 @@ class RingkasanGudangService
             ->when($gudangId !== null, fn ($q) => $q->where('gudang_tujuan_id', $gudangId))
             ->with(['gudangAsal:id,nama', 'gudangTujuan:id,nama', 'jenisQuran:id,nama_jenis'])
             ->orderByDesc('id')->limit(10)->get()
-            ->map(fn (TransferStok $t) => [
+            ->map(fn ($t) => [
                 'kode' => $t->kode,
                 'asal' => $t->gudangAsal?->nama,
                 'tujuan' => $t->gudangTujuan?->nama,
@@ -398,7 +409,8 @@ class RingkasanGudangService
             ->orderBy('jenis_quran_id')
             ->orderBy('terjemahan')
             ->get()
-            ->map(function (StokMushaf $s) use ($varianJenis) {
+            ->map(function ($s) use ($varianJenis) {
+                /** @var StokMushaf $s */
                 $adaVarian = in_array($s->jenisQuran?->kode_jenis, $varianJenis, true);
 
                 return [
@@ -421,7 +433,10 @@ class RingkasanGudangService
     }
 
     /** Stok habis (0), rendah (di bawah satu dus penuh), atau normal. */
-    private function statusStok(StokMushaf $s): string
+    /**
+     * @param  StokMushaf|mixed  $s
+     */
+    private function statusStok($s): string
     {
         if ($s->jumlahEks() <= 0) {
             return 'habis';

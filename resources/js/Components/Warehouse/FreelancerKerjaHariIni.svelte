@@ -1,13 +1,9 @@
 <script>
   /**
-   * Freelancer yang SUDAH mulai kerja hari ini, di kartu packing dashboard SPV dan
-   * Manager. Susunannya SENGAJA sama dengan daftar freelancer di halaman Performa
-   * Kerja (nama + pil status, jam mulai/selesai + jumlah kerdus, lalu selesai/target
-   * dengan bar progress) supaya mata tidak perlu menyesuaikan diri antarhalaman
-   * (keputusan pemilik sistem, 26/10/2026 — sebelumnya hanya pil nama · selesai/target).
-   *
-   * Yang ditugaskan tapi belum mulai sengaja tidak disebut namanya — cukup terhitung
-   * di kotak "Staf belum mulai". Daftar lengkap per tanggal ada di halaman Performa Kerja.
+   * Freelancer yang ditugaskan hari ini, di dashboard SPV dan Manager.
+   * Susunannya sama dengan daftar freelancer di halaman Performa Kerja
+   * (nama + pil status, jam mulai/selesai + jumlah kerdus, lalu selesai/target
+   * dengan bar progress).
    */
   import HeroIcon from '../UI/HeroIcon.svelte';
   import PilTitik from './PilTitik.svelte';
@@ -18,11 +14,15 @@
 
   $: bolehLihatPerforma = hasPermission('warehouse.performance.view');
 
-  /** Selesai = hijau, sedang kerja = indigo — sama dengan halaman Performa Kerja. */
+  /** Selesai = hijau, sedang kerja = indigo, belum mulai = amber — sama dengan halaman Performa Kerja. */
   function tampilanStatus(status) {
-    return status === 'selesai'
-      ? { label: 'Selesai', warna: 'green' }
-      : { label: 'Sedang kerja', warna: 'indigo' };
+    if (status === 'selesai') {
+      return { label: 'Selesai', warna: 'green' };
+    }
+    if (status === 'mulai') {
+      return { label: 'Sedang kerja', warna: 'indigo' };
+    }
+    return { label: 'Belum mulai', warna: 'amber' };
   }
 
   function persen(s) {
@@ -34,16 +34,16 @@
   }
 </script>
 
-<div class="mt-4 pt-4 border-t border-dashed border-gray-200">
-  <div class="flex items-center justify-between gap-3 mb-2">
-    <p class="text-xs font-medium text-gray-500">Freelancer yang kerja hari ini</p>
-    {#if bolehLihatPerforma}
+<div>
+  {#if bolehLihatPerforma}
+    <div class="flex items-center justify-between gap-3 mb-3">
+      <p class="text-xs font-medium text-gray-500">Freelancer yang ditugaskan hari ini ({staf.length})</p>
       <a href="/admin/warehouse/performance" class="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800">
         Semua per tanggal
         <HeroIcon name="arrow-right" class="w-3.5 h-3.5" />
       </a>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
   {#if staf.length > 0}
     <ul class="divide-y divide-gray-100 border border-gray-200 rounded-xl">

@@ -47,20 +47,20 @@ describe('Navigasi halaman Stok Mushaf', () => {
     });
 
     /**
-     * 26/10/2026: tabel isi stok diganti kartu yang dikelompokkan per gudang. Tabel tidak
-     * lagi dipakai di halaman ini (daftar dokumen transfer pun sudah pindah halaman).
+     * 27/10/2026: kartu isi stok memakai KOMPONEN & SUMBER DATA yang sama dengan dashboard
+     * (KartuStok + RingkasanGudangService::stokKartu), jadi bentuknya identik dengan kartu
+     * stok yang sudah ada di halaman lain — bukan kartu rancangan sendiri, dan bukan tabel.
      */
-    it('isi stok ditampilkan sebagai kartu per gudang, bukan tabel', () => {
+    it('isi stok memakai komponen KartuStok yang sama dengan dashboard', () => {
         expect(halamanStok).not.toContain('<table');
-        expect(halamanStok).toContain('kelompokStok');
-        expect(halamanStok).toContain('{#each kelompokStok as grup');
+        expect(halamanStok).toContain("import KartuStok from '../../Components/Warehouse/KartuStok.svelte'");
+        expect(halamanStok).toContain('export let stokKartu = []');
+        expect(halamanStok).toContain('{#each stokKartu as grup');
         expect(halamanStok).toContain('{grup.gudang}');
-        expect(halamanStok).toContain('{grup.baris.length} varian · {grup.eks} eks');
-        // Kartu memuat jenis, varian, jumlah eks, dan rincian dus.
-        expect(halamanStok).toContain('{stok.jenis}');
-        expect(halamanStok).toContain('{stok.eks}');
-        expect(halamanStok).toContain('rincianDus(stok)');
-        expect(halamanStok).toContain('1 dus = {kapasitasJenis(stok.jenis_id)} eks');
+        expect(halamanStok).toContain('<KartuStok {baris} />');
+        // Kartu tidak lagi menyusun isi sendiri (kelas/angka buatan halaman).
+        expect(halamanStok).not.toContain('rincianDus(');
+        expect(halamanStok).not.toContain('kelompokStok');
     });
 
     it('aksi tulis stok tergantung izin, bukan keterlihatan saja', () => {
@@ -84,13 +84,17 @@ describe('Navigasi halaman Stok Mushaf', () => {
      * Controller mengirim props datar (`gudang`, `jenis`, `terjemahan` sebagai teks).
      * Halaman pernah membacanya sebagai objek (`stok.gudang?.nama`) sehingga kolom
      * Gudang dan Jenis tampil KOSONG walau stoknya ada.
+     *
+     * Sejak 27/10/2026 kartu isi stok memakai komponen KartuStok (baris dari stokKartu);
+     * yang tersisa memakai props datar adalah daftar Pergerakan Terakhir.
      */
     it('membaca props datar yang benar-benar dikirim controller', () => {
-        expect(halamanStok).toContain('{stok.jenis}');
-        expect(halamanStok).toContain('{stok.terjemahan}');
+        expect(halamanStok).toContain('{baris.gudang}');
+        expect(halamanStok).toContain('{baris.jenis}');
+        expect(halamanStok).toContain('{baris.terjemahan}');
+        expect(halamanStok).toContain('{baris.jumlah_eks}');
         expect(halamanStok).not.toContain('stok.gudang?.nama');
         expect(halamanStok).not.toContain('stok.jenisQuran?.nama_jenis');
-        expect(halamanStok).toContain('{baris.terjemahan}');
     });
 
     /**

@@ -132,7 +132,7 @@ it('poling dashboard-status tanpa ?ringkasan tidak membawa ringkasan', function 
         ->and(array_key_exists('ringkasanGudang', $data))->toBeFalse();
 });
 
-it('manager hanya menerima nama freelancer yang sudah mulai kerja hari ini, sama seperti SPV', function () {
+it('manager menerima nama seluruh freelancer yang ditugaskan hari ini, sama seperti SPV', function () {
     $pj = drAkun(['warehouse', 'manager-repacking']);
     $andi = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
     $budi = drAkun([RoleEnum::WAREHOUSE->value], $this->smg);
@@ -146,10 +146,10 @@ it('manager hanya menerima nama freelancer yang sudah mulai kerja hari ini, sama
         ->firstWhere('kode', 'SMG');
 
     // Bentuk barisnya kini sama dengan dashboard SPV (status, jam, kerdus, persen dipakai
-    // komponen FreelancerKerjaHariIni), jadi yang dikunci: hanya Andi yang disebut, dan
-    // nilai intinya tetap 12/20.
-    expect(collect($smg['staf_kerja'])->pluck('nama')->all())->toBe(['Andi'])
+    // komponen FreelancerKerjaHariIni), seluruh freelancer yang ditugaskan hari ini dimuat.
+    expect(collect($smg['staf_kerja'])->pluck('nama')->all())->toBe(['Andi', 'Budi'])
         ->and($smg['staf_kerja'][0])->toMatchArray(['nama' => 'Andi', 'selesai' => 12, 'target' => 20, 'status' => 'mulai', 'persen' => 60])
+        ->and($smg['staf_kerja'][1])->toMatchArray(['nama' => 'Budi', 'selesai' => 0, 'target' => 20, 'status' => 'tidak_mulai', 'persen' => 0])
         ->and($smg['staf_kerja'][0])->toHaveKeys(['jam_mulai', 'jam_selesai', 'kerdus'])
         ->and($smg['staf_belum_mulai'])->toBe(1)
         ->and($smg)->not->toHaveKey('belum_nama');

@@ -2,10 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 
 class UserSeeder extends Seeder
 {
@@ -38,6 +37,7 @@ class UserSeeder extends Seeder
                 'password' => Hash::make('gudang123'),
                 'is_active' => true,
                 'spatie_role' => 'warehouse',
+                'gudang_id' => 1,
             ],
             [
                 'name' => 'Supervisor Gudang',
@@ -46,6 +46,7 @@ class UserSeeder extends Seeder
                 'password' => Hash::make('supervisor123'),
                 'is_active' => true,
                 'spatie_role' => 'supervisor',
+                'gudang_id' => 1,
             ],
             [
                 'name' => 'Kurir Pengiriman',
@@ -61,18 +62,18 @@ class UserSeeder extends Seeder
         foreach ($users as $userData) {
             $spatieRole = $userData['spatie_role'];
             unset($userData['spatie_role']);
-            
+
             $user = User::updateOrCreate(
                 ['email' => $userData['email']], // Find by email
                 $userData // Update or create with this data
             );
-            
+
             // Assign Spatie role
-            if (!$user->hasRole($spatieRole)) {
+            if (! $user->hasRole($spatieRole)) {
                 $user->assignRole($spatieRole);
             }
         }
-        
+
         $this->command->info('✅ Default users seeded successfully!');
         $this->command->info('📧 Admin: admin@ekspedisiquran.com / password123');
         $this->command->info('📧 CS: cs@ekspedisiquran.com / cs123');

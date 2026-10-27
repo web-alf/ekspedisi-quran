@@ -2,6 +2,7 @@
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
   import { gudangUntukEntri } from '../../utils/pilihanGudang.js';
+  import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
   import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian } from '../../utils/stokPratinjau.js';
 
   // Fase 3: stok mushaf tanpa muwakif per gudang. Dokumen transfer antar gudang sejak
@@ -12,6 +13,8 @@
   export let gudangList = [];
   export let jenisList = [];
   export let stokList = [];
+  // Kartu "Isi Stok": bentuk & sumber datanya sama dengan dashboard (KartuStok).
+  export let stokKartu = [];
   export let pergerakanList = [];
   export let bolehKelola = false;
   export let gudangSaya = null;
@@ -29,39 +32,6 @@
   let entriJumlah = 1;
   let entriCatatan = '';
   let hasilTerakhir = ''; // ringkasan sesudah simpan: "A5 tanpa terjemahan: 12 → 22 eks"
-
-  // Isi stok dikelompokkan per gudang (26/10/2026, keputusan pemilik): tabel diganti kartu,
-  // dan tiap gudang dapat judul + jumlah varian/eks. PJ yang memegang dua gudang langsung
-  // melihat kelompoknya masing-masing; SPV hanya punya satu kelompok.
-  $: kelompokStok = (() => {
-    const perGudang = new Map();
-
-    for (const baris of stokList) {
-      const kunci = String(baris.gudang_id ?? baris.gudang);
-
-      if (!perGudang.has(kunci)) {
-        perGudang.set(kunci, { gudang: baris.gudang, eks: 0, baris: [] });
-      }
-
-      const grup = perGudang.get(kunci);
-      grup.baris.push(baris);
-      grup.eks += Number(baris.eks) || 0;
-    }
-
-    return [...perGudang.values()];
-  })();
-
-  /** Rincian dus dari angka yang sudah dihitung server ("2 dus + 10 eks"). */
-  function rincianDus(baris) {
-    const dus = Number(baris.dus) || 0;
-    const sisa = Number(baris.sisaEks) || 0;
-
-    if (dus === 0) {
-      return `${sisa} eks`;
-    }
-
-    return sisa > 0 ? `${dus} dus + ${sisa} eks` : `${dus} dus utuh`;
-  }
 
   // Pratinjau akibat pergerakan SEBELUM disimpan — satu-satunya cara mencegah pencatatan
   // pengurangan melebihi stok, yang sekarang baru ketahuan setelah server menolak (422).
@@ -181,31 +151,16 @@
 
     <section class="bg-white rounded-lg border border-gray-200 p-5">
       <h2 class="font-semibold text-gray-900 mb-3">Isi Stok</h2>
-      {#if stokList.length > 0}
-        {#each kelompokStok as grup, i (grup.gudang)}
+      {#if stokKartu.length > 0}
+        {#each stokKartu as grup, i (grup.gudang_id)}
           <div class={i > 0 ? 'mt-5 pt-4 border-t border-dashed border-gray-200' : ''}>
             <div class="flex items-baseline gap-2 flex-wrap mb-3">
               <p class="text-sm font-semibold text-gray-900">{grup.gudang}</p>
-              <p class="text-xs text-gray-500">{grup.baris.length} varian · {grup.eks} eks</p>
+              <p class="text-xs text-gray-500">{grup.baris.length} jenis/varian</p>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {#each grup.baris as stok (stok.id)}
-                <div class="border border-gray-200 rounded-xl p-4">
-                  <div class="flex items-start justify-between gap-2">
-                    <p class="text-sm font-semibold text-gray-900 leading-snug">{stok.jenis}</p>
-                    <span class="flex-none inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border border-gray-200 bg-gray-50 text-gray-600 whitespace-nowrap">{stok.terjemahan}</span>
-                  </div>
-                  <p class="mt-3 flex items-baseline gap-1.5">
-                    <span class="text-2xl font-bold text-gray-900 leading-none">{stok.eks}</span>
-                    <span class="text-xs text-gray-500">eks</span>
-                  </p>
-                  <p class="mt-1.5 text-xs text-gray-500">
-                    <span class="font-semibold text-gray-700">{rincianDus(stok)}</span>
-                    {#if kapasitasJenis(stok.jenis_id)}
-                      · 1 dus = {kapasitasJenis(stok.jenis_id)} eks
-                    {/if}
-                  </p>
-                </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {#each grup.baris as baris (baris.kode_jenis + (baris.varian || 'x'))}
+                <KartuStok {baris} />
               {/each}
             </div>
           </div>

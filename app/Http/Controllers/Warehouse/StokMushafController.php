@@ -11,6 +11,7 @@ use App\Models\StokMushaf;
 use App\Models\StokMushafPergerakan;
 use App\Models\TransferStok;
 use App\Models\User;
+use App\Services\RingkasanGudangService;
 use App\Services\StokMushafService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -27,13 +28,36 @@ use Inertia\Inertia;
  */
 class StokMushafController extends Controller
 {
-    public function __construct(private StokMushafService $stokMushaf) {}
+    public function __construct(
+        private StokMushafService $stokMushaf,
+        private RingkasanGudangService $ringkasanGudang,
+    ) {}
 
     public function index()
     {
+        $user = auth()->user();
+        $tercakupGudang = $user->hasRole(RoleEnum::SPV_GUDANG->value);
+
+        // Kartu "Isi Stok" memakai SUMBER & KOMPONEN yang sama dengan dashboard
+        // (RingkasanGudangService::stokKartu + KartuStok) supaya bentuk kartunya identik
+        // di kedua halaman — bukan tabel atau kartu rancangan sendiri (27/10/2026).
+        $gudangKartu = Gudang::query()
+            ->when($tercakupGudang, fn ($q) => $q->whereKey($user->gudang_id))
+            ->orderBy('id')
+            ->get(['id', 'kode', 'nama'])
+            ->map(fn (Gudang $g) => [
+                'gudang_id' => $g->id,
+                'gudang' => $g->nama,
+                'baris' => $this->ringkasanGudang->stokKartu($g->id),
+            ])
+            ->filter(fn (array $g) => $g['baris'] !== [])
+            ->values()
+            ->all();
+
         return Inertia::render('Warehouse/StokMushaf', [
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
             'jenisList' => JenisQuran::active()->orderBy('id')->get(['id', 'kode_jenis', 'nama_jenis', 'default_capacity']),
+            'stokKartu' => $gudangKartu,
             'stokList' => StokMushaf::with(['gudang', 'jenisQuran'])
                 ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', auth()->user()->gudang_id))
                 ->orderBy('gudang_id')->get()

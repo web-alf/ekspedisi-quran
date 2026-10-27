@@ -70,10 +70,12 @@
   // tidak relevan bagi mereka kecuali memang ikut mengerjakan tugas packing.
   $: adalahPemantau = Boolean(ringkasanGudang || ringkasanManager);
 
-  // Dashboard SPV hanya menampilkan freelancer yang SUDAH mulai kerja hari ini;
-  // yang ditugaskan tapi belum mulai cukup terhitung di kotak "Staf belum mulai".
-  // Daftar lengkap per tanggal ada di halaman Performa Kerja.
-  $: stafKerjaHariIni = (ringkasanGudang?.packing?.per_staf ?? []).filter((s) => s.mulai);
+  // Dashboard SPV menampilkan seluruh freelancer yang ditugaskan hari ini (termasuk yang belum mulai);
+  // yang ditugaskan tapi belum mulai berstatus "Belum mulai" persis seperti di halaman Performa Kerja.
+  $: stafKerjaHariIni = (ringkasanGudang?.packing?.per_staf ?? []).map((s) => ({
+    ...s,
+    kode: s.kode ?? ringkasanGudang?.gudang?.kode,
+  }));
 
   $: persenPacking = ringkasanGudang?.packing?.target
     ? Math.round((ringkasanGudang.packing.selesai / ringkasanGudang.packing.target) * 100)
@@ -102,8 +104,8 @@
     const segB = Math.max(0, Math.min(100 - segA, ((perGudangUrut[1]?.selesai ?? 0) / gabunganTarget) * 100));
     return [segA, segB];
   })();
-  // Sama dengan SPV: hanya freelancer yang sudah kerja hari ini, diberi kode gudangnya.
-  $: stafKerjaManager = perGudangUrut.flatMap((g) => (g.staf_kerja || []).map((st) => ({ ...st, kode: g.kode })));
+  // Sama dengan SPV: seluruh freelancer yang ditugaskan hari ini, diberi kode gudangnya.
+  $: stafKerjaManager = perGudangUrut.flatMap((g) => (g.staf_kerja || []).map((st) => ({ ...st, kode: st.kode ?? g.kode })));
 
   // Palet Tailwind (bukan hex lepas) supaya seragam dengan halaman lain.
   // Ditulis utuh agar tidak dibuang purge Tailwind.
@@ -409,7 +411,13 @@
           <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
             <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
           </div>
+        </RingkasanSection>
 
+        <RingkasanSection
+          icon="users"
+          judul="Freelancer yang Kerja Hari Ini — {ringkasanGudang.gudang.nama}"
+          keterangan="Capaian dan progres tiap staf yang ditugaskan hari ini"
+        >
           <FreelancerKerjaHariIni staf={stafKerjaHariIni} />
         </RingkasanSection>
 
@@ -443,8 +451,8 @@
         <RingkasanSection
           icon="archive-box"
           warna="green"
-          judul="Saldo Stok per Varian"
-          keterangan="A5, A6, dan IQRA dipisah varian terjemahannya — {ringkasanGudang.gudang.nama}"
+          judul="Stok Mushaf"
+          keterangan="Stok tanpa muwakif — A5, A6, dan IQRA dipisah varian terjemahannya · {ringkasanGudang.gudang.nama}"
         >
           <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {#each ringkasanGudang.stok_kartu as baris (baris.kode_jenis + (baris.varian || 'x'))}
@@ -505,8 +513,6 @@
               {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
             </p>
           {/if}
-
-          <FreelancerKerjaHariIni staf={stafKerjaManager} />
         </RingkasanSection>
 
         <RingkasanSection
@@ -561,6 +567,14 @@
         </RingkasanSection>
 
         <RingkasanSection
+          icon="users"
+          judul="Freelancer yang Kerja Hari Ini — Semua Gudang"
+          keterangan="Capaian dan progres seluruh staf yang ditugaskan hari ini"
+        >
+          <FreelancerKerjaHariIni staf={stafKerjaManager} />
+        </RingkasanSection>
+
+        <RingkasanSection
           icon="exclamation-circle"
           warna="amber"
           judul="Perlu Tindakan"
@@ -595,8 +609,8 @@
         <RingkasanSection
           icon="archive-box"
           warna="green"
-          judul="Saldo Stok per Varian"
-          keterangan="A5, A6, dan IQRA dipisah varian terjemahannya — per gudang"
+          judul="Stok Mushaf"
+          keterangan="Stok tanpa muwakif — A5, A6, dan IQRA dipisah varian terjemahannya, per gudang"
         >
           <div slot="kanan" class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Saring kartu stok per gudang">
             <button type="button" role="tab" aria-selected={stokAktif === 'semua'} on:click={() => (stokAktif = 'semua')}
