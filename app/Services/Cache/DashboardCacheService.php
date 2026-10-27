@@ -173,7 +173,7 @@ class DashboardCacheService extends BaseCacheService
                 ->join('status_pengiriman', 'pengiriman.status_id', '=', 'status_pengiriman.id')
                 ->selectRaw('
                     COUNT(CASE WHEN status_pengiriman.slug = "pemesanan" THEN 1 END) as pending_shipments,
-                    COUNT(CASE WHEN status_pengiriman.slug IN ("kedatangan", "packing", "selesai-packing", "pengiriman") THEN 1 END) as in_transit_shipments,
+                    COUNT(CASE WHEN status_pengiriman.slug IN ("packing", "selesai-packing", "pengiriman") THEN 1 END) as in_transit_shipments,
                     COUNT(CASE WHEN status_pengiriman.slug = "diterima" THEN 1 END) as completed_shipments,
                     COUNT(CASE WHEN status_pengiriman.slug = "batal" THEN 1 END) as cancelled_shipments,
                     SUM(CASE WHEN status_pengiriman.slug = "diterima" THEN pengiriman.jumlah_quran ELSE 0 END) as total_mushaf_distributed
@@ -424,7 +424,7 @@ class DashboardCacheService extends BaseCacheService
                 $query->where('slug', 'pemesanan');
             })->count(),
             'inTransitShipments' => Pengiriman::whereHas('status', function ($query) {
-                $query->whereIn('slug', ['kedatangan', 'packing', 'selesai-packing', 'pengiriman']);
+                $query->whereIn('slug', ['packing', 'selesai-packing', 'pengiriman']);
             })->count(),
             'completedShipments' => Pengiriman::whereHas('status', function ($query) {
                 $query->where('slug', 'diterima');
@@ -468,7 +468,7 @@ class DashboardCacheService extends BaseCacheService
             'diterima' => '#10b981',
             'pengiriman', 'selesai-packing' => '#3b82f6',
             'pemesanan' => '#f59e0b',
-            'kedatangan', 'packing' => '#8b5cf6',
+            'packing' => '#8b5cf6',
             'batal' => '#ef4444',
             default => '#6b7280'
         };
@@ -481,7 +481,7 @@ class DashboardCacheService extends BaseCacheService
     {
         return match ($slug) {
             'pemesanan' => 'pending',
-            'kedatangan', 'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
+            'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
             'diterima' => 'completed',
             'batal' => 'cancelled',
             default => 'unknown'

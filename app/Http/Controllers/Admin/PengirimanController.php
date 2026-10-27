@@ -810,7 +810,6 @@ class PengirimanController extends Controller
         // Show pengiriman with all active non-final statuses (from pemesanan to pengiriman)
         $activeStatusIds = array_values(StatusPengirimanCache::getIdsBySlug([
             'pemesanan',
-            'kedatangan',
             'packing',
             'selesai-packing',
             'pengiriman',

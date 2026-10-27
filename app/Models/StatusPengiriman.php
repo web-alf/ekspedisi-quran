@@ -173,20 +173,11 @@ class StatusPengiriman extends Model
             // nyata (0 resi). Barisnya TIDAK dihapus karena 52 `status_histories` + 25
             // `tracking_history` lama masih merujuk id-nya (FK restrict); status itu hanya
             // tidak lagi ditawarkan maupun ditampilkan.
-            [
-                'nama' => 'Proses Kedatangan/Penurunan',
-                'slug' => 'kedatangan',
-                'deskripsi' => 'Quran sudah datang dan dalam proses penurunan',
-                'warna' => 'cyan',
-                'icon' => '📦',
-                'urutan' => 3,
-                // Nonaktif sejak alur gudang dirombak (2026-10-13): pemilik sistem
-                // menghapus tahap kedatangan/penurunan — mushaf datang langsung
-                // masuk "Antrian". Barisnya dipertahankan hanya agar resi lama
-                // yang menyimpan status_id ini tetap punya label.
-                'is_active' => false,
-                'is_final' => false,
-            ],
+            // `kedatangan` ("Proses Kedatangan/Penurunan") DIHAPUS dari alur 13/10/2026
+            // (mushaf datang langsung masuk Antrian) dan sisa pemakaiannya di kode dibuang
+            // 27/10/2026 bersama "Proses Produksi", jadi ia tidak dibuat lagi di sini.
+            // Barisnya di DB produksi TETAP ADA (nonaktif) karena 12 `status_histories` +
+            // 5 `tracking_history` lama merujuk id-nya.
             [
                 'nama' => 'Antrian',
                 'slug' => 'antrian',

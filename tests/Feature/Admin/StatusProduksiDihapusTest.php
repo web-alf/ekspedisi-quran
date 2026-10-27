@@ -84,11 +84,45 @@ it('tetap membaca riwayat lama yang menyebut produksi', function () {
         ->and($status->icon)->not->toBeEmpty();
 });
 
-it('tidak lagi membuat status produksi pada pemasangan baru', function () {
+it('tidak lagi membuat status produksi maupun kedatangan pada pemasangan baru', function () {
     $slug = collect(StatusPengiriman::getDefaultStatuses())->pluck('slug')->all();
 
     expect($slug)->not->toContain('produksi')
+        ->and($slug)->not->toContain('kedatangan')
         ->and($slug)->toContain('pemesanan')
         ->and($slug)->toContain('antrian')
         ->and($slug)->toContain('selesai-packing');
+});
+
+/*
+|--------------------------------------------------------------------------
+| "Proses Kedatangan/Penurunan" — ditutup rapat 27/10/2026
+|--------------------------------------------------------------------------
+| Sudah dihapus dari alur gudang sejak 13/10/2026, tetapi masih tersisa di tahap
+| dashboard dan daftar status halaman QR. Sisa itu yang dibuang sekarang.
+*/
+
+it('menutup status kedatangan tanpa menghapus barisnya', function () {
+    $status = StatusPengiriman::where('slug', 'kedatangan')->first();
+
+    // Seeder tidak lagi membuatnya; kalau barisnya tidak ada di DB uji, tidak ada yang
+    // perlu ditutup — yang penting ia tidak pernah muncul di daftar mana pun.
+    if ($status === null) {
+        expect(StatusPengiriman::active()->pluck('slug'))->not->toContain('kedatangan');
+
+        return;
+    }
+
+    expect($status->is_active)->toBeFalse();
+});
+
+it('tidak memuat kedatangan di tahap riwayat publik maupun pilihan status', function () {
+    expect(config('pengiriman.riwayat_publik_tahap'))->not->toContain('kedatangan');
+
+    $gudang = User::factory()->create(['is_active' => true]);
+    $gudang->assignRole(RoleEnum::WAREHOUSE->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    expect(PengirimanStageVisibility::visibleStatuses($gudang)->pluck('slug')->all())
+        ->not->toContain('kedatangan');
 });

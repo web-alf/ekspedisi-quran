@@ -44,17 +44,7 @@ class UpdateStatusPengiriman extends Command
             ],
             // `produksi` ("Proses Produksi") DIHAPUS 27/10/2026 atas keputusan pemilik:
             // proses cetak berjalan di luar gudang dan tahap ini tidak pernah dipakai alur.
-            [
-                'nama' => 'Proses Kedatangan/Penurunan',
-                'slug' => 'kedatangan',
-                'deskripsi' => 'Quran sudah datang dan dalam proses penurunan',
-                'warna' => 'cyan',
-                'urutan' => 3,
-                'is_active' => true,
-                'is_final' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+            // `kedatangan` tidak lagi dibuat: alurnya dihapus (lihat StatusPengiriman).
             [
                 'nama' => 'Proses Packing',
                 'slug' => 'packing',
