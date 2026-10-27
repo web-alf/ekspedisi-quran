@@ -30,7 +30,7 @@
   // Isinya tetap difilter izin (mata SPV dan freelancer otomatis berbeda).
   $: peranNama = (currentUser.roles || []).map((r) => (typeof r === 'string' ? r : r?.name));
   $: isPeranGudang = peranNama.some((r) => ['warehouse', 'manager-repacking', 'spv-gudang'].includes(r));
-  $: primaryRoleDisplay = userRolesDisplay[0] || 'User';
+  $: primaryRoleDisplay = currentUser.role_display || userRolesDisplay[0] || 'User';
   
   // Get settings for logo
   $: settings = $page.props.settings || {};
