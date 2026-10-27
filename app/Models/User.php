@@ -68,7 +68,11 @@ class User extends Authenticatable
      */
     public function getRoleAttribute()
     {
-        return $this->roles->first()?->name;
+        // Role UTAMA (roleUtama()), bukan baris pivot pertama: `$user->role` dipakai untuk
+        // menampilkan "role saat ini" di halaman pengguna dan props auth. Akun multi-role
+        // seperti gudang@ (warehouse + manager-repacking) tidak boleh tampil sebagai
+        // freelancer hanya karena urutan pivot (27/10/2026).
+        return $this->roleUtama()?->name;
     }
 
     /**

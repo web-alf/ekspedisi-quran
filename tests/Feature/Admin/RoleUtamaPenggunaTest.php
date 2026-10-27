@@ -33,7 +33,8 @@ it('memilih role terluas sebagai role utama, bukan urutan pivot', function () {
 
     expect($akun->fresh()->roleUtama()?->name)->toBe(RoleEnum::MANAGER_REPACKING->value)
         ->and($akun->fresh()->role_display)->toBe('Manager Repacking (PJ Gudang)')
-        ->and($akun->fresh()->role)->toBe(RoleEnum::WAREHOUSE->value);
+        // `$user->role` (dipakai props auth & halaman "role saat ini") ikut role utama.
+        ->and($akun->fresh()->role)->toBe(RoleEnum::MANAGER_REPACKING->value);
 });
 
 it('daftar pengguna menampilkan role utama akun multi-role', function () {

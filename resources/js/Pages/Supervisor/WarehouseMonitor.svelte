@@ -48,6 +48,16 @@
   let selectedMonth = new Date().toISOString().slice(0, 7)
   let loading = false
   let assignTarget = { user_id: '', target: 80 }
+
+  /**
+   * Label kandidat di modal Assign Target: SPV ditandai karena PJ membagi beban kerja
+   * lewat SPV (yang meneruskannya ke freelancer). Gudangnya ikut disebut agar tidak salah.
+   */
+  function labelKandidat(user) {
+    const spv = user.adalah_spv ? ' · SPV' : '';
+
+    return `${user.name}${spv}${user.gudang ? ` — ${user.gudang}` : ''}`;
+  }
   let showAssignTargetModal = false
   let isSubmitting = false
   let showExportModal = false
@@ -874,7 +884,7 @@
               >
                 <option value="" class="text-gray-500">-- Pilih User --</option>
                 {#each warehouseUsers as user}
-                  <option value={user.id}>{user.name}{#if user.gudang} — {user.gudang}{/if}</option>
+                  <option value={user.id}>{labelKandidat(user)}</option>
                 {/each}
               </select>
             </div>

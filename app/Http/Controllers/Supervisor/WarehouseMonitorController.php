@@ -522,14 +522,21 @@ class WarehouseMonitorController extends Controller
         $user = User::find($request->user_id);
         $gudangTercakup = $this->gudangTercakup();
 
-        // Tugas packing hanya untuk freelancer murni. Akun SPV/PJ memegang izin memindai
-        // (mereka "harus bisa mengerjakan") tetapi bukan pekerja packing: menugasi mereka
-        // membuat target gudang menggelembung oleh pekerjaan yang tak akan dilakukan
-        // (keputusan pemilik 26/10/2026 — PJ/SPV menugasi MANUAL ke freelancer).
-        if (! $user || ! $user->isFreelancerMurni()) {
+        // Siapa yang boleh ditugasi (hierarki gudang, 27/10/2026):
+        //  - freelancer murni (pekerja packing) — oleh siapa pun yang berwenang menugasi;
+        //  - SPV Gudang — hanya oleh PJ/super-admin, sebagai penerima beban kerja per
+        //    gudang yang nanti diteruskannya ke freelancer.
+        // Akun PJ tidak menugasi dirinya sendiri.
+        $penugasanAwal = auth()->user();
+        $bolehDitugasi = $user && (
+            $user->isFreelancerMurni()
+            || ($this->adalahPj($penugasanAwal) && $user->hasRole(RoleEnum::SPV_GUDANG->value))
+        );
+
+        if (! $bolehDitugasi) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tugas packing hanya bisa diberikan ke freelancer gudang (role Freelancer Gudang). Akun SPV/PJ tidak menerima tugas packing — tugaskan ke freelancer-nya.',
+                'message' => 'Tugas hanya bisa diberikan ke freelancer gudang — atau, oleh PJ, ke SPV gudang (yang meneruskannya ke freelancer).',
             ], 422);
         }
 
@@ -570,9 +577,14 @@ class WarehouseMonitorController extends Controller
             //   PJ/super-admin yang melihatnya di Monitor.
             $penugasan = auth()->user();
             $adalahSpvTercakup = $penugasan->hasRole(RoleEnum::SPV_GUDANG->value) && $penugasan->gudang_id !== null;
+            // SPV terikat gudang → tugas bertagih gudangnya. PJ/admin boleh memilih gudang;
+            // bila tidak memilih, tugas yang ditujukan ke SPV tetap bertagih gudang SPV itu
+            // (tanpa tagihan, SPV tidak akan melihatnya di Monitor yang ter-scope gudang).
             $tagihan = $adalahSpvTercakup
                 ? $penugasan->gudang_id
-                : ($request->filled('gudang_id') ? (int) $request->gudang_id : null);
+                : ($request->filled('gudang_id')
+                    ? (int) $request->gudang_id
+                    : ($user->hasRole(RoleEnum::SPV_GUDANG->value) ? $user->gudang_id : null));
             $namaGudang = null;
 
             if ($tagihan !== null) {
@@ -817,16 +829,27 @@ class WarehouseMonitorController extends Controller
             return collect();
         }
 
-        // Daftar KANDIDAT PENUGASAN PACKING: hanya FREELANCER MURNI (role `warehouse`
-        // tanpa spv-gudang/manager-repacking). Dulu penyaringnya role `warehouse` saja,
-        // sehingga akun PJ yang juga memegang role itu (gudang@) ikut ditawarkan sebagai
-        // pekerja packing — dan tugasnya menggelembungkan target gudang.
+        // Daftar KANDIDAT PENUGASAN, mengikuti hierarki gudang (keputusan pemilik
+        // 27/10/2026): PJ membagi beban kerja ke SPV per gudang, lalu SPV menugasi
+        // freelancer-nya.
         //
-        // SPV hanya ditawari freelancer gudangnya + yang belum ditempatkan — sama dengan
-        // yang diterima assignTargetToUser().
+        //  - PJ / super-admin (tanpa cakupan gudang): freelancer MURNI + SPV Gudang;
+        //  - SPV: hanya freelancer murni gudangnya (+ yang belum ditempatkan).
+        //
+        // Freelancer murni = role `warehouse` tanpa spv-gudang/manager-repacking; akun PJ
+        // tidak pernah muncul sebagai pekerja packing.
+        $penugasan = auth()->user();
+        $bolehMenugasiSpv = $this->adalahPj($penugasan);
+
         return User::query()
-            ->freelancerMurni()
             ->where('is_active', true)
+            ->when(
+                $bolehMenugasiSpv,
+                fn ($q) => $q->where(fn ($q2) => $q2
+                    ->freelancerMurni()
+                    ->orWhereHas('roles', fn ($roles) => $roles->where('name', RoleEnum::SPV_GUDANG->value))),
+                fn ($q) => $q->freelancerMurni(),
+            )
             ->when($gudangTercakup !== null, fn ($q) => $q->where(fn ($q2) => $q2
                 ->where('gudang_id', $gudangTercakup)
                 ->orWhereNull('gudang_id')))
@@ -835,18 +858,41 @@ class WarehouseMonitorController extends Controller
                     $query->whereDate('tanggal_tugas', today());
                 },
                 'gudang',
+                'roles',
             ])
             ->get()
-            ->map(function ($user) {
+            ->sortBy(fn (User $user) => [
+                $user->hasRole(RoleEnum::SPV_GUDANG->value) ? 0 : 1,
+                $user->gudang?->nama ?? '',
+                $user->name,
+            ])
+            ->map(function (User $user) {
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
                     // Fase 2 rombakan gudang: anggota gudang diberi label
-                    // gudangnya (Semarang/Boyolali) agar SPV tidak salah assign.
+                    // gudangnya (Semarang/Boyolali) agar tidak salah assign.
                     'gudang' => $user->gudang?->nama,
+                    // SPV ditandai supaya PJ tahu baris mana yang menerima beban kerja
+                    // untuk diteruskan ke freelancer.
+                    'peran' => $user->role_display,
+                    'adalah_spv' => $user->hasRole(RoleEnum::SPV_GUDANG->value),
                 ];
-            });
+            })
+            ->values();
+    }
+
+    /**
+     * PJ = manager-repacking TANPA role spv-gudang, plus super-admin.
+     *
+     * SPV yang juga memegang role manager-repacking tetap terikat gudangnya masing-masing.
+     */
+    private function adalahPj(User $user): bool
+    {
+        return $user->hasRole(RoleEnum::SUPER_ADMIN->value)
+            || ($user->hasRole(RoleEnum::MANAGER_REPACKING->value)
+                && ! $user->hasRole(RoleEnum::SPV_GUDANG->value));
     }
 
     /**
