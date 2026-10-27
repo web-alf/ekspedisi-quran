@@ -2,6 +2,8 @@
   import { useForm } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import PhoneInput from '../../../Components/PhoneInput.svelte';
+  import PenghitungDoa from '../../../Components/PenghitungDoa.svelte';
+  import { DOA_MAKS_KARAKTER } from '../../../utils/doa.js';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   
   export let donatur;
@@ -318,10 +320,12 @@
               <textarea
                 id="doa_untuk_semua"
                 bind:value={$form.doa_untuk_semua}
+                maxlength={DOA_MAKS_KARAKTER}
                 rows="3"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Masukkan doa untuk semua wakaf..."
               ></textarea>
+              <PenghitungDoa teks={$form.doa_untuk_semua} />
             </div>
           {/if}
         </fieldset>

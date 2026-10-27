@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Donatur;
+use App\Rules\DoaMuatResi;
 use App\Services\DonaturImportService;
 use App\Support\KodeDonatur;
 use Illuminate\Support\Collection;
@@ -222,9 +223,9 @@ class DonaturImport implements SkipsOnError, SkipsOnFailure, ToCollection, WithH
             'jumlah_a6' => 'nullable|integer|min:0',
             'jumlah_iqra' => 'nullable|integer|min:0',
             'donation_date' => 'nullable',
-            'doa_untuk_semua' => 'nullable|string',
+            'doa_untuk_semua' => ['nullable', 'string', new DoaMuatResi],
             'wakif_name' => 'nullable|string|max:255',
-            'doa_request' => 'nullable|string',
+            'doa_request' => ['nullable', 'string', new DoaMuatResi],
             'relationship_to_donatur' => 'nullable|string|max:100',
         ];
     }

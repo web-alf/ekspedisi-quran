@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
 use App\Models\Donatur;
+use App\Rules\DoaMuatResi;
 use App\Support\KodeDonatur;
 use Illuminate\Foundation\Http\FormRequest;
 use libphonenumber\PhoneNumberUtil;
@@ -20,6 +21,16 @@ class UpdateDonaturRequest extends FormRequest
             'kode_donatur' => KodeDonatur::bersihkan($this->kode_donatur),
             'nama_donatur' => KodeDonatur::nama($this->nama_donatur),
         ]);
+    }
+
+    /**
+     * Donatur yang sedang diedit (route model binding, atau id bila belum terikat).
+     */
+    private function donaturDiubah(): ?Donatur
+    {
+        $donatur = $this->route('donatur');
+
+        return $donatur instanceof Donatur ? $donatur : Donatur::find($donatur);
     }
 
     /**
@@ -52,7 +63,8 @@ class UpdateDonaturRequest extends FormRequest
             }],
             'email_donatur' => ['nullable', 'email', 'max:255'],
             'alamat_donatur' => ['nullable', 'string'],
-            'doa_untuk_semua' => ['nullable', 'string'],
+            // Doa lama yang tidak diubah tetap diterima walau lebih dari batas (lihat DoaMuatResi).
+            'doa_untuk_semua' => ['nullable', 'string', new DoaMuatResi($this->donaturDiubah()?->doa_untuk_semua)],
             'prayer_mode' => ['required', 'string', 'in:semua_donatur,customize_individual,mixed'],
         ];
     }

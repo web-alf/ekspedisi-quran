@@ -5,10 +5,35 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class WakafItem extends Model
 {
     use HasFactory;
+
+    /**
+     * Panjang doa yang muat di label resi 100×150 mm tanpa mendorong isi keluar label
+     * (keputusan pemilik 28/10/2026). Dipakai validasi input dan pemotongan di label.
+     */
+    public const DOA_MAKS_KARAKTER = 100;
+
+    /**
+     * Doa untuk dicetak di label: doa lama yang lebih panjang dipotong dengan "…".
+     */
+    public static function doaUntukLabel(?string $doa): ?string
+    {
+        $doa = $doa !== null ? trim($doa) : null;
+
+        if ($doa === null || $doa === '') {
+            return null;
+        }
+
+        if (mb_strlen($doa) <= self::DOA_MAKS_KARAKTER) {
+            return $doa;
+        }
+
+        return Str::limit($doa, self::DOA_MAKS_KARAKTER - 1, '…', preserveWords: true);
+    }
 
     protected $fillable = [
         'donatur_id',

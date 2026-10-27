@@ -2,6 +2,8 @@
   import { useForm } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import PhoneInput from '../../../Components/PhoneInput.svelte';
+  import PenghitungDoa from '../../../Components/PenghitungDoa.svelte';
+  import { DOA_MAKS_KARAKTER } from '../../../utils/doa.js';
   
   export let errors = {};
   
@@ -659,10 +661,12 @@
               <textarea
                 id="doa-semua"
                 bind:value={$form.doa_untuk_semua}
+                maxlength={DOA_MAKS_KARAKTER}
                 rows="3"
                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent"
                 placeholder="Contoh: Semoga Allah memberikan berkah dan manfaat..."
               ></textarea>
+              <PenghitungDoa teks={$form.doa_untuk_semua} />
             </div>
           {/if}
 
@@ -737,10 +741,12 @@
                     <input
                       id={`wakif-doa-${index}`}
                       bind:value={detail.doa_request}
+                      maxlength={DOA_MAKS_KARAKTER}
                       type="text"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent"
                       placeholder="Doa yang dititipkan"
                     />
+                    <PenghitungDoa teks={detail.doa_request} />
                   </div>
                   
                   <div>

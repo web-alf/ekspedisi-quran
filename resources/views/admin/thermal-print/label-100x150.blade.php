@@ -36,6 +36,8 @@
             display: flex;
             flex-direction: column;
             position: relative;
+            /* Isi yang kelebihan tidak boleh keluar kotak dan menimpa label berikutnya. */
+            overflow: hidden;
         }
         
         /* Header Compact */
@@ -128,7 +130,9 @@
             width: 100%;
             border: 1px solid #000;
             border-collapse: collapse;
-            margin-bottom: 1mm;
+            /* Jarak antarseksi cukup dari gap .label-content (dirapatkan 28/10/2026 supaya
+               nama/alamat panjang + doa 100 karakter tetap muat di 150 mm). */
+            margin-bottom: 0;
         }
         
         .section-header {
@@ -136,13 +140,13 @@
             font-size: 9pt;
             font-weight: bold;
             color: #000;
-            padding: 1.5mm;
+            padding: 1mm;
             text-align: center;
             border-bottom: 1px solid #000;
         }
         
         .section-content {
-            padding: 1mm;
+            padding: 0.5mm;
         }
         
         /* Info Table Compact */
@@ -153,14 +157,14 @@
         }
         
         .info-table td {
-            padding: 0.8mm 1.5mm;
+            padding: 0.5mm 1.2mm;
             vertical-align: top;
             border: none;
-            line-height: 1.4;
+            line-height: 1.3;
         }
         
         .info-table .label-col {
-            width: 22mm;
+            width: 20mm;
             font-weight: bold;
             color: #333;
             text-align: left;
@@ -171,6 +175,13 @@
             color: #000;
             word-break: break-word;
             font-weight: bold;
+        }
+
+        /* Doa: maks. 100 karakter (WakafItem::DOA_MAKS_KARAKTER) dalam dua baris; doa lama
+           yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
+        .info-table .doa-col {
+            font-size: 7pt;
+            line-height: 1.25;
         }
         
         .address-content {
@@ -419,7 +430,7 @@
                             @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
                             <tr>
                                 <td class="label-col">Doa:</td>
-                                <td class="value-col">{{ $pengiriman->wakafItem->doa_request }}</td>
+                                <td class="value-col doa-col">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
                             </tr>
                             @endif
                         </table>

@@ -10,6 +10,7 @@ use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\WakafItem;
+use App\Rules\DoaMuatResi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -366,7 +367,7 @@ class WakafItemsController extends Controller
         // Validate input
         $request->validate([
             'wakif_name' => 'nullable|string|max:255',
-            'doa_request' => 'nullable|string|max:1000',
+            'doa_request' => ['nullable', 'string', new DoaMuatResi($wakafItem->doa_request)],
             'relationship_to_donatur' => 'nullable|string|max:100',
         ]);
 

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
 use App\Models\Donatur;
+use App\Rules\DoaMuatResi;
 use App\Support\KodeDonatur;
 use Illuminate\Foundation\Http\FormRequest;
 use libphonenumber\PhoneNumberUtil;
@@ -75,10 +76,10 @@ class StoreDonaturRequest extends FormRequest
             'jumlah_a6' => ['nullable', 'integer', 'min:0', 'max:300'],
             'jumlah_iqra' => ['nullable', 'integer', 'min:0', 'max:200'],
             'prayer_mode' => ['required', 'string', 'in:semua_donatur,customize_individual,mixed'],
-            'doa_untuk_semua' => ['nullable', 'string', 'max:1000'],
+            'doa_untuk_semua' => ['nullable', 'string', new DoaMuatResi],
             'wakif_details' => ['required_if:prayer_mode,customize_individual', 'array', 'max:1000'], // ENHANCED: Limit wakif details
             'wakif_details.*.wakif_name' => ['required_if:prayer_mode,customize_individual', 'string', 'max:255', 'min:2', 'regex:/^[a-zA-Z\s\.\'\-]+$/u'],
-            'wakif_details.*.doa_request' => ['nullable', 'string', 'max:1000'],
+            'wakif_details.*.doa_request' => ['nullable', 'string', new DoaMuatResi],
             'wakif_details.*.relationship_to_donatur' => ['nullable', 'string', 'max:100', 'regex:/^[a-zA-Z\s\.\'\-]+$/u'],
             'wakif_details.*.wakaf_type' => ['required_if:prayer_mode,customize_individual', 'string', 'in:A5,A6,IQRA'],
             'wakif_details.*.sequence_in_type' => ['required_if:prayer_mode,customize_individual', 'integer', 'min:1', 'max:1000'],

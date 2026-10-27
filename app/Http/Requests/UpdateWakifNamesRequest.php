@@ -3,6 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
+use App\Models\WakafItem;
+use App\Rules\DoaMuatResi;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateWakifNamesRequest extends FormRequest
@@ -25,7 +28,13 @@ class UpdateWakifNamesRequest extends FormRequest
             'wakif_updates' => ['required', 'array', 'min:1'],
             'wakif_updates.*.wakaf_item_id' => ['required', 'integer', 'exists:wakaf_items,id'],
             'wakif_updates.*.wakif_name' => ['required', 'string', 'max:255'],
-            'wakif_updates.*.doa_request' => ['nullable', 'string'],
+            'wakif_updates.*.doa_request' => ['nullable', 'string', function (string $attribute, mixed $value, Closure $fail): void {
+                // Form edit mengirim ulang doa yang ada; doa lama yang tidak diubah tetap diterima.
+                $indeks = explode('.', $attribute)[1];
+                $tersimpan = WakafItem::find($this->input("wakif_updates.{$indeks}.wakaf_item_id"))?->doa_request;
+
+                (new DoaMuatResi($tersimpan))->validate($attribute, $value, $fail);
+            }],
             'wakif_updates.*.relationship_to_donatur' => ['nullable', 'string', 'max:100'],
         ];
     }

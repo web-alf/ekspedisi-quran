@@ -8,6 +8,8 @@
   import { can } from '../../../../utils/permissions.js';
   import { toast, dialog } from '../../../../utils/notifications.js';
   import ConfirmDialog from '../../../../Components/ConfirmDialog.svelte';
+  import PenghitungDoa from '../../../../Components/PenghitungDoa.svelte';
+  import { DOA_MAKS_KARAKTER } from '../../../../utils/doa.js';
   
   // Props from backend
   export let donatur = {};
@@ -1075,10 +1077,12 @@
                     <textarea
                       id="edit-doa"
                       bind:value={$editForm.doa_request}
+                      maxlength={DOA_MAKS_KARAKTER}
                       rows="3"
                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Doa untuk muwakif"
                     ></textarea>
+                    <PenghitungDoa teks={$editForm.doa_request} />
                   </div>
 
                   {#if errors.wakif_name}

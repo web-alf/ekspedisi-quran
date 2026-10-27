@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Enums\PermissionEnum;
 use App\Models\Donatur;
+use App\Rules\DoaMuatResi;
 use Illuminate\Foundation\Http\FormRequest;
+use libphonenumber\PhoneNumberUtil;
 
 class StoreWakafItemsRequest extends FormRequest
 {
@@ -26,7 +28,7 @@ class StoreWakafItemsRequest extends FormRequest
             'items.*.wakaf_type' => ['required', 'string', 'in:A5,A6,IQRA'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:100'], // Increased per-item limit
             'items.*.wakif_name' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z\s\.\'\-]+$/u'], // Enhanced validation
-            'items.*.doa_request' => ['nullable', 'string', 'max:1000'],
+            'items.*.doa_request' => ['nullable', 'string', new DoaMuatResi],
             'items.*.relationship_to_donatur' => ['nullable', 'string', 'max:100', 'regex:/^[a-zA-Z\s\.\'\-]+$/u'],
         ];
     }
@@ -49,7 +51,6 @@ class StoreWakafItemsRequest extends FormRequest
             'items.*.quantity.max' => 'Jumlah item maksimal 100 per jenis dalam satu permintaan.',
             'items.*.wakif_name.max' => 'Nama wakif maksimal 255 karakter.',
             'items.*.wakif_name.regex' => 'Nama wakif hanya boleh mengandung huruf, spasi, titik, apostrof, dan tanda hubung.',
-            'items.*.doa_request.max' => 'Permintaan doa maksimal 1000 karakter.',
             'items.*.relationship_to_donatur.max' => 'Hubungan dengan donatur maksimal 100 karakter.',
             'items.*.relationship_to_donatur.regex' => 'Hubungan dengan donatur hanya boleh mengandung huruf, spasi, titik, apostrof, dan tanda hubung.',
         ];
@@ -101,7 +102,7 @@ class StoreWakafItemsRequest extends FormRequest
 
             // Optional validation for phone format - warn but don't block
             try {
-                $phoneUtil = \libphonenumber\PhoneNumberUtil::getInstance();
+                $phoneUtil = PhoneNumberUtil::getInstance();
                 $numberProto = $phoneUtil->parse($donatur->no_hp, null);
                 if (! $phoneUtil->isValidNumber($numberProto)) {
                     $validator->errors()->add('phone_format_warning',
