@@ -72,8 +72,10 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(blokManager).not.toMatch(/<section/);
     });
 
-    it('menampilkan beban sebagai kotak di kedua peran, termasuk tahap Produksi', () => {
-        expect(skrip).toMatch(/\['produksi',\s*'Produksi'\]/);
+    it('menampilkan beban sebagai kotak di kedua peran tanpa tahap Produksi', () => {
+        // "Proses Produksi" dinonaktifkan 27/10/2026: tahap itu tidak pernah dipakai alur.
+        expect(skrip).not.toMatch(/\['produksi',\s*'Produksi'\]/);
+        expect(skrip).toMatch(/\['pemesanan',\s*'Pemesanan'\]/);
         expect(blokSpv).toMatch(/\{#each TAHAP_BEBAN as/);
         expect(blokManager).toMatch(/\{#each TAHAP_BEBAN as/);
         expect(blokManager).not.toMatch(/<table/);

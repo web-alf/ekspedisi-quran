@@ -340,7 +340,7 @@ class DashboardController extends Controller
             'diterima' => '#10b981',
             'pengiriman', 'selesai-packing' => '#3b82f6',
             'pemesanan' => '#f59e0b',
-            'produksi', 'kedatangan', 'packing' => '#8b5cf6',
+            'kedatangan', 'packing' => '#8b5cf6',
             'batal' => '#ef4444',
             default => '#6b7280'
         };

@@ -374,7 +374,7 @@ class RingkasanGudangService
         $perTahap = Pengiriman::query()
             ->join('status_pengiriman', 'status_pengiriman.id', '=', 'pengiriman.status_id')
             ->where('pengiriman.gudang_id', $gudangId)
-            ->whereIn('status_pengiriman.slug', ['pemesanan', 'produksi', 'packing', 'selesai-packing'])
+            ->whereIn('status_pengiriman.slug', ['pemesanan', 'packing', 'selesai-packing'])
             ->groupBy('status_pengiriman.slug')
             ->selectRaw('status_pengiriman.slug, count(*) as jumlah, sum(pengiriman.jumlah_quran) as eks')
             ->pluck('jumlah', 'slug');
@@ -386,7 +386,6 @@ class RingkasanGudangService
 
         return [
             'pemesanan' => (int) ($perTahap['pemesanan'] ?? 0),
-            'produksi' => (int) ($perTahap['produksi'] ?? 0),
             'packing' => (int) ($perTahap['packing'] ?? 0),
             'selesai_packing' => (int) ($perTahap['selesai-packing'] ?? 0),
             'dalam_kerdus' => $dalamKerdus,

@@ -172,7 +172,7 @@ class DashboardCacheService extends BaseCacheService
             $shipmentStats = DB::table('pengiriman')
                 ->join('status_pengiriman', 'pengiriman.status_id', '=', 'status_pengiriman.id')
                 ->selectRaw('
-                    COUNT(CASE WHEN status_pengiriman.slug IN ("pemesanan", "produksi") THEN 1 END) as pending_shipments,
+                    COUNT(CASE WHEN status_pengiriman.slug = "pemesanan" THEN 1 END) as pending_shipments,
                     COUNT(CASE WHEN status_pengiriman.slug IN ("kedatangan", "packing", "selesai-packing", "pengiriman") THEN 1 END) as in_transit_shipments,
                     COUNT(CASE WHEN status_pengiriman.slug = "diterima" THEN 1 END) as completed_shipments,
                     COUNT(CASE WHEN status_pengiriman.slug = "batal" THEN 1 END) as cancelled_shipments,
@@ -421,7 +421,7 @@ class DashboardCacheService extends BaseCacheService
     {
         return [
             'pendingShipments' => Pengiriman::whereHas('status', function ($query) {
-                $query->whereIn('slug', ['pemesanan', 'produksi']);
+                $query->where('slug', 'pemesanan');
             })->count(),
             'inTransitShipments' => Pengiriman::whereHas('status', function ($query) {
                 $query->whereIn('slug', ['kedatangan', 'packing', 'selesai-packing', 'pengiriman']);
@@ -468,7 +468,7 @@ class DashboardCacheService extends BaseCacheService
             'diterima' => '#10b981',
             'pengiriman', 'selesai-packing' => '#3b82f6',
             'pemesanan' => '#f59e0b',
-            'produksi', 'kedatangan', 'packing' => '#8b5cf6',
+            'kedatangan', 'packing' => '#8b5cf6',
             'batal' => '#ef4444',
             default => '#6b7280'
         };
@@ -480,7 +480,7 @@ class DashboardCacheService extends BaseCacheService
     private function getStatusCategory(string $slug): string
     {
         return match ($slug) {
-            'pemesanan', 'produksi' => 'pending',
+            'pemesanan' => 'pending',
             'kedatangan', 'packing', 'selesai-packing', 'pengiriman' => 'in_transit',
             'diterima' => 'completed',
             'batal' => 'cancelled',

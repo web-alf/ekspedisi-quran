@@ -56,7 +56,6 @@
   // Urutan tahap beban gudang — sama untuk SPV dan Manager.
   const TAHAP_BEBAN = [
     ['pemesanan', 'Pemesanan'],
-    ['produksi', 'Produksi'],
     ['packing', 'Packing'],
     ['selesai_packing', 'Selesai packing'],
     ['dalam_kerdus', 'Dalam kerdus'],

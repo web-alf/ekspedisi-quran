@@ -168,16 +168,11 @@ class StatusPengiriman extends Model
                 'is_active' => true,
                 'is_final' => false,
             ],
-            [
-                'nama' => 'Proses Produksi',
-                'slug' => 'produksi',
-                'deskripsi' => 'Quran sedang dalam proses produksi',
-                'warna' => 'blue',
-                'icon' => '🏭',
-                'urutan' => 2,
-                'is_active' => true,
-                'is_final' => false,
-            ],
+            // `produksi` ("Proses Produksi") DINONAKTIFKAN 27/10/2026 atas keputusan pemilik:
+            // proses cetak berjalan di luar gudang dan tahap itu tidak pernah dipakai alur
+            // nyata (0 resi). Barisnya TIDAK dihapus karena 52 `status_histories` + 25
+            // `tracking_history` lama masih merujuk id-nya (FK restrict); status itu hanya
+            // tidak lagi ditawarkan maupun ditampilkan.
             [
                 'nama' => 'Proses Kedatangan/Penurunan',
                 'slug' => 'kedatangan',

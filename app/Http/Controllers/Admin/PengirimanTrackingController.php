@@ -487,8 +487,9 @@ class PengirimanTrackingController extends Controller
     {
         $request->validate([
             // 'antrian' memantapkan rombakan tahap gudang (2026-10-13);
-            // 'kedatangan' sudah tidak dipakai alur gudang.
-            'proses' => ['required', 'string', 'in:pemesanan,produksi,antrian,packing,dokumentasi,pengiriman,diterima'],
+            // 'kedatangan' sudah tidak dipakai alur gudang, dan 'produksi' dinonaktifkan
+            // 27/10/2026 (proses cetak berjalan di luar gudang).
+            'proses' => ['required', 'string', 'in:pemesanan,antrian,packing,dokumentasi,pengiriman,diterima'],
             'catatan' => ['nullable', 'string', 'max:1000'],
             'dokumentasi' => ['nullable', 'array'],
             'dokumentasi.*' => ['file', 'image', 'max:10240'], // Max 10MB per file

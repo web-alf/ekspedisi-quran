@@ -14,7 +14,7 @@ use Illuminate\Support\Collection;
  *
  * Role manager (Nalurita Firdausyah) hanya menangani pengiriman yang SUDAH
  * selesai dikerjakan gudang: Selesai Packing, Proses Pengiriman, Diterima
- * Penerima. Tahap awal (pemesanan, produksi, kedatangan, packing) adalah ranah
+ * Penerima. Tahap awal (pemesanan, kedatangan, packing) adalah ranah
  * gudang/kustomer servis dan tidak boleh terlihat olehnya.
  *
  * Karena itu pembatasan ini TIDAK cukup di tampilan. Semua jalur yang bisa
@@ -54,7 +54,7 @@ class PengirimanStageVisibility
      * Apakah user ini staff gudang.
      *
      * Gudang memegang izin `shipments.update-status` supaya bisa mencatat tahap
-     * awal distribusi (pemesanan, produksi, kedatangan, packing). Izin itu
+     * awal distribusi (pemesanan, kedatangan, packing). Izin itu
      * sendiri TIDAK membatasi status tujuan — ia hanya mengatakan "boleh
      * mengubah status". Karena itu batas tahapnya harus ditegakkan di sini,
      * pada satu-satunya predikat yang dipakai baik untuk menyusun pilihan

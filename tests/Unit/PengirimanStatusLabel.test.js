@@ -31,10 +31,9 @@ vi.mock('@inertiajs/svelte', () => ({
 
 vi.mock('../../resources/js/utils/auth.js', () => ({ logout: vi.fn(), safeLogout: vi.fn() }));
 
-/** 8 status yang benar-benar ada di produksi, urut sesuai pipeline. */
+/** Status AKTIF yang dipakai pipeline (produksi dinonaktifkan 27/10/2026). */
 const statusProduksi = [
     { id: 1, nama: 'Proses Pemesanan', slug: 'pemesanan', warna: '#6b7280' },
-    { id: 2, nama: 'Proses Produksi', slug: 'produksi', warna: '#f59e0b' },
     { id: 3, nama: 'Proses Kedatangan/Penurunan', slug: 'kedatangan', warna: '#3b82f6' },
     { id: 4, nama: 'Proses Packing', slug: 'packing', warna: '#8b5cf6' },
     { id: 5, nama: 'Selesai Packing', slug: 'selesai-packing', warna: '#10b981' },
@@ -99,14 +98,13 @@ describe('Dropdown status di halaman Edit', () => {
         expect(label.textContent, 'tanda wajib harus tetap ada').toContain('*');
     });
 
-    it('memuat SELURUH status termasuk tahap produksi dan kedatangan', () => {
+    it('memuat seluruh status yang dikirim, bukan hanya status pengiriman', () => {
         // Justru inilah alasan labelnya bukan "Status Pengiriman": isinya
         // mencakup tahap sebelum barang jadi kiriman.
         const { container } = renderEdit();
 
         const opsi = [...container.querySelectorAll('#status-select option')].map((o) => o.textContent.trim());
 
-        expect(opsi).toContain('Proses Produksi');
         expect(opsi).toContain('Proses Kedatangan/Penurunan');
         expect(opsi).toContain('Proses Pengiriman');
         expect(opsi).toContain('Diterima Penerima');

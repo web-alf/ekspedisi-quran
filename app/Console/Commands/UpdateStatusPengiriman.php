@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\StatusPengiriman;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class UpdateStatusPengiriman extends Command
@@ -42,17 +42,8 @@ class UpdateStatusPengiriman extends Command
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
-            [
-                'nama' => 'Proses Produksi',
-                'slug' => 'produksi',
-                'deskripsi' => 'Quran sedang dalam proses produksi',
-                'warna' => 'blue',
-                'urutan' => 2,
-                'is_active' => true,
-                'is_final' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+            // `produksi` ("Proses Produksi") DIHAPUS 27/10/2026 atas keputusan pemilik:
+            // proses cetak berjalan di luar gudang dan tahap ini tidak pernah dipakai alur.
             [
                 'nama' => 'Proses Kedatangan/Penurunan',
                 'slug' => 'kedatangan',
@@ -124,7 +115,7 @@ class UpdateStatusPengiriman extends Command
         // Bersihkan status lama
         $this->info('Clearing old statuses...');
         DB::table('status_pengiriman')->truncate();
-        
+
         // Masukkan status baru
         $this->info('Inserting new statuses...');
         foreach ($statusBaru as $status) {
@@ -135,7 +126,7 @@ class UpdateStatusPengiriman extends Command
         }
 
         $this->info('Status pengiriman updated successfully!');
-        
+
         // Tampilkan status yang ada
         $statuses = StatusPengiriman::orderBy('urutan')->get();
         $this->table(
@@ -152,7 +143,7 @@ class UpdateStatusPengiriman extends Command
                 ];
             })
         );
-        
+
         return Command::SUCCESS;
     }
 }

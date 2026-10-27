@@ -150,7 +150,7 @@ it('beban gudang menghitung resi bergudang per tahap dan dalam kerdus', function
     $buat('pemesanan', $this->smg);
     $buat('pemesanan', $this->smg);
     $buat('pemesanan', $this->btl);
-    $buat('produksi', $this->smg);
+    // 'produksi' tidak lagi dihitung: statusnya dinonaktifkan 27/10/2026.
     $buat('packing', $this->smg);
     $buat('selesai-packing', $this->smg);
     $buat('selesai-packing', null); // tanpa gudang — tidak boleh masuk hitungan mana pun
@@ -160,7 +160,7 @@ it('beban gudang menghitung resi bergudang per tahap dan dalam kerdus', function
 
     expect($r['beban'])->toBe([
         // Resi dalam kerdus tetap berstatus packing — 'dalam_kerdus' info tambahan, bukan pemindah tahap.
-        'pemesanan' => 2, 'produksi' => 1, 'packing' => 2, 'selesai_packing' => 1, 'dalam_kerdus' => 1,
+        'pemesanan' => 2, 'packing' => 2, 'selesai_packing' => 1, 'dalam_kerdus' => 1,
     ]);
 });
 

@@ -172,9 +172,10 @@ it('gudang tetap melihat semua status aktif pada filter daftar pengiriman', func
     expect(collect(PengirimanStageVisibility::visibleStatuses($gudang))->pluck('slug'))
         ->toContain('pengiriman')
         ->toContain('diterima')
-        ->toContain('produksi')
         ->toContain('antrian')
-        ->not->toContain('kedatangan');
+        ->not->toContain('kedatangan')
+        // 'produksi' dinonaktifkan 27/10/2026: status nonaktif tidak masuk filter mana pun.
+        ->not->toContain('produksi');
 });
 
 it('mengizinkan gudang memindahkan pemesanan ke antrian lewat ubah status', function () {

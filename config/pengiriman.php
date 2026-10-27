@@ -39,13 +39,14 @@ return [
     |
     | Riwayat publik hanya memuat tahap penting, satu entri per tahap, tanpa catatan
     | petugas dan nama petugas (lihat App\Services\RiwayatPublikService). Tahap kerja
-    | internal — Kedatangan/Penurunan dan Antrian — sengaja tidak dimasukkan.
+    | internal — Kedatangan/Penurunan dan Antrian — sengaja tidak dimasukkan, demikian
+    | pula `produksi`: status itu dinonaktifkan 27/10/2026 atas keputusan pemilik
+    | (proses cetak di luar gudang, tidak pernah dipakai di alur nyata).
     |
     */
 
     'riwayat_publik_tahap' => [
         'pemesanan',
-        'produksi',
         'packing',
         'selesai-packing',
         'pengiriman',

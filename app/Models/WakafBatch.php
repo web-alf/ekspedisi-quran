@@ -112,7 +112,8 @@ class WakafBatch extends Model
         // Define weighted progress for each status
         $statusWeights = [
             'pemesanan' => 0,      // 0% - Just ordered
-            'produksi' => 15,      // 15% - In production
+            // 'produksi' (15%) dibuang 27/10/2026 bersama statusnya; resi lama yang masih
+            // menyebut slug itu jatuh ke bawaan 0% lewat `?? 0` di bawah.
             'kedatangan' => 35,    // 35% - Arrived at warehouse
             'packing' => 55,       // 55% - Being packed
             'selesai-packing' => 75,   // 75% - Packing completed

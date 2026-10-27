@@ -516,7 +516,6 @@
         case 'selesai-packing': return 'bg-blue-500';
         case 'pembelian':
         case 'pemesanan': return 'bg-yellow-500';
-        case 'produksi':
         case 'kedatangan':
         case 'packing': return 'bg-purple-500';
         case 'batal': return 'bg-red-500';
