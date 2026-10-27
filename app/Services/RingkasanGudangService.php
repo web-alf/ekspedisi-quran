@@ -50,10 +50,12 @@ class RingkasanGudangService
             'perlu_tindakan' => $this->perluTindakan($gudang->id),
             'beban' => $beban,
             'stok_kartu' => $stokKartu,
-            'alur' => $this->alurMushaf([[
+            // Seksi "Stok" dashboard (keputusan pemilik 27/10/2026): tahap resi + saldo
+            // mushaf belum ada muwakif per jenis/varian, semuanya milik gudang ini.
+            'stok' => $this->stokGudang([[
                 'id' => $gudang->id, 'kode' => $gudang->kode, 'nama' => $gudang->nama,
                 'beban' => $beban, 'stok_kartu' => $stokKartu,
-            ]]),
+            ]], semuaGudang: false),
         ];
     }
 
@@ -126,7 +128,7 @@ class RingkasanGudangService
             // Empat kartu "Alur Mushaf" (keputusan pemilik 27/10/2026): satu bentuk untuk
             // SPV (satu gudang) dan Manager (dua gudang), dihitung dari angka yang SAMA
             // dengan beban & stok per gudang supaya tidak ada dua kebenaran.
-            'alur' => $this->alurMushaf($perGudang->all()),
+            'stok' => $this->stokGudang($perGudang->all(), semuaGudang: true),
 
             // Dokumen perpindahan yang menunggu diterima di gudang MANA PUN di bawah,
             // dengan arah asal → tujuan begitu jelas.
@@ -405,72 +407,81 @@ class RingkasanGudangService
     }
 
     /**
-     * Empat angka "Alur Mushaf" di dashboard gudang (keputusan pemilik 27/10/2026).
+     * Angka seksi "Stok" dashboard gudang (keputusan pemilik 27/10/2026).
      *
-     * Bentuknya sama untuk SPV dan Manager supaya SATU komponen kartu dipakai keduanya:
-     * angka besar milik satu gudang (SPV) atau gabungan (Manager), dan rincian per gudang
-     * hanya dikirim apa adanya — halaman menyembunyikannya bila gudangnya cuma satu.
+     * Bentuknya satu untuk SPV dan Manager: tahap resi (Proses Pesan, Proses Packing,
+     * Selesai Packing, Mushaf sudah dikarduskan & siap distribusi) dan saldo mushaf yang
+     * BELUM ADA MUWAKIF per jenis/varian (A5 & A6 masing-masing dua varian, plus IQRA).
      *
-     * `pemesanan` sengaja GLOBAL, bukan per gudang: resi pada tahap ini belum bertagih
-     * gudang (26 ribu baris lama `gudang_id` NULL), jadi memotongnya per gudang akan
-     * menampilkan 0 padahal barangnya ada. Tahap sesudahnya (`packing`, `selesai-packing`)
-     * memang sudah bertagih gudang dan dihitung dari beban gudang.
+     * `$semuaGudang` membedakan arti "seluruh":
+     * - Manager: yang dihitung adalah SELURUH resi, termasuk baris lama yang belum bertagih
+     *   gudang (di produksi 26.079 dari 26.080 resi pemesanan) — kalau dipotong per gudang,
+     *   kartunya menampilkan 0 padahal barangnya ada.
+     * - SPV: hanya resi/kerdus/stok gudangnya, sesuai janji halaman ini selalu ter-coup.
      *
      * @param  array<int, array<string, mixed>>  $perGudang  baris gudang berisi `id`, `kode`, `nama`, `beban`, `stok_kartu`
      * @return array<string, mixed>
      */
-    private function alurMushaf(array $perGudang): array
+    private function stokGudang(array $perGudang, bool $semuaGudang): array
     {
-        $pemesanan = Pengiriman::query()
+        $ids = array_values(array_filter(array_map(fn (array $g) => $g['id'] ?? null, $perGudang)));
+
+        $perTahap = Pengiriman::query()
             ->join('status_pengiriman', 'status_pengiriman.id', '=', 'pengiriman.status_id')
-            ->where('status_pengiriman.slug', 'pemesanan')
-            ->selectRaw('count(*) as resi, coalesce(sum(pengiriman.jumlah_quran), 0) as eks')
+            ->whereIn('status_pengiriman.slug', ['pemesanan', 'packing', 'selesai-packing'])
+            ->when(! $semuaGudang, fn ($q) => $q->whereIn('pengiriman.gudang_id', $ids))
+            ->selectRaw("sum(case when status_pengiriman.slug = 'pemesanan' then 1 else 0 end) as pemesanan,
+                         coalesce(sum(case when status_pengiriman.slug = 'pemesanan' then pengiriman.jumlah_quran else 0 end), 0) as pemesanan_eks,
+                         sum(case when status_pengiriman.slug = 'packing' then 1 else 0 end) as packing,
+                         sum(case when status_pengiriman.slug = 'selesai-packing' then 1 else 0 end) as selesai")
             ->first();
 
-        // Resi tahap packing/selesai-packing yang `gudang_id`-nya masih NULL (baris lama).
-        // Tanpa angka ini, kartu per gudang menampilkan 0 padahal barangnya ada di sistem —
-        // pemilik membacanya sebagai salah hitung.
-        $global = Pengiriman::query()
-            ->join('status_pengiriman', 'status_pengiriman.id', '=', 'pengiriman.status_id')
-            ->whereIn('status_pengiriman.slug', ['packing', 'selesai-packing'])
-            ->selectRaw("sum(case when status_pengiriman.slug = 'packing' then 1 else 0 end) as packing,
-                         sum(case when status_pengiriman.slug = 'selesai-packing' then 1 else 0 end) as siap")
-            ->first();
+        // "Sudah dikarduskan & siap distribusi" = isi kerdus yang SUDAH TERSEGEL.
+        $kerdus = PackingBox::query()
+            ->where('status', PackingBox::STATUS_SEALED)
+            ->when(! $semuaGudang, fn ($q) => $q->whereIn('gudang_id', $ids))
+            ->withSum('packingItems as isi_eks', 'quantity')
+            ->get(['id']);
 
-        $baris = collect($perGudang)->map(fn (array $g) => [
-            'gudang_id' => $g['id'],
-            'kode' => $g['kode'],
-            'nama' => $g['nama'],
-            'ready_eks' => (int) collect($g['stok_kartu'] ?? [])->sum('eks'),
-            'packing_resi' => (int) ($g['beban']['packing'] ?? 0),
-            'siap_resi' => (int) ($g['beban']['selesai_packing'] ?? 0),
-        ])->values()->all();
+        // Mushaf belum ada muwakif: lima kartu tetap (termasuk yang 0) supaya barisnya tidak
+        // berubah-ubah saat stok kosong. IQRA mengikuti kode master `IQRO`.
+        $petaStok = [];
+        foreach ($perGudang as $g) {
+            foreach ($g['stok_kartu'] ?? [] as $baris) {
+                $kunci = ($baris['kode_jenis'] ?? '-').'|'.($baris['varian'] ?? '');
+                $petaStok[$kunci] = ($petaStok[$kunci] ?? 0) + (int) ($baris['eks'] ?? 0);
+            }
+        }
 
-        $tanpaGudangPacking = max(0, (int) ($global->packing ?? 0) - (int) collect($baris)->sum('packing_resi'));
-        $tanpaGudangSiap = max(0, (int) ($global->siap ?? 0) - (int) collect($baris)->sum('siap_resi'));
+        $muwakif = [];
+        foreach ([
+            ['A5', 'Dengan terjemahan', 'A5 · Terjemahan'],
+            ['A5', 'Tanpa terjemahan', 'A5 · Tanpa Terjemahan'],
+            ['A6', 'Dengan terjemahan', 'A6 · Terjemahan'],
+            ['A6', 'Tanpa terjemahan', 'A6 · Tanpa Terjemahan'],
+            ['IQRO', '', 'IQRA'],
+        ] as [$kode, $varian, $label]) {
+            $eks = $petaStok[$kode.'|'.$varian] ?? 0;
+
+            if ($kode === 'IQRO') {
+                $eks += $petaStok['IQRA|'] ?? 0;
+            }
+
+            $muwakif[] = ['label' => $label, 'eks' => (int) $eks];
+        }
 
         return [
-            'tanpa_gudang' => [
-                'packing' => $tanpaGudangPacking,
-                'siap' => $tanpaGudangSiap,
-                'total' => $tanpaGudangPacking + $tanpaGudangSiap,
-            ],
             'pemesanan' => [
-                'resi' => (int) ($pemesanan->resi ?? 0),
-                'eks' => (int) ($pemesanan->eks ?? 0),
+                'resi' => (int) ($perTahap->pemesanan ?? 0),
+                'eks' => (int) ($perTahap->pemesanan_eks ?? 0),
             ],
-            'ready' => [
-                'eks' => (int) collect($baris)->sum('ready_eks'),
-                'per_gudang' => $baris,
+            'packing' => (int) ($perTahap->packing ?? 0),
+            'selesai' => (int) ($perTahap->selesai ?? 0),
+            'kerdus' => [
+                'jumlah' => $kerdus->count(),
+                'eks' => (int) $kerdus->sum('isi_eks'),
             ],
-            'packing' => [
-                'resi' => (int) collect($baris)->sum('packing_resi'),
-                'per_gudang' => $baris,
-            ],
-            'siap' => [
-                'resi' => (int) collect($baris)->sum('siap_resi'),
-                'per_gudang' => $baris,
-            ],
+            'muwakif' => $muwakif,
         ];
     }
 

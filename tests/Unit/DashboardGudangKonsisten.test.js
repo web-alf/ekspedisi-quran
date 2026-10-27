@@ -58,9 +58,8 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
 
         expect(bagian(blokSpv)).toEqual([
             ['cube', 'Packing Hari Ini'],
-            // 27/10/2026: pemesanan global + satu seksi "Alur Mushaf" per gudang.
-            ['arrow-path', 'Proses Pemesanan'],
-            ['arrow-path', 'Alur Mushaf'],
+            // 27/10/2026: satu seksi "Stok" (tahap resi + mushaf belum ada muwakif).
+            ['archive-box', 'Stok {ringkasanGudang.gudang.nama}'],
             ['users', 'Freelancer yang Kerja Hari Ini'],
             ['exclamation-circle', 'Perlu Tindakan'],
             ['clipboard-document-list', 'Beban Gudang'],
@@ -68,18 +67,15 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         ]);
         // Manager punya seksi "Alur Mushaf" per gudang (2), SPV hanya gudangnya (1) —
         // jadi yang dibandingkan adalah JENIS seksi (gudang berulang diringkas).
-        const ringkas = (daftar) => daftar.filter(([, judul], i) => i === 0 || judul !== daftar[i - 1][1]);
+        const ringkas = (daftar) => daftar
+            .map(([ikon, judul]) => [ikon, judul.startsWith('Stok {') || judul === 'Stok Seluruh Gudang' ? 'Stok' : judul])
+            .filter(([, judul], i, arr) => i === 0 || judul !== arr[i - 1][1]);
 
         expect(ringkas(managerTanpaPerforma)).toEqual(ringkas(bagian(blokSpv)));
 
-        // Seksi "Alur Mushaf" ditulis SEKALI di sumber lalu diulang per gudang lewat {#each};
-        // Manager (2 gudang) karena itu melihat dua seksi, SPV satu.
-        expect(manager.filter(([, judul]) => judul === 'Alur Mushaf')).toHaveLength(1);
-        expect(blokManager).toContain('{#each ringkasanManager.alur.ready.per_gudang as g');
-        expect(blokSpv).toContain('{#each ringkasanGudang.alur.ready.per_gudang as g');
-
-        expect(manager[1]).toEqual(['arrow-path', 'Proses Pemesanan']);
-        expect(manager[2]).toEqual(['arrow-path', 'Alur Mushaf']);
+        // Seksi "Stok" berdiri sendiri: SPV memakai judul gudangnya, Manager judul gabungan.
+        expect(ringkas(managerTanpaPerforma)).toHaveLength(ringkas(bagian(blokSpv)).length);
+        expect(manager[1]).toEqual(['archive-box', 'Stok Seluruh Gudang']);
         expect(manager).toContainEqual(['chart-pie', 'Performa Gudang']);
     });
 

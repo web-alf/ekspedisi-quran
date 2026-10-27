@@ -419,34 +419,36 @@
         </RingkasanSection>
 
         <RingkasanSection
-          icon="arrow-path"
-          warna="blue"
-          judul="Proses Pemesanan"
-          keterangan="Seluruh gudang — resi tahap ini belum bertagih gudang"
+          icon="archive-box"
+          warna="green"
+          judul="Stok {ringkasanGudang.gudang.nama}"
+          keterangan="Tahap resi & mushaf belum ada muwakif"
         >
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <KartuAlur label="Resi" nilai={numberId(ringkasanGudang.alur.pemesanan.resi)} satuan="resi" />
-            <KartuAlur label="Eks Dipesan" nilai={numberId(ringkasanGudang.alur.pemesanan.eks)} satuan="eks" />
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KartuAlur
+              label="Proses Pesan"
+              nilai={numberId(ringkasanGudang.stok.pemesanan.resi)}
+              satuan="resi"
+              keterangan={ringkasanGudang.stok.pemesanan.resi === 0 ? 'belum ada resi bertagih gudang ini' : ''}
+            />
+            <KartuAlur label="Proses Packing" nilai={numberId(ringkasanGudang.stok.packing)} satuan="resi" />
+            <KartuAlur label="Selesai Packing" nilai={numberId(ringkasanGudang.stok.selesai)} satuan="resi" />
+            <KartuAlur
+              label="Sudah Dikarduskan · Siap Distribusi"
+              nilai={numberId(ringkasanGudang.stok.kerdus.eks)}
+              satuan="eks"
+              keterangan="{ringkasanGudang.stok.kerdus.jumlah} kerdus tersegel"
+            />
           </div>
-          {#if ringkasanGudang.alur.tanpa_gudang.total > 0}
-            <p class="text-xs text-gray-400 mt-3">{ringkasanGudang.alur.tanpa_gudang.total} resi tahap packing belum bertagih gudang dan tidak masuk kartu gudang.</p>
-          {/if}
-        </RingkasanSection>
 
-        {#each ringkasanGudang.alur.ready.per_gudang as g (g.gudang_id)}
-          <RingkasanSection
-            icon="arrow-path"
-            warna="blue"
-            judul="Alur Mushaf — {g.nama}"
-            keterangan="Posisi mushaf hari ini"
-          >
-            <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-              <KartuAlur label="Quran Ready · Belum Ada Muwakif" nilai={numberId(g.ready_eks)} satuan="eks" />
-              <KartuAlur label="Proses Packing" nilai={numberId(g.packing_resi)} satuan="resi" />
-              <KartuAlur label="Selesai Packing · Siap Distribusi" nilai={numberId(g.siap_resi)} satuan="resi" />
-            </div>
-          </RingkasanSection>
-        {/each}
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {#each ringkasanGudang.stok.muwakif as baris (baris.label)}
+              <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
+            {/each}
+          </div>
+        </RingkasanSection>
 
         <RingkasanSection
           icon="users"
@@ -551,34 +553,36 @@
         </RingkasanSection>
 
         <RingkasanSection
-          icon="arrow-path"
-          warna="blue"
-          judul="Proses Pemesanan"
-          keterangan="Seluruh gudang — resi tahap ini belum bertagih gudang"
+          icon="archive-box"
+          warna="green"
+          judul="Stok Seluruh Gudang"
+          keterangan="{perGudangUrut.map((g) => g.nama).join(' + ')}"
         >
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <KartuAlur label="Resi" nilai={numberId(ringkasanManager.alur.pemesanan.resi)} satuan="resi" />
-            <KartuAlur label="Eks Dipesan" nilai={numberId(ringkasanManager.alur.pemesanan.eks)} satuan="eks" />
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KartuAlur
+              label="Proses Pesan"
+              nilai={numberId(ringkasanManager.stok.pemesanan.resi)}
+              satuan="resi"
+              keterangan="{numberId(ringkasanManager.stok.pemesanan.eks)} eks dipesan"
+            />
+            <KartuAlur label="Proses Packing" nilai={numberId(ringkasanManager.stok.packing)} satuan="resi" />
+            <KartuAlur label="Selesai Packing" nilai={numberId(ringkasanManager.stok.selesai)} satuan="resi" />
+            <KartuAlur
+              label="Sudah Dikarduskan · Siap Distribusi"
+              nilai={numberId(ringkasanManager.stok.kerdus.eks)}
+              satuan="eks"
+              keterangan="{ringkasanManager.stok.kerdus.jumlah} kerdus tersegel"
+            />
           </div>
-          {#if ringkasanManager.alur.tanpa_gudang.total > 0}
-            <p class="text-xs text-gray-400 mt-3">{ringkasanManager.alur.tanpa_gudang.total} resi tahap packing belum bertagih gudang dan tidak masuk kartu gudang.</p>
-          {/if}
-        </RingkasanSection>
 
-        {#each ringkasanManager.alur.ready.per_gudang as g (g.gudang_id)}
-          <RingkasanSection
-            icon="arrow-path"
-            warna="blue"
-            judul="Alur Mushaf — {g.nama}"
-            keterangan="Posisi mushaf hari ini"
-          >
-            <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-              <KartuAlur label="Quran Ready · Belum Ada Muwakif" nilai={numberId(g.ready_eks)} satuan="eks" />
-              <KartuAlur label="Proses Packing" nilai={numberId(g.packing_resi)} satuan="resi" />
-              <KartuAlur label="Selesai Packing · Siap Distribusi" nilai={numberId(g.siap_resi)} satuan="resi" />
-            </div>
-          </RingkasanSection>
-        {/each}
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {#each ringkasanManager.stok.muwakif as baris (baris.label)}
+              <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
+            {/each}
+          </div>
+        </RingkasanSection>
 
         <RingkasanSection
           icon="chart-pie"
