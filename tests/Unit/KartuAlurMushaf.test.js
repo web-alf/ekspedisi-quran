@@ -30,13 +30,19 @@ describe('Kartu Alur Mushaf', () => {
         expect(blokManager).toMatch(/<KartuAlur\b/);
     });
 
-    it('memuat empat kartu yang diminta di kedua blok', () => {
+    it('memisahkan pemesanan (global) dan seksi per gudang di kedua blok', () => {
         for (const blok of [blokSpv, blokManager]) {
-            const label = [...blok.matchAll(/label="([^"]+)"/g)].map((m) => m[1]);
-            expect(label).toContain('Proses Pemesanan');
-            expect(label).toContain('Quran Ready · Belum Ada Muwakif');
-            expect(label).toContain('Proses Packing');
-            expect(label).toContain('Selesai Packing · Siap Distribusi');
+            // Seksi global pemesanan: resi + eks, bukan per gudang.
+            expect(blok).toContain('judul="Proses Pemesanan"');
+            expect(blok).toContain('label="Resi"');
+            expect(blok).toContain('label="Eks Dipesan"');
+
+            // Seksi per gudang: satu RingkasanSection untuk setiap baris gudang.
+            expect(blok).toContain('{#each ');
+            expect(blok).toContain('judul="Alur Mushaf — {g.nama}"');
+            expect(blok).toContain('label="Quran Ready · Belum Ada Muwakif"');
+            expect(blok).toContain('label="Proses Packing"');
+            expect(blok).toContain('label="Selesai Packing · Siap Distribusi"');
         }
     });
 
@@ -52,7 +58,9 @@ describe('Kartu Alur Mushaf', () => {
         expect(kartu).toContain('text-2xl font-bold text-gray-900');
     });
 
-    it('menyembunyikan rincian gudang bila gudangnya hanya satu', () => {
-        expect(kartu).toMatch(/\{#if rincian\.length > 1\}/);
+    it('tidak lagi membawa rincian gudang di dalam kartu', () => {
+        // Rincian per gudang diganti SEKSI per gudang (keputusan pemilik 27/10/2026),
+        // jadi kartu tidak perlu baris rincian lagi.
+        expect(kartu).not.toContain('rincian');
     });
 });
