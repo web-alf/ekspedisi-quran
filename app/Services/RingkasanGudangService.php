@@ -41,12 +41,19 @@ class RingkasanGudangService
             return null;
         }
 
+        $beban = $this->bebanGudang($gudang->id);
+        $stokKartu = $this->stokKartu($gudang->id);
+
         return [
             'gudang' => ['id' => $gudang->id, 'kode' => $gudang->kode, 'nama' => $gudang->nama],
             'packing' => $this->packingHariIni($gudang->id),
             'perlu_tindakan' => $this->perluTindakan($gudang->id),
-            'beban' => $this->bebanGudang($gudang->id),
-            'stok_kartu' => $this->stokKartu($gudang->id),
+            'beban' => $beban,
+            'stok_kartu' => $stokKartu,
+            'alur' => $this->alurMushaf([[
+                'id' => $gudang->id, 'kode' => $gudang->kode, 'nama' => $gudang->nama,
+                'beban' => $beban, 'stok_kartu' => $stokKartu,
+            ]]),
         ];
     }
 
@@ -115,6 +122,11 @@ class RingkasanGudangService
             ],
 
             'per_gudang' => $perGudang->all(),
+
+            // Empat kartu "Alur Mushaf" (keputusan pemilik 27/10/2026): satu bentuk untuk
+            // SPV (satu gudang) dan Manager (dua gudang), dihitung dari angka yang SAMA
+            // dengan beban & stok per gudang supaya tidak ada dua kebenaran.
+            'alur' => $this->alurMushaf($perGudang->all()),
 
             // Dokumen perpindahan yang menunggu diterima di gudang MANA PUN di bawah,
             // dengan arah asal → tujuan begitu jelas.
@@ -389,6 +401,76 @@ class RingkasanGudangService
             'packing' => (int) ($perTahap['packing'] ?? 0),
             'selesai_packing' => (int) ($perTahap['selesai-packing'] ?? 0),
             'dalam_kerdus' => $dalamKerdus,
+        ];
+    }
+
+    /**
+     * Empat angka "Alur Mushaf" di dashboard gudang (keputusan pemilik 27/10/2026).
+     *
+     * Bentuknya sama untuk SPV dan Manager supaya SATU komponen kartu dipakai keduanya:
+     * angka besar milik satu gudang (SPV) atau gabungan (Manager), dan rincian per gudang
+     * hanya dikirim apa adanya — halaman menyembunyikannya bila gudangnya cuma satu.
+     *
+     * `pemesanan` sengaja GLOBAL, bukan per gudang: resi pada tahap ini belum bertagih
+     * gudang (26 ribu baris lama `gudang_id` NULL), jadi memotongnya per gudang akan
+     * menampilkan 0 padahal barangnya ada. Tahap sesudahnya (`packing`, `selesai-packing`)
+     * memang sudah bertagih gudang dan dihitung dari beban gudang.
+     *
+     * @param  array<int, array<string, mixed>>  $perGudang  baris gudang berisi `id`, `kode`, `nama`, `beban`, `stok_kartu`
+     * @return array<string, mixed>
+     */
+    private function alurMushaf(array $perGudang): array
+    {
+        $pemesanan = Pengiriman::query()
+            ->join('status_pengiriman', 'status_pengiriman.id', '=', 'pengiriman.status_id')
+            ->where('status_pengiriman.slug', 'pemesanan')
+            ->selectRaw('count(*) as resi, coalesce(sum(pengiriman.jumlah_quran), 0) as eks')
+            ->first();
+
+        // Resi tahap packing/selesai-packing yang `gudang_id`-nya masih NULL (baris lama).
+        // Tanpa angka ini, kartu per gudang menampilkan 0 padahal barangnya ada di sistem —
+        // pemilik membacanya sebagai salah hitung.
+        $global = Pengiriman::query()
+            ->join('status_pengiriman', 'status_pengiriman.id', '=', 'pengiriman.status_id')
+            ->whereIn('status_pengiriman.slug', ['packing', 'selesai-packing'])
+            ->selectRaw("sum(case when status_pengiriman.slug = 'packing' then 1 else 0 end) as packing,
+                         sum(case when status_pengiriman.slug = 'selesai-packing' then 1 else 0 end) as siap")
+            ->first();
+
+        $baris = collect($perGudang)->map(fn (array $g) => [
+            'gudang_id' => $g['id'],
+            'kode' => $g['kode'],
+            'nama' => $g['nama'],
+            'ready_eks' => (int) collect($g['stok_kartu'] ?? [])->sum('eks'),
+            'packing_resi' => (int) ($g['beban']['packing'] ?? 0),
+            'siap_resi' => (int) ($g['beban']['selesai_packing'] ?? 0),
+        ])->values()->all();
+
+        $tanpaGudangPacking = max(0, (int) ($global->packing ?? 0) - (int) collect($baris)->sum('packing_resi'));
+        $tanpaGudangSiap = max(0, (int) ($global->siap ?? 0) - (int) collect($baris)->sum('siap_resi'));
+
+        return [
+            'tanpa_gudang' => [
+                'packing' => $tanpaGudangPacking,
+                'siap' => $tanpaGudangSiap,
+                'total' => $tanpaGudangPacking + $tanpaGudangSiap,
+            ],
+            'pemesanan' => [
+                'resi' => (int) ($pemesanan->resi ?? 0),
+                'eks' => (int) ($pemesanan->eks ?? 0),
+            ],
+            'ready' => [
+                'eks' => (int) collect($baris)->sum('ready_eks'),
+                'per_gudang' => $baris,
+            ],
+            'packing' => [
+                'resi' => (int) collect($baris)->sum('packing_resi'),
+                'per_gudang' => $baris,
+            ],
+            'siap' => [
+                'resi' => (int) collect($baris)->sum('siap_resi'),
+                'per_gudang' => $baris,
+            ],
         ];
     }
 

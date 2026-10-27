@@ -58,13 +58,16 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
 
         expect(bagian(blokSpv)).toEqual([
             ['cube', 'Packing Hari Ini'],
+            // Empat kartu "Alur Mushaf" (27/10/2026) — seksi terpisah dari "Beban Gudang".
+            ['arrow-path', 'Alur Mushaf'],
             ['users', 'Freelancer yang Kerja Hari Ini'],
             ['exclamation-circle', 'Perlu Tindakan'],
             ['clipboard-document-list', 'Beban Gudang'],
             ['archive-box', 'Stok Mushaf'],
         ]);
         expect(managerTanpaPerforma).toEqual(bagian(blokSpv));
-        expect(manager[1]).toEqual(['chart-pie', 'Performa Gudang']);
+        expect(manager[1]).toEqual(['arrow-path', 'Alur Mushaf']);
+        expect(manager[2]).toEqual(['chart-pie', 'Performa Gudang']);
     });
 
     it('tidak lagi menulis kerangka section sendiri di dalam blok ringkasan', () => {

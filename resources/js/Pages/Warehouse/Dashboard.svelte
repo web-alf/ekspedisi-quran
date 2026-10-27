@@ -9,6 +9,7 @@
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
   import StatTile from '../../Components/Warehouse/StatTile.svelte';
+  import KartuAlur from '../../Components/Warehouse/KartuAlur.svelte';
   import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
   import PerluTindakan from '../../Components/Warehouse/PerluTindakan.svelte';
@@ -60,6 +61,23 @@
     ['selesai_packing', 'Selesai packing'],
     ['dalam_kerdus', 'Dalam kerdus'],
   ];
+
+  /** 1.284 → "1.284" (pemisah ribuan Indonesia). */
+  function numberId(angka) {
+    return new Intl.NumberFormat('id-ID').format(Number(angka) || 0);
+  }
+
+  /**
+   * Rincian per gudang untuk kartu Alur Mushaf. Hanya dipakai bila gudangnya lebih dari
+   * satu (Manager); KartuAlur sendiri menyembunyikan rincian satu baris.
+   */
+  function rincianGudang(perGudang = [], kunci, satuan) {
+    return (perGudang ?? []).map((g) => ({
+      nama: g.nama,
+      nilai: numberId(g[kunci] ?? 0),
+      satuan,
+    }));
+  }
 
   function totalBeban(kunci) {
     return (ringkasanManager?.per_gudang ?? []).reduce((n, g) => n + (g.beban?.[kunci] ?? 0), 0);
@@ -413,6 +431,43 @@
         </RingkasanSection>
 
         <RingkasanSection
+          icon="arrow-path"
+          warna="blue"
+          judul="Alur Mushaf"
+          keterangan="Posisi mushaf hari ini · {ringkasanGudang.gudang.nama}"
+        >
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KartuAlur
+              label="Proses Pemesanan"
+              nilai={numberId(ringkasanGudang.alur.pemesanan.resi)}
+              satuan="resi"
+              keterangan="{numberId(ringkasanGudang.alur.pemesanan.eks)} eks · belum masuk gudang"
+            />
+            <KartuAlur
+              label="Quran Ready · Belum Ada Muwakif"
+              nilai={numberId(ringkasanGudang.alur.ready.eks)}
+              satuan="eks"
+              rincian={rincianGudang(ringkasanGudang.alur.ready.per_gudang, 'ready_eks', 'eks')}
+            />
+            <KartuAlur
+              label="Proses Packing"
+              nilai={numberId(ringkasanGudang.alur.packing.resi)}
+              satuan="resi"
+              rincian={rincianGudang(ringkasanGudang.alur.packing.per_gudang, 'packing_resi', 'resi')}
+            />
+            <KartuAlur
+              label="Selesai Packing · Siap Distribusi"
+              nilai={numberId(ringkasanGudang.alur.siap.resi)}
+              satuan="resi"
+              rincian={rincianGudang(ringkasanGudang.alur.siap.per_gudang, 'siap_resi', 'resi')}
+            />
+          </div>
+          {#if ringkasanGudang.alur.tanpa_gudang.total > 0}
+            <p class="text-xs text-gray-400 mt-3">{ringkasanGudang.alur.tanpa_gudang.total} resi lama belum bertagih gudang dan tidak dihitung di kartu.</p>
+          {/if}
+        </RingkasanSection>
+
+        <RingkasanSection
           icon="users"
           judul="Freelancer yang Kerja Hari Ini — {ringkasanGudang.gudang.nama}"
           keterangan="Capaian dan progres tiap staf yang ditugaskan hari ini"
@@ -511,6 +566,43 @@
             <p class="mt-2 text-xs text-amber-700" data-tugas-tanpa-gudang>
               {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
             </p>
+          {/if}
+        </RingkasanSection>
+
+        <RingkasanSection
+          icon="arrow-path"
+          warna="blue"
+          judul="Alur Mushaf"
+          keterangan="Posisi mushaf hari ini · {perGudangUrut.map((g) => g.nama).join(' + ')}"
+        >
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KartuAlur
+              label="Proses Pemesanan"
+              nilai={numberId(ringkasanManager.alur.pemesanan.resi)}
+              satuan="resi"
+              keterangan="{numberId(ringkasanManager.alur.pemesanan.eks)} eks · belum masuk gudang"
+            />
+            <KartuAlur
+              label="Quran Ready · Belum Ada Muwakif"
+              nilai={numberId(ringkasanManager.alur.ready.eks)}
+              satuan="eks"
+              rincian={rincianGudang(ringkasanManager.alur.ready.per_gudang, 'ready_eks', 'eks')}
+            />
+            <KartuAlur
+              label="Proses Packing"
+              nilai={numberId(ringkasanManager.alur.packing.resi)}
+              satuan="resi"
+              rincian={rincianGudang(ringkasanManager.alur.packing.per_gudang, 'packing_resi', 'resi')}
+            />
+            <KartuAlur
+              label="Selesai Packing · Siap Distribusi"
+              nilai={numberId(ringkasanManager.alur.siap.resi)}
+              satuan="resi"
+              rincian={rincianGudang(ringkasanManager.alur.siap.per_gudang, 'siap_resi', 'resi')}
+            />
+          </div>
+          {#if ringkasanManager.alur.tanpa_gudang.total > 0}
+            <p class="text-xs text-gray-400 mt-3">{ringkasanManager.alur.tanpa_gudang.total} resi lama belum bertagih gudang dan tidak dihitung di kartu.</p>
           {/if}
         </RingkasanSection>
 
