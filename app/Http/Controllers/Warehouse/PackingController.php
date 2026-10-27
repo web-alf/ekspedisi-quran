@@ -236,10 +236,11 @@ class PackingController extends Controller
     /**
      * Tetapkan gudang TUGAS HARI INI (LOKASI MUSHAF, 2026-10-15).
      *
-     * Tugas harian dari cron `packing:daily-assignment` lahir tanpa gudang, dan di produksi
-     * seluruh 354 tugas belum bertagih — akibatnya kerdus yang dibuat dari tugas itu tidak
-     * punya lokasi. Halaman packing menyodorkan pilihan ini SEKALI; begitu dipilih, gudangnya
-     * disimpan ke tugas sehingga semua kerdus berikutnya mewarisinya otomatis.
+     * Tugas harian bisa lahir tanpa gudang (mis. dibuat job massal atau penugasan tanpa
+     * tagihan gudang), dan di produksi seluruh 354 tugas lama belum bertagih — akibatnya
+     * kerdus yang dibuat dari tugas itu tidak punya lokasi. Halaman packing menyodorkan
+     * pilihan ini SEKALI; begitu dipilih, gudangnya disimpan ke tugas sehingga semua kerdus
+     * berikutnya mewarisinya otomatis.
      *
      * Dua penjaga, keduanya penting supaya pilihan ini tidak menjadi celah memindahkan lokasi
      * mushaf tanpa dokumen perpindahan:

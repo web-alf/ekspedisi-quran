@@ -8,10 +8,17 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Critical scheduled tasks for warehouse automation
-Schedule::command('packing:daily-assignment')->dailyAt('06:00')
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/packing-assignment.log'));
+// Penugasan packing harian OTOMATIS DIHAPUS (keputusan pemilik, 27/10/2026).
+//
+// Pekerjaan sekarang dibagi manusia, bukan cron: PJ (manager gudang) memberi beban kerja
+// ke SPV gudangnya, lalu SPV menugasi freelancer-nya dari halaman Monitor & Penugasan.
+// Cron pukul 06:00 dulu menugasi semua pemegang izin memindai — termasuk akun PJ/SPV —
+// sehingga target gudang menggelembung oleh tugas yang tak dikerjakan sebagai pekerja
+// packing, dan SPV kehilangan kendali atas pembagian kerja.
+//
+// Perintah `php artisan packing:daily-assignment` SENGAJA tetap ada untuk dijalankan
+// manual bila suatu hari dibutuhkan (mis. menyiapkan data uji), tetapi tidak lagi
+// dijadwalkan.
 
 Schedule::command('packing:expire-tasks')->dailyAt('23:59')
     ->withoutOverlapping()

@@ -50,10 +50,11 @@ class DailyPackingTask extends Model
     /**
      * Tugas lahir membawa gudang staf yang ditugasi (keputusan pemilik sistem, 16/10/2026).
      *
-     * Cron `packing:daily-assignment` jalan pukul 06:00 tanpa ada yang login, jadi cadangan
-     * "gudang penugasa" di gudangKerdus() selalu kosong — seluruh 376 tugas produksi lahir
-     * tanpa gudang. Diisi di model, bukan di tiap pemanggil, karena tugas dibuat dari empat
-     * jalur (cron, penugasan manual, job massal, kerdus bersama). Gudang yang diisi
+     * Penugasan yang dibuat tanpa ada yang login (dulu cron `packing:daily-assignment` pukul
+     * 06:00; sejak 27/10/2026 tugas dibuat manual oleh PJ/SPV) tidak membawa gudang penugasa,
+     * jadi cadangan \"gudang penugasa\" di gudangKerdus() selalu kosong — seluruh 376 tugas
+     * produksi lahir tanpa gudang. Diisi di model, bukan di tiap pemanggil, karena tugas dibuat
+     * dari beberapa jalur (penugasan manual, job massal, kerdus bersama). Gudang yang diisi
      * eksplisit oleh pemanggil (SPV/PJ) tetap dihormati.
      */
     protected static function booted(): void
