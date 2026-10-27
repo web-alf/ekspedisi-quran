@@ -144,4 +144,19 @@ return [
         'selesai-packing',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Jenis mushaf yang punya varian terjemahan (stok tanpa muwakif)
+    |--------------------------------------------------------------------------
+    |
+    | Temuan lapangan 19/10/2026: A5/A6 dicetak dengan dan tanpa terjemahan, jadi
+    | stoknya dua tumpukan terpisah dan varian WAJIB dipilih di setiap pergerakan.
+    | Jenis lain (IQRA/IQRO) tidak punya varian: form stok dan transfer tidak
+    | menawarkan pilihannya, dan server selalu menyimpannya sebagai "tanpa
+    | terjemahan" supaya stoknya tidak pernah terpecah dua.
+    |
+    */
+
+    'stok_varian_jenis' => ['A5', 'A6'],
+
 ];

@@ -5,7 +5,15 @@
  * modul ini, supaya bisa diuji tanpa merender halaman.
  */
 import { describe, it, expect } from 'vitest';
-import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian } from '../../resources/js/utils/stokPratinjau.js';
+import {
+    stokSaatIni,
+    hitungHasil,
+    bolehSimpan,
+    labelVarian,
+    jenisPunyaVarian,
+    varianSesudahGantiJenis,
+    VARIAN_JENIS_TUNGGAL,
+} from '../../resources/js/utils/stokPratinjau.js';
 
 const stokList = [
     { jenis_id: 1, varian: false, gudang_id: 1, eks: 12 },
@@ -89,5 +97,45 @@ describe('labelVarian', () => {
         expect(labelVarian(1)).toBe('Dengan terjemahan');
         expect(labelVarian(0)).toBe('Tanpa terjemahan');
         expect(labelVarian('')).toBe('');
+    });
+});
+
+/**
+ * IQRA tidak punya varian terjemahan (config pengiriman.stok_varian_jenis = A5, A6): form
+ * tidak menawarkan pilihannya dan nilainya diisi otomatis "tanpa terjemahan".
+ */
+describe('varian per jenis', () => {
+    const jenisList = [
+        { id: 1, kode_jenis: 'A5', ada_varian: true },
+        { id: 4, kode_jenis: 'A6', ada_varian: true },
+        { id: 5, kode_jenis: 'IQRA', ada_varian: false },
+    ];
+
+    it('hanya A5/A6 yang menawarkan pilihan varian', () => {
+        expect(jenisPunyaVarian(jenisList, 1)).toBe(true);
+        expect(jenisPunyaVarian(jenisList, '4')).toBe(true);
+        expect(jenisPunyaVarian(jenisList, '5')).toBe(false);
+    });
+
+    it('menganggap jenis yang belum dipilih atau tak dikenal punya varian', () => {
+        expect(jenisPunyaVarian(jenisList, '')).toBe(true);
+        expect(jenisPunyaVarian(jenisList, 99)).toBe(true);
+        expect(jenisPunyaVarian([{ id: 1 }], 1)).toBe(true);
+    });
+
+    it('mengisi IQRA otomatis tanpa terjemahan, apa pun pilihan sebelumnya', () => {
+        expect(VARIAN_JENIS_TUNGGAL).toBe('0');
+        expect(varianSesudahGantiJenis(jenisList, '5', '1', '1')).toBe('0');
+        expect(varianSesudahGantiJenis(jenisList, '5', '', '')).toBe('0');
+    });
+
+    it('mengosongkan varian saat kembali dari IQRA ke A5/A6 supaya dipilih sendiri', () => {
+        expect(varianSesudahGantiJenis(jenisList, '1', '0', '5')).toBe('');
+    });
+
+    it('mempertahankan varian saat berpindah antar jenis yang sama-sama punya varian', () => {
+        expect(varianSesudahGantiJenis(jenisList, '4', '1', '1')).toBe('1');
+        expect(varianSesudahGantiJenis(jenisList, '1', 0, '')).toBe('0');
+        expect(varianSesudahGantiJenis(jenisList, '', '', '5')).toBe('');
     });
 });

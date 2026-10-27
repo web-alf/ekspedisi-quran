@@ -147,7 +147,9 @@ describe('Halaman Perpindahan Mushaf — dua tab dokumen', () => {
 
     it('mewajibkan varian pada form transfer stok dan mengirimnya sebagai angka', () => {
         expect(halamanPerpindahan).toContain('Pilih varian...');
-        expect(halamanPerpindahan).toContain('<option value={1}>Ada terjemahan</option>');
+        // Nilai opsi berupa teks: varian yang diisi otomatis saat ganti jenis juga teks
+        // ('0'/'1'), dan bind:value pada <select> mencocokkan nilainya secara ketat.
+        expect(halamanPerpindahan).toContain('<option value="1">Ada terjemahan</option>');
         expect(halamanPerpindahan).toContain("stokTerjemahan === ''");
         expect(halamanPerpindahan).toContain('terjemahan: Number(stokTerjemahan)');
     });
@@ -195,3 +197,21 @@ describe('Monitor gudang: kartu performa mengikuti izin', () => {
         expect(monitor).toContain('export let bolehExportPerforma = false');
     });
 });
+
+describe('Varian terjemahan hanya untuk jenis yang memilikinya (IQRA tanpa varian)', () => {
+    it('form entri stok menyembunyikan pilihan varian untuk jenis tanpa varian', () => {
+        expect(halamanStok).toMatch(/adaVarianEntri = jenisPunyaVarian\(jenisList, entriJenis\)/);
+        expect(halamanStok).toMatch(/varianSesudahGantiJenis\(jenisList, entriJenis, entriTerjemahan, jenisSebelumnya\)/);
+        expect(halamanStok).toMatch(/\{#if adaVarianEntri\}\s*<div>\s*<span[^>]*>Varian/);
+        // Pratinjau tidak menyebut "tanpa terjemahan" untuk IQRA.
+        expect(halamanStok).not.toContain('{namaJenis(entriJenis)} {labelVarian');
+        expect(halamanStok).toContain('{namaJenis(entriJenis)}{sebutanVarianEntri}');
+    });
+
+    it('form transfer stok menyembunyikan pilihan varian untuk jenis tanpa varian', () => {
+        expect(halamanPerpindahan).toMatch(/adaVarianStok = jenisPunyaVarian\(jenisList, stokJenis\)/);
+        expect(halamanPerpindahan).toMatch(/varianSesudahGantiJenis\(jenisList, stokJenis, stokTerjemahan, stokJenisSebelumnya\)/);
+        expect(halamanPerpindahan).toMatch(/\{#if adaVarianStok\}\s*<label[^>]*>\s*<span[^>]*>Varian/);
+    });
+});
+

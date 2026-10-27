@@ -3,7 +3,7 @@
   import { router } from '@inertiajs/svelte';
   import { gudangUntukEntri } from '../../utils/pilihanGudang.js';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
-  import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian } from '../../utils/stokPratinjau.js';
+  import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian, jenisPunyaVarian, varianSesudahGantiJenis } from '../../utils/stokPratinjau.js';
 
   // Fase 3: stok mushaf tanpa muwakif per gudang. Dokumen transfer antar gudang sejak
   // 26/10/2026 hidup di halaman Perpindahan Mushaf (tab "Stok tanpa muwakif") — halaman ini
@@ -32,6 +32,15 @@
   let entriJumlah = 1;
   let entriCatatan = '';
   let hasilTerakhir = ''; // ringkasan sesudah simpan: "A5 tanpa terjemahan: 12 → 22 eks"
+
+  // IQRA tidak punya varian: pilihannya disembunyikan dan nilainya diisi otomatis.
+  let jenisSebelumnya = '';
+  $: if (String(entriJenis) !== String(jenisSebelumnya)) {
+      entriTerjemahan = varianSesudahGantiJenis(jenisList, entriJenis, entriTerjemahan, jenisSebelumnya);
+      jenisSebelumnya = entriJenis;
+  }
+  $: adaVarianEntri = jenisPunyaVarian(jenisList, entriJenis);
+  $: sebutanVarianEntri = adaVarianEntri && entriTerjemahan !== '' ? ` ${labelVarian(entriTerjemahan).toLowerCase()}` : '';
 
   // Pratinjau akibat pergerakan SEBELUM disimpan — satu-satunya cara mencegah pencatatan
   // pengurangan melebihi stok, yang sekarang baru ketahuan setelah server menolak (422).
@@ -221,16 +230,18 @@
             </select>
           </label>
 
-          <div>
-            <span class="block text-sm text-gray-700 mb-1">Varian <span class="text-[#eb3434]">*</span></span>
-            <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Varian">
-              {#each [[1, 'Dengan terjemahan'], [0, 'Tanpa terjemahan']] as [nilai, teks]}
-                <button type="button" on:click={() => (entriTerjemahan = String(nilai))}
-                  class="px-3 py-1.5 rounded-md text-sm font-medium {String(entriTerjemahan) === String(nilai) ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}"
-                  aria-pressed={String(entriTerjemahan) === String(nilai)}>{teks}</button>
-              {/each}
+          {#if adaVarianEntri}
+            <div>
+              <span class="block text-sm text-gray-700 mb-1">Varian <span class="text-[#eb3434]">*</span></span>
+              <div class="inline-flex gap-1 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Varian">
+                {#each [[1, 'Dengan terjemahan'], [0, 'Tanpa terjemahan']] as [nilai, teks]}
+                  <button type="button" on:click={() => (entriTerjemahan = String(nilai))}
+                    class="px-3 py-1.5 rounded-md text-sm font-medium {String(entriTerjemahan) === String(nilai) ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}"
+                    aria-pressed={String(entriTerjemahan) === String(nilai)}>{teks}</button>
+                {/each}
+              </div>
             </div>
-          </div>
+          {/if}
 
           <div>
             <label for="entri-jumlah" class="block text-sm text-gray-700 mb-1">Jumlah <span class="text-[#eb3434]">*</span></label>
@@ -260,10 +271,10 @@
             <span class="text-gray-500">Pilih jenis dan varian untuk melihat stok sekarang.</span>
           {:else if stokKurang}
             <span class="text-red-700">
-              Stok {namaJenis(entriJenis)} {labelVarian(entriTerjemahan).toLowerCase()} hanya <b>{stokSekarang} eks</b> — pengurangan {Number(entriJumlah) || 0} eks tidak cukup.
+              Stok {namaJenis(entriJenis)}{sebutanVarianEntri} hanya <b>{stokSekarang} eks</b> — pengurangan {Number(entriJumlah) || 0} eks tidak cukup.
             </span>
           {:else}
-            Stok {namaJenis(entriJenis)} {labelVarian(entriTerjemahan).toLowerCase()} saat ini <b>{stokSekarang} eks</b> → menjadi <b>{hasilEntri.akhir} eks</b>
+            Stok {namaJenis(entriJenis)}{sebutanVarianEntri} saat ini <b>{stokSekarang} eks</b> → menjadi <b>{hasilEntri.akhir} eks</b>
           {/if}
         </div>
 
@@ -278,7 +289,7 @@
           type="button"
           disabled={!bolehRekam}
           on:click={() => {
-            const ringkas = `${namaJenis(entriJenis)} ${labelVarian(entriTerjemahan).toLowerCase()}: ${stokSekarang} → ${hasilEntri.akhir} eks`;
+            const ringkas = `${namaJenis(entriJenis)}${sebutanVarianEntri}: ${stokSekarang} → ${hasilEntri.akhir} eks`;
             kirimJson('/admin/warehouse/stok/entri', { gudang_id: entriGudang, jenis_quran_id: entriJenis, terjemahan: Number(entriTerjemahan), tipe: entriTipe, jumlah_eks: Number(entriJumlah) || 0, catatan: entriCatatan }, () => {
               hasilTerakhir = ringkas;
               // Jenis & varian dipertahankan untuk entri berikutnya; hanya jumlah yang direset.

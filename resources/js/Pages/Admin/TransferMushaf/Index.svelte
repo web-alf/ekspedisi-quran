@@ -2,6 +2,7 @@
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import { router } from '@inertiajs/svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
+  import { jenisPunyaVarian, varianSesudahGantiJenis } from '../../../utils/stokPratinjau.js';
 
   // DUA DOKUMEN PERPINDAHAN ANTAR GUDANG DALAM SATU HALAMAN (keputusan pemilik 26/10/2026):
   //
@@ -47,6 +48,14 @@
   let stokTerjemahan = '';
   let stokJumlah = 1;
   let stokCatatan = '';
+
+  // IQRA tidak punya varian: pilihannya disembunyikan dan nilainya diisi otomatis.
+  let stokJenisSebelumnya = '';
+  $: if (String(stokJenis) !== String(stokJenisSebelumnya)) {
+    stokTerjemahan = varianSesudahGantiJenis(jenisList, stokJenis, stokTerjemahan, stokJenisSebelumnya);
+    stokJenisSebelumnya = stokJenis;
+  }
+  $: adaVarianStok = jenisPunyaVarian(jenisList, stokJenis);
 
   let tabAktif = 'mushaf';
 
@@ -509,14 +518,16 @@
               </select>
             </label>
 
-            <label class="block text-sm">
-              <span class="block text-gray-700 mb-1">Varian</span>
-              <select bind:value={stokTerjemahan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                <option value="">Pilih varian...</option>
-                <option value={1}>Ada terjemahan</option>
-                <option value={0}>Tanpa terjemahan</option>
-              </select>
-            </label>
+            {#if adaVarianStok}
+              <label class="block text-sm">
+                <span class="block text-gray-700 mb-1">Varian</span>
+                <select bind:value={stokTerjemahan} class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih varian...</option>
+                  <option value="1">Ada terjemahan</option>
+                  <option value="0">Tanpa terjemahan</option>
+                </select>
+              </label>
+            {/if}
 
             <label class="block text-sm">
               <span class="block text-gray-700 mb-1">Jumlah (eks)</span>

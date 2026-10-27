@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\RingkasanGudangService;
 use App\Services\StokMushafService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 /**
@@ -56,7 +57,7 @@ class StokMushafController extends Controller
 
         return Inertia::render('Warehouse/StokMushaf', [
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
-            'jenisList' => JenisQuran::active()->orderBy('id')->get(['id', 'kode_jenis', 'nama_jenis', 'default_capacity']),
+            'jenisList' => JenisQuran::daftarUntukFormStok(),
             'stokKartu' => $gudangKartu,
             'stokList' => StokMushaf::with(['gudang', 'jenisQuran'])
                 ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', auth()->user()->gudang_id))
@@ -107,8 +108,8 @@ class StokMushafController extends Controller
             'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
             // Temuan lapangan 19/10/2026: A5/A6 ada varian ber-terjemahan dan tanpa.
             // WAJIB dipilih — tanpa ini dua tumpukan tercampur dan "stok tinggal 4 eks"
-            // tak bisa dijawab.
-            'terjemahan' => ['required', 'boolean'],
+            // tak bisa dijawab. IQRA tidak punya varian (lihat config stok_varian_jenis).
+            'terjemahan' => $this->aturanVarian($request),
             'tipe' => ['required', 'in:masuk,keluar'],
             'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
             'catatan' => ['nullable', 'string', 'max:255'],
@@ -116,7 +117,7 @@ class StokMushafController extends Controller
 
         $gudang = Gudang::findOrFail($validated['gudang_id']);
         $jenis = JenisQuran::findOrFail($validated['jenis_quran_id']);
-        $terjemahan = (bool) $validated['terjemahan'];
+        $terjemahan = $this->varianTersimpan($jenis, $validated);
 
         // SPV tercakup hanya boleh menyentuh stok gudangnya sendiri (server-side,
         // bukan sekadar disembunyikan di form).
@@ -135,7 +136,7 @@ class StokMushafController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => sprintf('Stok %s%s di %s: %d eks (%d dus %s) terekam.', $jenis->nama_jenis, $this->sebutanVarian($terjemahan), $gudang->nama, $stok->jumlah_eks, $stok->jumlahDus(), $stok->sisaEksDiLuarDus() > 0 ? '+ '.$stok->sisaEksDiLuarDus().' eks' : 'utuh'),
+            'message' => sprintf('Stok %s%s di %s: %d eks (%d dus %s) terekam.', $jenis->nama_jenis, $this->sebutanVarian($jenis, $terjemahan), $gudang->nama, $stok->jumlah_eks, $stok->jumlahDus(), $stok->sisaEksDiLuarDus() > 0 ? '+ '.$stok->sisaEksDiLuarDus().' eks' : 'utuh'),
             'data' => ['eks' => $stok->jumlah_eks, 'dus' => $stok->jumlahDus()],
         ]);
     }
@@ -146,11 +147,12 @@ class StokMushafController extends Controller
             'gudang_asal_id' => ['required', 'integer', 'exists:gudang,id', 'different:gudang_tujuan_id'],
             'gudang_tujuan_id' => ['required', 'integer', 'exists:gudang,id'],
             'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
-            'terjemahan' => ['required', 'boolean'],
+            'terjemahan' => $this->aturanVarian($request),
             'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
             'catatan' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $jenis = JenisQuran::findOrFail($validated['jenis_quran_id']);
         $asal = Gudang::findOrFail($validated['gudang_asal_id']);
         $tujuan = Gudang::findOrFail($validated['gudang_tujuan_id']);
 
@@ -164,9 +166,9 @@ class StokMushafController extends Controller
             $transfer = $this->stokMushaf->buatTransfer(
                 $asal,
                 $tujuan,
-                JenisQuran::findOrFail($validated['jenis_quran_id']),
+                $jenis,
                 (int) $validated['jumlah_eks'],
-                (bool) $validated['terjemahan'],
+                $this->varianTersimpan($jenis, $validated),
                 $validated['catatan'] ?? null,
                 auth()->user(),
             );
@@ -176,7 +178,7 @@ class StokMushafController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => sprintf('Dokumen %s dibuat: %d eks %s%s dari %s ke %s. Stok berpindah saat SPV tujuan menerima.', $transfer->kode, $transfer->jumlah_eks, $transfer->jenisQuran->nama_jenis, $this->sebutanVarian((bool) $transfer->terjemahan), $transfer->gudangAsal->nama, $transfer->gudangTujuan->nama),
+            'message' => sprintf('Dokumen %s dibuat: %d eks %s%s dari %s ke %s. Stok berpindah saat SPV tujuan menerima.', $transfer->kode, $transfer->jumlah_eks, $transfer->jenisQuran->nama_jenis, $this->sebutanVarian($transfer->jenisQuran, (bool) $transfer->terjemahan), $transfer->gudangAsal->nama, $transfer->gudangTujuan->nama),
             'data' => ['id' => $transfer->id, 'kode' => $transfer->kode],
         ]);
     }
@@ -253,10 +255,41 @@ class StokMushafController extends Controller
     }
 
     /**
-     * Sebutan varian untuk kalimat: " (ada terjemahan)" / " (tanpa terjemahan)".
+     * Varian wajib hanya untuk jenis yang punya varian terjemahan (A5/A6). Jenis yang tidak
+     * ditemukan diperlakukan wajib, supaya galatnya tetap muncul bersama galat jenis.
+     *
+     * @return array<int, mixed>
      */
-    private function sebutanVarian(bool $terjemahan): string
+    private function aturanVarian(Request $request): array
     {
+        return [
+            Rule::requiredIf(fn () => JenisQuran::find($request->integer('jenis_quran_id'))?->punyaVarianTerjemahan() ?? true),
+            'nullable',
+            'boolean',
+        ];
+    }
+
+    /**
+     * Varian yang disimpan: IQRA selalu "tanpa terjemahan", apa pun yang dikirim, supaya
+     * stoknya tidak terpecah menjadi dua tumpukan.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function varianTersimpan(JenisQuran $jenis, array $validated): bool
+    {
+        return $jenis->punyaVarianTerjemahan() && (bool) ($validated['terjemahan'] ?? false);
+    }
+
+    /**
+     * Sebutan varian untuk kalimat: " (ada terjemahan)" / " (tanpa terjemahan)"; kosong
+     * untuk jenis tanpa varian (IQRA).
+     */
+    private function sebutanVarian(JenisQuran $jenis, bool $terjemahan): string
+    {
+        if (! $jenis->punyaVarianTerjemahan()) {
+            return '';
+        }
+
         return $terjemahan ? ' (ada terjemahan)' : ' (tanpa terjemahan)';
     }
 

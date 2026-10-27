@@ -13,6 +13,45 @@ export function labelVarian(terjemahan) {
     return Number(terjemahan) === 1 ? 'Dengan terjemahan' : 'Tanpa terjemahan';
 }
 
+/** Varian satu-satunya untuk jenis tanpa varian (IQRA): selalu disimpan tanpa terjemahan. */
+export const VARIAN_JENIS_TUNGGAL = '0';
+
+/**
+ * Apakah jenis ini menawarkan pilihan terjemahan? Penandanya `ada_varian` dari server
+ * (config pengiriman.stok_varian_jenis). Jenis yang belum dipilih/dikenal dianggap punya
+ * varian, supaya pilihan tidak hilang sebelum jenisnya jelas.
+ *
+ * @param {Array<{id:number|string, ada_varian?:boolean}>} jenisList
+ * @param {number|string|null} jenisId
+ */
+export function jenisPunyaVarian(jenisList = [], jenisId = null) {
+    const jenis = jenisList.find((j) => String(j.id) === String(jenisId));
+
+    return jenis ? jenis.ada_varian !== false : true;
+}
+
+/**
+ * Varian sesudah jenis berganti: jenis tanpa varian memakai VARIAN_JENIS_TUNGGAL; kembali
+ * dari jenis tanpa varian ke A5/A6 mengosongkan pilihan supaya varian dipilih sendiri,
+ * bukan terbawa diam-diam dari IQRA.
+ *
+ * @param {Array<{id:number|string, ada_varian?:boolean}>} jenisList
+ * @param {number|string} jenisBaru
+ * @param {number|string} varian
+ * @param {number|string} jenisLama
+ * @returns {string}
+ */
+export function varianSesudahGantiJenis(jenisList, jenisBaru, varian, jenisLama) {
+    if (jenisBaru !== '' && jenisBaru !== null && !jenisPunyaVarian(jenisList, jenisBaru)) {
+        return VARIAN_JENIS_TUNGGAL;
+    }
+    if (jenisLama !== '' && jenisLama !== null && !jenisPunyaVarian(jenisList, jenisLama)) {
+        return '';
+    }
+
+    return varian === null || varian === undefined ? '' : String(varian);
+}
+
 /**
  * Stok yang tercatat untuk kombinasi gudang × jenis × varian.
  *

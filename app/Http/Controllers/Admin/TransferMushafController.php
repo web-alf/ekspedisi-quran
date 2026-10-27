@@ -86,9 +86,7 @@ class TransferMushafController extends Controller
             // --- Tab "Stok tanpa muwakif" ---
             'penggunaId' => $user->id,
             'bolehTransferStok' => $user->can(PermissionEnum::STOK_TRANSFER->value),
-            'jenisList' => $bolehStok
-                ? JenisQuran::active()->orderBy('id')->get(['id', 'kode_jenis', 'nama_jenis', 'default_capacity'])
-                : [],
+            'jenisList' => $bolehStok ? JenisQuran::daftarUntukFormStok() : [],
             'stokList' => $bolehStok ? $this->stokMushaf->ringkasanStok($user) : [],
             'transferStokList' => $bolehStok ? $this->stokMushaf->daftarTransfer($user) : [],
         ]);

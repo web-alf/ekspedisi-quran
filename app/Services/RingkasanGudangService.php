@@ -540,17 +540,15 @@ class RingkasanGudangService
      */
     public function stokKartu(int $gudangId): array
     {
-        $varianJenis = config('pengiriman.stok_varian_jenis', ['A5', 'A6']);
-
         return StokMushaf::query()
             ->where('gudang_id', $gudangId)
             ->with('jenisQuran:id,kode_jenis,nama_jenis,default_capacity')
             ->orderBy('jenis_quran_id')
             ->orderBy('terjemahan')
             ->get()
-            ->map(function ($s) use ($varianJenis) {
+            ->map(function ($s) {
                 /** @var StokMushaf $s */
-                $adaVarian = in_array($s->jenisQuran?->kode_jenis, $varianJenis, true);
+                $adaVarian = (bool) $s->jenisQuran?->punyaVarianTerjemahan();
 
                 return [
                     'kode_jenis' => $s->jenisQuran?->kode_jenis ?? '-',

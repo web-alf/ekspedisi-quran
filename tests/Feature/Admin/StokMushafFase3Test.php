@@ -438,6 +438,96 @@ it('memisahkan stok A5 ber-terjemahan dan tanpa terjemahan, dan menolak pergerak
     expect((int) StokMushaf::where('gudang_id', $gudang->id)->sum('jumlah_eks'))->toBe(60);
 });
 
+function stokJenisIqra(): JenisQuran
+{
+    $jenis = JenisQuran::where('kode_jenis', 'IQRA')->first() ?? JenisQuran::factory()->iqra()->create();
+    $jenis->update(['default_capacity' => 160]);
+
+    return $jenis->refresh();
+}
+
+/**
+ * IQRA tidak punya varian terjemahan (config pengiriman.stok_varian_jenis = A5, A6). Server
+ * menyimpannya selalu "tanpa terjemahan", walau permintaan mengirim nilai lain, supaya
+ * stok IQRA tidak pernah terpecah dua tumpukan.
+ */
+it('menyimpan entri IQRA sebagai tanpa terjemahan dan tidak mewajibkan varian', function () {
+    $gudang = stokGudang('SMG');
+    $iqra = stokJenisIqra();
+    $pelaku = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $iqra->id,
+            'tipe' => 'masuk',
+            'jumlah_eks' => 160,
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('message', fn (string $pesan) => ! str_contains($pesan, 'terjemahan'));
+
+    // Nilai "ada terjemahan" yang tetap terkirim untuk IQRA masuk ke tumpukan yang sama.
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/entri', [
+            'gudang_id' => $gudang->id,
+            'jenis_quran_id' => $iqra->id,
+            'tipe' => 'masuk',
+            'terjemahan' => 1,
+            'jumlah_eks' => 40,
+        ])
+        ->assertSuccessful();
+
+    $saldo = StokMushaf::where('gudang_id', $gudang->id)->where('jenis_quran_id', $iqra->id)->get();
+    expect($saldo)->toHaveCount(1)
+        ->and($saldo[0]->terjemahan)->toBeFalse()
+        ->and($saldo[0]->jumlah_eks)->toBe(200)
+        ->and(StokMushafPergerakan::where('jenis_quran_id', $iqra->id)->where('terjemahan', true)->exists())->toBeFalse();
+});
+
+it('membuat dokumen transfer IQRA tanpa varian dan tetap mewajibkan varian untuk A5', function () {
+    $asal = stokGudang('SMG');
+    $tujuan = stokGudang('BTL');
+    $iqra = stokJenisIqra();
+    stokIsiAwal($asal, $iqra, 160);
+    $pelaku = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/transfer', [
+            'gudang_asal_id' => $asal->id,
+            'gudang_tujuan_id' => $tujuan->id,
+            'jenis_quran_id' => $iqra->id,
+            'terjemahan' => 1,
+            'jumlah_eks' => 40,
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('message', fn (string $pesan) => ! str_contains($pesan, 'terjemahan'));
+
+    expect(TransferStok::sole()->terjemahan)->toBeFalse();
+
+    $this->actingAs($pelaku)
+        ->postJson('/admin/warehouse/stok/transfer', [
+            'gudang_asal_id' => $asal->id,
+            'gudang_tujuan_id' => $tujuan->id,
+            'jenis_quran_id' => stokJenisA5()->id,
+            'jumlah_eks' => 20,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('terjemahan');
+});
+
+it('menandai jenis yang punya varian di daftar jenis kedua halaman', function () {
+    $a5 = stokJenisA5();
+    $iqra = stokJenisIqra();
+    $pengelola = stokAkun(RoleEnum::MANAGER_REPACKING->value);
+
+    foreach (['/admin/warehouse/stok', '/admin/transfer-mushaf'] as $halaman) {
+        $jenisList = collect($this->actingAs($pengelola)->get($halaman)->assertSuccessful()->viewData('page')['props']['jenisList']);
+
+        expect($jenisList->firstWhere('id', $a5->id)['ada_varian'])->toBeTrue()
+            ->and($jenisList->firstWhere('id', $iqra->id)['ada_varian'])->toBeFalse();
+    }
+});
+
 it('menyampaikan galat validasi sebagai JSON, bukan pengalihan halaman', function () {
     // Halaman stok memanggil endpoint ini dengan fetch + Accept: application/json.
     // Tanpa header itu Laravel menjawab REDIRECT 302 dan browser menerima HTML —
