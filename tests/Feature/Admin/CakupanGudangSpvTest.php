@@ -314,7 +314,7 @@ it('SPV tidak bisa menugaskan freelancer gudang lain', function () {
     $freelancerBtl = cgAkun(RoleEnum::WAREHOUSE->value, $this->btl);
 
     $this->actingAs($spv)
-        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancerBtl->id, 'target' => 10])
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancerBtl->id, 'target' => 10, ...jenisTugasUji()])
         ->assertForbidden();
 
     expect(DailyPackingTask::where('user_id', $freelancerBtl->id)->exists())->toBeFalse();
@@ -326,7 +326,7 @@ it('SPV tidak bisa menimpa tugas hari ini yang sudah bertagih gudang lain', func
     $tugas = cgTugas($freelancer, $this->btl);
 
     $this->actingAs($spv)
-        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10, ...jenisTugasUji()])
         ->assertForbidden();
 
     expect($tugas->fresh()->gudang_id)->toBe($this->btl->id);
@@ -337,7 +337,7 @@ it('SPV tetap bisa menugaskan freelancer gudangnya sendiri', function () {
     $freelancer = cgAkun(RoleEnum::WAREHOUSE->value, $this->smg);
 
     $this->actingAs($spv)
-        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10, ...jenisTugasUji()])
         ->assertSuccessful();
 
     expect(DailyPackingTask::where('user_id', $freelancer->id)->value('gudang_id'))->toBe($this->smg->id);
@@ -384,7 +384,7 @@ it('SPV yang belum ditempatkan tidak melihat dan tidak menugaskan apa pun di Mon
         ->and($data->json('spvBelumDitempatkan'))->toBeTrue();
 
     $this->actingAs($spv)
-        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10])
+        ->postJson('/admin/supervisor/assign-target', ['user_id' => $freelancer->id, 'target' => 10, ...jenisTugasUji()])
         ->assertForbidden();
     $this->actingAs($spv)
         ->deleteJson("/admin/supervisor/warehouse-monitor/task/{$tugasSmg->id}/delete")

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 
 class DailyPackingTask extends Model
@@ -17,6 +18,10 @@ class DailyPackingTask extends Model
         // sukses, tugasnya tetap tanpa gudang. Jebakan yang sama sudah dua kali kena di kolom
         // lain (pengiriman.mushaf_request_id, packing_boxes.gudang_id).
         'gudang_id',
+        // Jenis mushaf tugas (28/10/2026): resi berjenis lain ditolak saat scan; varian
+        // terjemahan hanya keterangan (resi belum menyimpan varian).
+        'jenis_quran_id',
+        'terjemahan',
         'tanggal_tugas',
         'total_target',
         'total_selesai',
@@ -45,6 +50,7 @@ class DailyPackingTask extends Model
         'expired_at' => 'datetime',
         'box_breakdown' => 'array',
         'has_shared_boxes' => 'boolean',
+        'terjemahan' => 'boolean',
     ];
 
     /**
@@ -100,6 +106,43 @@ class DailyPackingTask extends Model
     public function gudang()
     {
         return $this->belongsTo(Gudang::class);
+    }
+
+    /**
+     * Jenis mushaf yang boleh dikemas dalam tugas ini; null = tanpa batasan jenis.
+     */
+    public function jenisQuran(): BelongsTo
+    {
+        return $this->belongsTo(JenisQuran::class);
+    }
+
+    /**
+     * Label jenis tugas seperti di modal Assign Target ("A5 Terjemahan", "Iqro"); null bila
+     * tugas tidak dibatasi jenis.
+     */
+    public function labelJenis(): ?string
+    {
+        return $this->jenisQuran?->labelDenganVarian($this->terjemahan);
+    }
+
+    /**
+     * Apakah resi berjenis ini ditolak oleh tugas? Hanya JENIS yang dijaga; varian terjemahan
+     * belum tersimpan di resi sehingga tidak bisa diperiksa.
+     */
+    public function menolakJenis(?int $jenisQuranId): bool
+    {
+        return $this->jenis_quran_id !== null && (int) $this->jenis_quran_id !== (int) $jenisQuranId;
+    }
+
+    /**
+     * Pesan untuk staf yang memindai/mencatat jenis di luar tugasnya. Jenis resi dimuat ulang
+     * dari id-nya: relasi pada resi sering dimuat tanpa kolom kode_jenis.
+     */
+    public function pesanJenisBerbeda(?int $jenisResiId): string
+    {
+        $jenisLain = JenisQuran::find($jenisResiId)?->labelSingkat() ?? 'jenis lain';
+
+        return "Tugas Anda hari ini khusus {$this->labelJenis()}, sedangkan resi ini {$jenisLain}. Kemas resi ini lewat tugas jenis {$jenisLain}, atau minta SPV mengubah jenis tugas Anda.";
     }
 
     public function packingBoxes()

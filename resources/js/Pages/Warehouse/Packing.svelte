@@ -95,6 +95,10 @@
   let kardusHasil = null;
   let kardusError = '';
   $: jenisKardusTerpilih = jenisList.find((jenis) => String(jenis.id) === String(kardusJenisId)) || null;
+  // Tugas berjenis: server hanya mengirim jenis tugasnya, jadi langsung terpilih.
+  $: if (jenisList.length === 1 && kardusJenisId === '') {
+    kardusJenisId = jenisList[0].id;
+  }
   // Scan yang gagal, tersimpan di server (packing_scan_logs) — tahan refresh,
   // lengkap dengan siapa yang melakukan scan-nya. Tab History memuatnya saat dibuka.
   let scanLogs = [];
@@ -1072,7 +1076,7 @@
         <!-- Task Progress -->
         <div class="space-y-2">
           <div class="flex justify-between text-sm">
-            <span>Progress Tugas: {task.total_selesai}/{task.total_target} mushaf</span>
+            <span>Progress Tugas: {task.total_selesai}/{task.total_target} mushaf{#if task.jenis} · Khusus <span class="font-semibold">{task.jenis}</span>{/if}</span>
             <span>{task.progress_percentage}%</span>
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3">

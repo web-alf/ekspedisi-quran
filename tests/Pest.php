@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -78,6 +79,20 @@ function tibakan($resi): void
         DB::table('pengiriman')->where('id', $p->id)->update(['status_id' => $tiba->id]);
         $p->refresh();
     }
+}
+
+/**
+ * Isian jenis wajib untuk POST assign-target (sejak 28/10/2026). Uji yang tentang aturan
+ * LAIN (gudang, hierarki penugasan) memakai Iqro: jenis tanpa varian, jadi cukup satu id.
+ *
+ * @return array{jenis_quran_id: int}
+ */
+function jenisTugasUji(): array
+{
+    $iqra = JenisQuran::where('kode_jenis', 'IQRA')->first() ?? JenisQuran::factory()->iqra()->create();
+    $iqra->update(['is_active' => true]);
+
+    return ['jenis_quran_id' => $iqra->id];
 }
 
 function something()

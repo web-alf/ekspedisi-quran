@@ -75,6 +75,7 @@ it('menandai tugas yang di-assign SPV dengan gudang SPV itu', function () {
         ->postJson(route('admin.supervisor.assign-target'), [
             'user_id' => $freelancer->id,
             'target' => 50,
+            ...jenisTugasUji(),
         ])
         ->assertSuccessful()
         ->assertJsonPath('success', true);
@@ -96,6 +97,7 @@ it('menyebut gudang di pesan penugasan SPV', function () {
         ->postJson(route('admin.supervisor.assign-target'), [
             'user_id' => $freelancer->id,
             'target' => 30,
+            ...jenisTugasUji(),
         ])
         ->assertSuccessful();
 
@@ -120,11 +122,13 @@ it('tidak menghapus tagihan gudang saat penugasan datang dari akun tanpa gudang'
     $this->actingAs($spv)->postJson(route('admin.supervisor.assign-target'), [
         'user_id' => $freelancer->id,
         'target' => 20,
+        ...jenisTugasUji(),
     ]);
 
     $this->actingAs($admin)->postJson(route('admin.supervisor.assign-target'), [
         'user_id' => $freelancer->id,
         'target' => 25,
+        ...jenisTugasUji(),
     ]);
 
     $tugas = DailyPackingTask::where('user_id', $freelancer->id)->whereDate('tanggal_tugas', today())->first();
@@ -133,7 +137,10 @@ it('tidak menghapus tagihan gudang saat penugasan datang dari akun tanpa gudang'
         ->and($tugas->gudang_id)->toBe($semarang->id);
 });
 
-it('memberi tugas tanpa tagihan gudang bila penugasa tidak terpasang gudang', function () {
+it('menolak penugasan PJ untuk staf yang belum ditempatkan di gudang', function () {
+    // Sejak 28/10/2026 gudang tugas mengikuti penempatan staf (kolom gudang di modal
+    // dihapus). Dulu tugas ini lahir tanpa tagihan gudang: SPV tidak melihatnya di Monitor
+    // dan kerdusnya tercatat tanpa gudang.
     $managerRepacking = akunGudang(RoleEnum::MANAGER_REPACKING->value);
     $freelancer = akunGudang(RoleEnum::WAREHOUSE->value);
 
@@ -141,30 +148,28 @@ it('memberi tugas tanpa tagihan gudang bila penugasa tidak terpasang gudang', fu
         ->postJson(route('admin.supervisor.assign-target'), [
             'user_id' => $freelancer->id,
             'target' => 40,
+            ...jenisTugasUji(),
         ])
-        ->assertSuccessful();
+        ->assertStatus(422)
+        ->assertJsonPath('success', false);
 
-    // Manager Repacking tanpa gudang tetap bisa menugaskan; tagihan gudangnya
-    // saja yang kosong (dari akun yang terpasang gudang, tugas mewarisi).
-    $tugas = DailyPackingTask::where('user_id', $freelancer->id)->whereDate('tanggal_tugas', today())->first();
-
-    expect($tugas->total_target)->toBe(40)
-        ->and($tugas->gudang_id)->toBeNull();
+    expect(DailyPackingTask::where('user_id', $freelancer->id)->exists())->toBeFalse();
 });
 
-it('PJ memilih gudang saat assign dan tugas ikut bertagih gudang itu', function () {
+it('tugas dari PJ bertagih gudang penempatan staf, bukan gudang yang dikirim klien', function () {
     $boyolali = Gudang::byKode('BTL');
     // PJ sebenarnya = manager-repacking TANPA role spv-gudang.
     $pj = User::factory()->create(['is_active' => true]);
     $pj->assignRole(RoleEnum::MANAGER_REPACKING->value);
-    $freelancer = akunGudang(RoleEnum::WAREHOUSE->value);
+    $freelancer = akunGudang(RoleEnum::WAREHOUSE->value, $boyolali);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
 
     $this->actingAs($pj->fresh())
         ->postJson(route('admin.supervisor.assign-target'), [
             'user_id' => $freelancer->id,
             'target' => 60,
-            'gudang_id' => $boyolali->id,
+            'gudang_id' => Gudang::byKode('SMG')->id,
+            ...jenisTugasUji(),
         ])
         ->assertSuccessful()
         ->assertJsonPath('data.gudang', 'Gudang Boyolali');
@@ -208,6 +213,7 @@ it('menolak freelancer memakai endpoint penugasan', function () {
         ->postJson(route('admin.supervisor.assign-target'), [
             'user_id' => $teman->id,
             'target' => 10,
+            ...jenisTugasUji(),
         ])
         ->assertForbidden();
 

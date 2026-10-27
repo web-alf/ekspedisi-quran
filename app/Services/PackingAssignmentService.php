@@ -452,6 +452,11 @@ class PackingAssignmentService
             throw new \Exception(CakupanGudang::pesanTolak());
         }
 
+        // Tugas berjenis (28/10/2026): resi jenis lain tidak boleh masuk tugas ini.
+        if ($task->menolakJenis($pengiriman->jenis_quran_id)) {
+            throw new \Exception($task->pesanJenisBerbeda($pengiriman->jenis_quran_id));
+        }
+
         // Check if pengiriman is available for packing
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
         if ($pengiriman->status_id !== $packingStatusId) {
@@ -555,6 +560,10 @@ class PackingAssignmentService
 
             if (! $jenis) {
                 throw new \Exception('Jenis Quran tidak ditemukan.');
+            }
+
+            if ($task->menolakJenis($jenis->id)) {
+                throw new \Exception("Tugas Anda hari ini khusus {$task->labelJenis()}, bukan {$jenis->labelSingkat()}. Minta SPV mengubah jenis tugas Anda bila perlu mencatat kerdus jenis ini.");
             }
 
             $kapasitas = max(1, (int) $jenis->getDefaultCapacity());

@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class WarehouseMonitorController extends Controller
@@ -159,14 +160,13 @@ class WarehouseMonitorController extends Controller
             // SPV tanpa penempatan tidak melihat tugas mana pun dan tidak bisa menugaskan
             // sampai Manager Gudang menempatkannya.
             'spvBelumDitempatkan' => CakupanGudang::belumDitempatkan($user),
-            'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
             'warehouseUsers' => $this->getWarehouseUsers($tercakupGudang),
             'recentActivities' => $this->getRecentActivities(),
             'summary' => $this->getSummaryStats(),
             'kartuGudang' => $this->kartuGudang($tercakupGudang),
-            // PJ/admin boleh MEMILIH gudang saat assign (SPV tidak — otomatis
-            // gudangnya).
-            'pilihGudang' => ! $tercakupGudang && ! CakupanGudang::belumDitempatkan($user),
+            // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026). Gudang tugas tidak
+            // lagi dipilih: mengikuti penempatan staf yang ditugasi.
+            'pilihanJenis' => JenisQuran::pilihanTugasPacking(),
             'availablePengirimanCount' => $availablePengirimanCount,
             'stockInfo' => $stockInfo,
             // Add performance data to initial load
@@ -511,8 +511,18 @@ class WarehouseMonitorController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'target' => 'required|integer|min:1|max:200',
-            // Hanya bermakna bagi PJ/admin (bukan SPV terikat gudang).
-            'gudang_id' => 'nullable|integer|exists:gudang,id',
+            // Jenis mushaf tugas (28/10/2026): wajib. Varian terjemahan hanya untuk jenis
+            // bervarian (A5/A6) dan hanya keterangan — resi belum menyimpan varian.
+            'jenis_quran_id' => ['required', 'integer', Rule::exists('jenis_quran', 'id')->where('is_active', true)],
+            'terjemahan' => [
+                Rule::requiredIf(fn () => JenisQuran::find($request->integer('jenis_quran_id'))?->punyaVarianTerjemahan() ?? false),
+                'nullable',
+                'boolean',
+            ],
+        ], [
+            'jenis_quran_id.required' => 'Pilih jenis mushaf untuk tugas ini.',
+            'jenis_quran_id.exists' => 'Jenis mushaf tidak ditemukan atau tidak aktif.',
+            'terjemahan.required' => 'Pilih varian (terjemahan atau tanpa terjemahan) untuk jenis ini.',
         ]);
 
         if (CakupanGudang::belumDitempatkan(auth()->user())) {
@@ -543,11 +553,11 @@ class WarehouseMonitorController extends Controller
         // SPV tidak boleh menugaskan freelancer gudang lain atau menimpa tugas yang sudah
         // bertagih gudang lain: tagihannya akan ikut berpindah ke gudang SPV ini, dan kerdus
         // yang dibuat freelancer itu tercatat di gudang yang salah.
-        if ($gudangTercakup !== null) {
-            $gudangTugasHariIni = DailyPackingTask::where('user_id', $user->id)
-                ->whereDate('tanggal_tugas', today())
-                ->value('gudang_id');
+        $gudangTugasHariIni = DailyPackingTask::where('user_id', $user->id)
+            ->whereDate('tanggal_tugas', today())
+            ->value('gudang_id');
 
+        if ($gudangTercakup !== null) {
             $gudangLain = collect([$user->gudang_id, $gudangTugasHariIni])
                 ->filter()
                 ->contains(fn ($gudangId) => (int) $gudangId !== $gudangTercakup);
@@ -560,6 +570,22 @@ class WarehouseMonitorController extends Controller
             }
         }
 
+        // Gudang tugas mengikuti PENEMPATAN STAF yang ditugasi (keputusan 28/10/2026; kolom
+        // "Gudang penugasan" di modal dihapus). Staf yang belum ditempatkan: gudang SPV yang
+        // menugasi, lalu gudang tugas hari ini yang sudah ada. Tanpa ketiganya tugas ditolak —
+        // tugas tanpa gudang tidak terlihat SPV dan kerdusnya tercatat tanpa gudang.
+        $tagihan = $user->gudang_id ?? $gudangTercakup ?? $gudangTugasHariIni;
+
+        if ($tagihan === null) {
+            return response()->json([
+                'success' => false,
+                'message' => "{$user->name} belum ditempatkan di gudang mana pun. Tempatkan dulu lewat menu Penempatan Gudang.",
+            ], 422);
+        }
+
+        $jenis = JenisQuran::findOrFail($request->integer('jenis_quran_id'));
+        $terjemahan = $jenis->punyaVarianTerjemahan() ? $request->boolean('terjemahan') : null;
+
         try {
             // Allow update if task already exists
             $result = $this->assignmentService->assignDailyTaskToUserWithTarget(
@@ -569,50 +595,28 @@ class WarehouseMonitorController extends Controller
                 true // Allow update
             );
 
-            // Fase 2/3: tugas mewarisi gudang PENUGASANYA.
-            // - SPV terikat gudang → tugas bertagih gudangnya (SPV lain melihat
-            //   tugas itu di Monitor sesuai scoping);
-            // - PJ/admin (tanpa terikat gudang) boleh MEMILIH gudang lewat
-            //   gudang_id — kalau tidak memilih, tugas tak bertagih dan hanya
-            //   PJ/super-admin yang melihatnya di Monitor.
-            $penugasan = auth()->user();
-            $adalahSpvTercakup = $penugasan->hasRole(RoleEnum::SPV_GUDANG->value) && $penugasan->gudang_id !== null;
-            // SPV terikat gudang → tugas bertagih gudangnya. PJ/admin boleh memilih gudang;
-            // bila tidak memilih, tugas yang ditujukan ke SPV tetap bertagih gudang SPV itu
-            // (tanpa tagihan, SPV tidak akan melihatnya di Monitor yang ter-scope gudang).
-            $tagihan = $adalahSpvTercakup
-                ? $penugasan->gudang_id
-                : ($request->filled('gudang_id')
-                    ? (int) $request->gudang_id
-                    : ($user->hasRole(RoleEnum::SPV_GUDANG->value) ? $user->gudang_id : null));
-            $namaGudang = null;
-
-            if ($tagihan !== null) {
-                $gudang = Gudang::find($tagihan);
-                if (! $gudang) {
-                    throw new \Exception('Gudang penugasan tidak ditemukan.');
-                }
-                $namaGudang = $gudang->nama;
+            $gudang = Gudang::find($tagihan);
+            if (! $gudang) {
+                throw new \Exception('Gudang penugasan tidak ditemukan.');
             }
 
-            if ($tagihan !== null) {
-                DailyPackingTask::where('user_id', $user->id)
-                    ->whereDate('tanggal_tugas', today())
-                    ->update(['gudang_id' => $tagihan]);
-            }
+            DailyPackingTask::where('user_id', $user->id)
+                ->whereDate('tanggal_tugas', today())
+                ->update([
+                    'gudang_id' => $gudang->id,
+                    'jenis_quran_id' => $jenis->id,
+                    'terjemahan' => $terjemahan,
+                ]);
 
-            if ($namaGudang !== null) {
-                $result['gudang'] = $namaGudang;
-            }
+            $result['gudang'] = $gudang->nama;
+            $result['jenis'] = $jenis->labelDenganVarian($terjemahan);
 
             // Determine success message based on status
             $message = $result['status'] === 'target_updated'
                 ? "Target berhasil diperbarui menjadi {$result['new_target']} mushaf untuk {$user->name}"
                 : "Target {$request->target} mushaf berhasil di-assign ke {$user->name}";
 
-            if (! empty($result['gudang'])) {
-                $message .= " ({$result['gudang']})";
-            }
+            $message .= " — {$result['jenis']} ({$result['gudang']})";
 
             return response()->json([
                 'success' => true,
@@ -840,6 +844,7 @@ class WarehouseMonitorController extends Controller
         // tidak pernah muncul sebagai pekerja packing.
         $penugasan = auth()->user();
         $bolehMenugasiSpv = $this->adalahPj($penugasan);
+        $namaGudang = Gudang::pluck('nama', 'id');
 
         return User::query()
             ->where('is_active', true)
@@ -866,7 +871,13 @@ class WarehouseMonitorController extends Controller
                 $user->gudang?->nama ?? '',
                 $user->name,
             ])
-            ->map(function (User $user) {
+            ->map(function (User $user) use ($gudangTercakup, $namaGudang) {
+                // Gudang yang akan dipakai tugasnya — urutan yang sama dengan
+                // assignTargetToUser(): penempatan staf, gudang SPV, gudang tugas hari ini.
+                $gudangTugas = $user->gudang_id
+                    ?? $gudangTercakup
+                    ?? $user->dailyPackingTasks->first()?->gudang_id;
+
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
@@ -874,6 +885,8 @@ class WarehouseMonitorController extends Controller
                     // Fase 2 rombakan gudang: anggota gudang diberi label
                     // gudangnya (Semarang/Boyolali) agar tidak salah assign.
                     'gudang' => $user->gudang?->nama,
+                    // null = belum ditempatkan dan tidak ada cadangan: penugasan akan ditolak.
+                    'gudang_tugas' => $gudangTugas !== null ? $namaGudang->get($gudangTugas) : null,
                     // SPV ditandai supaya PJ tahu baris mana yang menerima beban kerja
                     // untuk diteruskan ke freelancer.
                     'peran' => $user->role_display,
@@ -906,7 +919,7 @@ class WarehouseMonitorController extends Controller
 
         return DailyPackingTask::whereDate('tanggal_tugas', today())
             ->when($gudangTercakup !== null, fn ($q) => $q->where('gudang_id', $gudangTercakup))
-            ->with(['user', 'packingBoxes', 'gudang'])
+            ->with(['user', 'packingBoxes', 'gudang', 'jenisQuran'])
             ->get()
             ->map(function ($task) {
                 return [
@@ -920,6 +933,12 @@ class WarehouseMonitorController extends Controller
                     // Fase 2 rombakan gudang: tugas bertagih gudang penugasa
                     // (Semarang/Boyolali); null = tidak bertagih.
                     'gudang' => $task->gudang?->nama,
+                    // "A5 Terjemahan" / "Iqro"; null = tugas tanpa batasan jenis.
+                    'jenis' => $task->labelJenis(),
+                    // Mengisi ulang pilihan modal saat target tugas ini diubah.
+                    'jenis_nilai' => $task->jenis_quran_id !== null
+                        ? JenisQuran::nilaiPilihanTugas($task->jenis_quran_id, $task->terjemahan)
+                        : null,
                     'target_quantity' => $task->total_target - ($task->sisa_kemarin ?? 0),
                     'carry_over_quantity' => $task->sisa_kemarin ?? 0,
                     'total_target' => $task->total_target,

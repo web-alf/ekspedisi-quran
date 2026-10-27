@@ -86,6 +86,8 @@ class DashboardController extends Controller
                     'started_at' => $todayTask->started_at?->format('H:i'),
                     'completed_at' => $todayTask->completed_at?->format('H:i'),
                     'assignment_method' => $todayTask->assignment_method ?? 'target_only',
+                    // "A5 Terjemahan" / "Iqro"; null = tanpa batasan jenis.
+                    'jenis' => $todayTask->labelJenis(),
                 ], $this->getBoxBasedAssignmentData($todayTask)) : null,
                 'activeBox' => $activeBox ? [
                     'id' => $activeBox->id,
@@ -131,7 +133,7 @@ class DashboardController extends Controller
                 'packingBoxes:id,daily_packing_task_id,kode_kerdus,status,jumlah_terisi,kapasitas',
                 'taskItems:id,daily_packing_task_id,pengiriman_id,is_packed,packed_at',
             ])
-            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'sisa_kemarin', 'status', 'started_at', 'completed_at')
+            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'sisa_kemarin', 'status', 'started_at', 'completed_at', 'jenis_quran_id', 'terjemahan')
             ->first();
 
         // DISABLED: Auto-assignment removed - only supervisor can assign tasks now
@@ -583,6 +585,7 @@ class DashboardController extends Controller
                     'status' => $todayTask->status,
                     'is_completed' => $todayTask->is_completed,
                     'assignment_method' => $todayTask->assignment_method ?? 'target_only',
+                    'jenis' => $todayTask->labelJenis(),
                 ], $this->getBoxBasedAssignmentData($todayTask));
             }
 

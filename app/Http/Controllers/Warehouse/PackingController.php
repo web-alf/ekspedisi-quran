@@ -69,7 +69,7 @@ class PackingController extends Controller
                     ->with('jenisQuran:id,nama_jenis,kode_jenis')
                     ->orderBy('id');
             }])
-            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'gudang_id')
+            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'gudang_id', 'jenis_quran_id', 'terjemahan')
             ->first();
 
         if (! $todayTask) {
@@ -137,6 +137,12 @@ class PackingController extends Controller
             ->orderBy('urutan_dalam_box', 'desc')
             ->get() : collect();
 
+        // Tugas berjenis (28/10/2026): pencatatan kerdus hanya menawarkan jenis tugasnya —
+        // jenis lain pasti ditolak server.
+        if ($todayTask->jenis_quran_id !== null) {
+            $jenisList = $jenisList->where('id', $todayTask->jenis_quran_id)->values();
+        }
+
         return Inertia::render('Warehouse/Packing', [
             'jenisList' => $jenisList,
             'task' => [
@@ -145,6 +151,8 @@ class PackingController extends Controller
                 'total_selesai' => $todayTask->total_selesai,
                 'remaining' => $todayTask->remaining,
                 'progress_percentage' => $todayTask->progress_percentage,
+                // "A5 Terjemahan" / "Iqro"; null = tanpa batasan jenis.
+                'jenis' => $todayTask->labelJenis(),
             ],
             'currentBox' => $currentBox ? [
                 'id' => $currentBox->id,
@@ -397,6 +405,18 @@ class PackingController extends Controller
                             'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor.',
                             $sanitizedQrData,
                             $noResi,
+                        );
+                    }
+
+                    // Tugas berjenis (28/10/2026): tolak resi jenis lain SEBELUM peringatan
+                    // ganti jenis — peringatan itu menawarkan "lanjut" yang pasti ditolak.
+                    if ($todayTask->menolakJenis($pengiriman->jenis_quran_id)) {
+                        return $this->scanFailed(
+                            'jenis_tugas_berbeda',
+                            $todayTask->pesanJenisBerbeda($pengiriman->jenis_quran_id),
+                            $sanitizedQrData,
+                            $noResi,
+                            $todayTask->id,
                         );
                     }
 

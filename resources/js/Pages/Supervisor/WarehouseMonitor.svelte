@@ -5,11 +5,14 @@
   import { router } from '@inertiajs/svelte'
   import axios from 'axios'
   import { toast } from '../../utils/notifications.js'
+  import { isianJenis, gudangTugas, bolehSimpanTarget } from '../../utils/penugasanTarget.js'
   
   export let warehouseUsers = []
   export let dailyTasks = []
   export let kartuGudang = null
-  export let pilihGudang = false
+  // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026): [{nilai, jenis_quran_id,
+  // terjemahan, label}]. Gudang tugas tidak dipilih — mengikuti penempatan staf.
+  export let pilihanJenis = []
   // SPV yang belum ditempatkan di gudang: tidak melihat tugas dan tidak bisa menugaskan.
   export let spvBelumDitempatkan = false
   export let recentActivities = []
@@ -47,7 +50,13 @@
 
   let selectedMonth = new Date().toISOString().slice(0, 7)
   let loading = false
-  let assignTarget = { user_id: '', target: 80 }
+  let assignTarget = { user_id: '', target: 80, jenis: '' }
+  $: gudangAssign = gudangTugas(warehouseUsers, assignTarget.user_id)
+  $: cekAssign = bolehSimpanTarget(
+    { userId: assignTarget.user_id, target: assignTarget.target, jenis: assignTarget.jenis },
+    pilihanJenis,
+    warehouseUsers,
+  )
 
   /**
    * Label kandidat di modal Assign Target: SPV ditandai karena PJ membagi beban kerja
@@ -230,37 +239,37 @@
     return icons[type] || 'information-circle'
   }
 
-  let gudangKerja = ''
-  function openAssignModal(userId = null) {
+  function openAssignModal(userId = null, jenisNilai = null) {
     if (spvBelumDitempatkan) {
       toast.error('Akun SPV Anda belum ditempatkan di gudang. Minta Manager Gudang menempatkan akun Anda.')
       return
     }
     if (userId) {
-      assignTarget.user_id = userId.toString()
+      // Angka, sama dengan nilai <option value={user.id}>: teks membuat staf tampil kosong.
+      assignTarget.user_id = userId
     }
+    // Mengubah target tugas yang sudah ada: jenisnya ikut terisi; selain itu dipilih ulang.
+    assignTarget.jenis = jenisNilai ?? ''
     showAssignTargetModal = true
   }
 
   async function handleAssignTarget() {
-    if (!assignTarget.user_id || !assignTarget.target) return
+    if (!cekAssign.boleh) return
 
     isSubmitting = true
     try {
       const response = await axios.post('/admin/supervisor/assign-target', {
         user_id: parseInt(assignTarget.user_id),
         target: parseInt(assignTarget.target),
-        // PJ/admin memilih gudang penugasannya; SPV dibiarkan kosong (otomatis
-        // gudang SPV itu di server).
-        gudang_id: pilihGudang && gudangKerja ? gudangKerja : null
+        // Gudang tidak dikirim: server memakai penempatan staf yang ditugasi.
+        ...isianJenis(pilihanJenis, assignTarget.jenis)
       })
 
       // Refresh data
       await refreshData()
 
       // Reset form and close modal
-      assignTarget = { user_id: '', target: 80 }
-      gudangKerja = ''
+      assignTarget = { user_id: '', target: 80, jenis: '' }
       showAssignTargetModal = false
 
       // Show success message from server
@@ -525,6 +534,8 @@
                     <h3 class="font-semibold text-gray-900 text-base sm:text-lg">
                       {task.user.name}{#if task.gudang}
                         <span class="ml-2 align-middle inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">{task.gudang}</span>
+                      {/if}{#if task.jenis}
+                        <span class="ml-1 align-middle inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">{task.jenis}</span>
                       {/if}
                     </h3>
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600 mt-1">
@@ -539,7 +550,7 @@
                       {task.status}
                     </span>
                     <button
-                      on:click={() => openAssignModal(task.user_id)}
+                      on:click={() => openAssignModal(task.user_id, task.jenis_nilai)}
                       class="text-blue-600 hover:text-blue-800 p-1 rounded transition-colors"
                       title="Update target"
                     >
@@ -887,26 +898,15 @@
                   <option value={user.id}>{labelKandidat(user)}</option>
                 {/each}
               </select>
+              <!-- Gudang tugas mengikuti penempatan staf (keputusan 28/10/2026). -->
+              {#if assignTarget.user_id}
+                {#if gudangAssign}
+                  <p class="mt-2 text-xs text-gray-600">Gudang tugas mengikuti penempatan staf: <span class="font-semibold text-gray-700">{gudangAssign}</span></p>
+                {:else}
+                  <p class="mt-2 text-xs text-red-700">Staf ini belum ditempatkan di gudang. Tempatkan dulu lewat menu Penempatan Gudang.</p>
+                {/if}
+              {/if}
             </div>
-
-            <!-- Gudang penugasan: hanya PJ/admin yang memilih; SPV otomatis
-                 gudangnya sendiri (server). -->
-            {#if pilihGudang}
-              <div class="mb-4">
-                <label for="assign-gudang" class="block text-base font-medium text-gray-700 mb-2">Gudang penugasan</label>
-                <select
-                  id="assign-gudang"
-                  bind:value={gudangKerja}
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base"
-                >
-                  <option value="" class="text-gray-500">-- (tanpa tagihan gudang) --</option>
-                  {#each gudangList as g}
-                    <option value={g.id}>{g.nama}</option>
-                  {/each}
-                </select>
-                <p class="text-xs text-gray-500 mt-1">Tanpa tagihan gudang, tugas hanya terlihat oleh PJ/super-admin.</p>
-              </div>
-            {/if}
 
             <!-- Target Input -->
             <div>
@@ -931,6 +931,26 @@
               </div>
             </div>
 
+            <!-- Jenis Mushaf (28/10/2026): resi jenis lain ditolak saat scan; varian
+                 terjemahan hanya keterangan karena resi belum menyimpan varian. -->
+            <div>
+              <label for="jenis-mushaf" class="block text-sm font-medium text-gray-700 mb-2">
+                Jenis Mushaf <span class="text-red-700">*</span>
+              </label>
+              <select
+                id="jenis-mushaf"
+                bind:value={assignTarget.jenis}
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base"
+                required
+              >
+                <option value="" class="text-gray-500">-- Pilih Jenis --</option>
+                {#each pilihanJenis as pilihan (pilihan.nilai)}
+                  <option value={pilihan.nilai}>{pilihan.label}</option>
+                {/each}
+              </select>
+              <p class="mt-2 text-xs text-gray-600">Staf hanya bisa memindai resi jenis ini selama tugas hari ini.</p>
+            </div>
+
             <!-- Action Buttons -->
             <div class="flex gap-4 pt-4">
               <button
@@ -943,7 +963,7 @@
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !assignTarget.user_id || !assignTarget.target}
+                disabled={isSubmitting || !cekAssign.boleh}
                 class="flex-1 px-6 py-3 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 {isSubmitting ? 'Menyimpan...' : 'Simpan Target'}

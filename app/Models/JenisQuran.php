@@ -93,6 +93,60 @@ class JenisQuran extends Model
     }
 
     /**
+     * Sebutan pendek jenis untuk pilihan tugas packing: kode ukuran (A5/A6), atau "Iqro".
+     */
+    public function labelSingkat(): string
+    {
+        return in_array($this->kode_jenis, ['IQRA', 'IQRO'], true) ? 'Iqro' : $this->kode_jenis;
+    }
+
+    /**
+     * "A5 Terjemahan" / "A5 Tanpa Terjemahan"; jenis tanpa varian cukup sebutan pendeknya.
+     */
+    public function labelDenganVarian(?bool $terjemahan): string
+    {
+        if (! $this->punyaVarianTerjemahan() || $terjemahan === null) {
+            return $this->labelSingkat();
+        }
+
+        return $this->labelSingkat().($terjemahan ? ' Terjemahan' : ' Tanpa Terjemahan');
+    }
+
+    /**
+     * Nilai satu pilihan jenis tugas: "<id jenis>:<1|0|->" (1 terjemahan, 0 tanpa, - tanpa varian).
+     */
+    public static function nilaiPilihanTugas(int $jenisQuranId, ?bool $terjemahan): string
+    {
+        return $jenisQuranId.':'.match ($terjemahan) {
+            true => '1',
+            false => '0',
+            null => '-',
+        };
+    }
+
+    /**
+     * Pilihan "Jenis Mushaf" di modal Assign Target Harian, berurutan: tiap jenis bervarian
+     * muncul dua kali (tanpa terjemahan lalu terjemahan), jenis lain sekali.
+     *
+     * @return array<int, array{nilai: string, jenis_quran_id: int, terjemahan: bool|null, label: string}>
+     */
+    public static function pilihanTugasPacking(): array
+    {
+        return static::active()
+            ->orderBy('id')
+            ->get(['id', 'kode_jenis'])
+            ->flatMap(fn (JenisQuran $jenis) => collect($jenis->punyaVarianTerjemahan() ? [false, true] : [null])
+                ->map(fn (?bool $terjemahan) => [
+                    'nilai' => static::nilaiPilihanTugas($jenis->id, $terjemahan),
+                    'jenis_quran_id' => $jenis->id,
+                    'terjemahan' => $terjemahan,
+                    'label' => $jenis->labelDenganVarian($terjemahan),
+                ]))
+            ->values()
+            ->all();
+    }
+
+    /**
      * Jenis aktif untuk form stok & transfer stok, beserta penanda `ada_varian` yang
      * menentukan apakah pilihan terjemahan ditawarkan.
      *

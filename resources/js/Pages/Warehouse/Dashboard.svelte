@@ -685,6 +685,10 @@
                 <span class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium {getStatusBadge(todayTask.status).class}">
                   {getStatusBadge(todayTask.status).text}
                 </span>
+                <!-- Jenis tugas (28/10/2026): resi jenis lain ditolak saat scan. -->
+                {#if todayTask.jenis}
+                  <p class="mt-3 text-sm text-gray-700">Khusus <span class="font-semibold text-gray-900">{todayTask.jenis}</span></p>
+                {/if}
               </div>
               
               <!-- Progress Display - Responsive -->

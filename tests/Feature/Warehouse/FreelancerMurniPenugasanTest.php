@@ -77,7 +77,7 @@ it('PJ bisa menugasi SPV gudang, dan tugasnya bertagih gudang SPV itu', function
     $spvBtl = fmAkun([RoleEnum::MANAGER_REPACKING->value, RoleEnum::SPV_GUDANG->value], $this->btl, 'SPV Boyolali');
 
     $this->actingAs($pj)
-        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $spvBtl->id, 'target' => 90])
+        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $spvBtl->id, 'target' => 90, ...jenisTugasUji()])
         ->assertSuccessful()
         ->assertJsonPath('success', true);
 
@@ -96,12 +96,12 @@ it('PJ tetap bisa menugasi freelancer, tetapi SPV tidak bisa menugasi sesama SPV
     $spvBtl = fmAkun([RoleEnum::MANAGER_REPACKING->value, RoleEnum::SPV_GUDANG->value], $this->btl);
 
     $this->actingAs($pj)
-        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $freelancer->id, 'target' => 40])
+        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $freelancer->id, 'target' => 40, ...jenisTugasUji()])
         ->assertSuccessful();
 
     // Beban kerja SPV datang dari PJ, bukan dari SPV lain.
     $this->actingAs($spvSmg)
-        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $spvBtl->id, 'target' => 40])
+        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $spvBtl->id, 'target' => 40, ...jenisTugasUji()])
         ->assertStatus(422)
         ->assertJsonPath('success', false);
 
@@ -112,7 +112,7 @@ it('menolak penugasan ke akun PJ sendiri', function () {
     $pj = fmAkun([RoleEnum::MANAGER_REPACKING->value, RoleEnum::WAREHOUSE->value], $this->smg);
 
     $this->actingAs($pj)
-        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $pj->id, 'target' => 40])
+        ->postJson(route('admin.supervisor.assign-target'), ['user_id' => $pj->id, 'target' => 40, ...jenisTugasUji()])
         ->assertStatus(422);
 
     expect(DailyPackingTask::where('user_id', $pj->id)->count())->toBe(0);
