@@ -1,6 +1,6 @@
 <script>
   /**
-   * Penghitung karakter di bawah isian doa (batas 100 karakter agar muat di label resi).
+   * Penghitung karakter di bawah isian doa (batas DOA_MAKS_KARAKTER agar muat di label resi).
    * Doa lama yang lebih panjang diberi peringatan: tercetak terpotong sampai diperpendek.
    */
   import { DOA_MAKS_KARAKTER, panjangDoa, doaTerlaluPanjang } from '../utils/doa.js';

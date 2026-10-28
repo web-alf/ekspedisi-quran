@@ -756,7 +756,7 @@
                     </select>
                   </div>
 
-                  <!-- Doa selebar penuh, 2 baris: doa sampai 100 karakter terbaca utuh saat diketik. -->
+                  <!-- Doa selebar penuh, 3 baris: doa sampai 250 karakter terbaca utuh saat diketik. -->
                   <div class="md:col-span-2">
                     <label for={`wakif-doa-${index}`} class="block text-sm font-medium text-gray-700 mb-1">
                       Doa <span class="text-gray-400">(Opsional)</span>
@@ -765,7 +765,7 @@
                       id={`wakif-doa-${index}`}
                       bind:value={detail.doa_request}
                       maxlength={DOA_MAKS_KARAKTER}
-                      rows="2"
+                      rows="3"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#eb3434] focus:border-transparent resize-none"
                       placeholder="Doa yang dititipkan"
                     ></textarea>

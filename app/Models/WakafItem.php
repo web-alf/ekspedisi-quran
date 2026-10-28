@@ -13,9 +13,10 @@ class WakafItem extends Model
 
     /**
      * Panjang doa yang muat di label resi 100×150 mm tanpa mendorong isi keluar label
-     * (keputusan pemilik 28/10/2026). Dipakai validasi input dan pemotongan di label.
+     * (keputusan pemilik 28/10/2026). Dipakai validasi input dan pemotongan di label;
+     * doa panjang dicetak dengan font lebih kecil (lihat kelasUkuranDoaLabel()).
      */
-    public const DOA_MAKS_KARAKTER = 100;
+    public const DOA_MAKS_KARAKTER = 250;
 
     /**
      * Doa untuk dicetak di label: doa lama yang lebih panjang dipotong dengan "…".
@@ -33,6 +34,22 @@ class WakafItem extends Model
         }
 
         return Str::limit($doa, self::DOA_MAKS_KARAKTER - 1, '…', preserveWords: true);
+    }
+
+    /**
+     * Kelas ukuran font doa di label resi, bertingkat menurut panjang doa yang dicetak:
+     * sampai 100 karakter 7pt (2 baris), sampai 180 karakter 6,5pt (3 baris),
+     * selebihnya 6pt (4 baris). Ditentukan di server agar cetak satuan dan massal sama.
+     */
+    public static function kelasUkuranDoaLabel(?string $doa): string
+    {
+        $panjang = mb_strlen((string) self::doaUntukLabel($doa));
+
+        return match (true) {
+            $panjang <= 100 => 'doa-normal',
+            $panjang <= 180 => 'doa-sedang',
+            default => 'doa-panjang',
+        };
     }
 
     protected $fillable = [

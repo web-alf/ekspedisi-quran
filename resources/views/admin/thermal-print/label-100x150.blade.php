@@ -131,7 +131,7 @@
             border: 1px solid #000;
             border-collapse: collapse;
             /* Jarak antarseksi cukup dari gap .label-content (dirapatkan 28/10/2026 supaya
-               nama/alamat panjang + doa 100 karakter tetap muat di 150 mm). */
+               nama/alamat panjang + doa panjang tetap muat di 150 mm). */
             margin-bottom: 0;
         }
         
@@ -177,11 +177,21 @@
             font-weight: bold;
         }
 
-        /* Doa: maks. 100 karakter (WakafItem::DOA_MAKS_KARAKTER) dalam dua baris; doa lama
-           yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
+        /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
+           menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
+           Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
             font-size: 7pt;
             line-height: 1.25;
+        }
+
+        .info-table .doa-col.doa-sedang {
+            font-size: 6.5pt;
+        }
+
+        .info-table .doa-col.doa-panjang {
+            font-size: 6pt;
+            line-height: 1.2;
         }
         
         .address-content {
@@ -430,7 +440,7 @@
                             @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
                             <tr>
                                 <td class="label-col">Doa:</td>
-                                <td class="value-col doa-col">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
+                                <td class="value-col doa-col {{ \App\Models\WakafItem::kelasUkuranDoaLabel($pengiriman->wakafItem->doa_request) }}">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
                             </tr>
                             @endif
                         </table>
