@@ -21,6 +21,17 @@
   export const flash = {};
   export const auth = {};
 
+  // Kartu angka mengikuti kartu statistik dashboard super-admin: kotak ikon beraksen di atas,
+  // angka besar, lalu label. Label di bawah angka tidak terpotong walau 6 kolom.
+  $: kartuStat = [
+    { label: 'Total Kerdus', nilai: stats.total_boxes, icon: 'cube', aksen: 'bg-gray-100 text-gray-600' },
+    { label: 'Kosong', nilai: stats.empty_boxes, icon: 'inbox-stack', aksen: 'bg-gray-100 text-gray-500' },
+    { label: 'Sedang Diisi', nilai: stats.filling_boxes, icon: 'arrow-path', aksen: 'bg-blue-50 text-blue-600' },
+    { label: 'Penuh', nilai: stats.full_boxes, icon: 'archive-box', aksen: 'bg-yellow-50 text-yellow-600' },
+    { label: 'Tersegel', nilai: stats.sealed_boxes, icon: 'lock-closed', aksen: 'bg-green-50 text-green-600' },
+    { label: 'Total Items', nilai: stats.total_items_packed, icon: 'book-open', aksen: 'bg-red-50 text-[#eb3434]' },
+  ];
+
   // State
   let searchQuery = filters.search || '';
   let selectedStatus = filters.status || '';
@@ -137,39 +148,19 @@
 
   <!-- Stats Cards -->
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Total Kerdus</div>
-      <div class="text-2xl font-bold text-gray-900">{stats.total_boxes || 0}</div>
-    </div>
-    
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Kosong</div>
-      <div class="text-2xl font-bold text-gray-500">{stats.empty_boxes || 0}</div>
-    </div>
-    
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Sedang Diisi</div>
-      <div class="text-2xl font-bold text-blue-600">{stats.filling_boxes || 0}</div>
-    </div>
-    
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Penuh</div>
-      <div class="text-2xl font-bold text-yellow-600">{stats.full_boxes || 0}</div>
-    </div>
-    
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Tersegel</div>
-      <div class="text-2xl font-bold text-green-600">{stats.sealed_boxes || 0}</div>
-    </div>
-    
-    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-      <div class="text-sm font-medium text-gray-600">Total Items</div>
-      <div class="text-2xl font-bold text-[#eb3434]">{stats.total_items_packed || 0}</div>
-    </div>
+    {#each kartuStat as kartu (kartu.label)}
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 {kartu.aksen}">
+          <HeroIcon name={kartu.icon} class="w-5 h-5" />
+        </div>
+        <p class="text-xl md:text-2xl font-bold text-gray-900">{kartu.nilai || 0}</p>
+        <p class="text-xs md:text-sm text-gray-600">{kartu.label}</p>
+      </div>
+    {/each}
   </div>
 
   <!-- Filters -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-6">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
     <h3 class="text-lg font-semibold text-gray-900 mb-4">Filter & Pencarian</h3>
     
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -286,7 +277,7 @@
   </div>
 
   <!-- Ringkasan Selesai Packing (per jenis: isi 1 doz berbeda tiap ukuran) -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-5 mb-6">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
       <div>
         <h3 class="text-sm font-semibold text-gray-900">Total Al-Qur'an Selesai Packing</h3>
@@ -321,7 +312,7 @@
   </div>
 
   <!-- Boxes Table -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-200">
       <h3 class="text-lg font-semibold text-gray-900">Daftar Kerdus</h3>
     </div>

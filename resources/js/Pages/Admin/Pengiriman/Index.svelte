@@ -829,41 +829,42 @@
   
   <TabNavigation {currentMode} />
   
-  <!-- Statistics Cards -->
+  <!-- Statistics Cards. Ikon di atas angka sampai layar xl: di samping label, ikon + sidebar
+       menyisakan kolom terlalu sempit dan label terpotong ("Pe…", "Dal…"). -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6">
     {#if stageVisibility?.restricted}
       <!-- Manager: tahap awal gudang tidak ditampilkan, diganti Selesai Packing -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-        <div class="flex items-center">
+        <div class="flex flex-col xl:flex-row xl:items-center gap-3 xl:gap-4">
           <div class="w-10 h-10 md:w-12 md:h-12 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
             <HeroIcon name="archive-box" class="w-5 h-5 md:w-6 md:h-6" />
           </div>
-          <div class="ml-3 md:ml-4 min-w-0 flex-1">
-            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Selesai Packing</p>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600">Selesai Packing</p>
             <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.selesai_packing || 0}</p>
           </div>
         </div>
       </div>
     {:else}
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-        <div class="flex items-center">
+        <div class="flex flex-col xl:flex-row xl:items-center gap-3 xl:gap-4">
           <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
             <HeroIcon name="cube" class="w-5 h-5 md:w-6 md:h-6" />
           </div>
-          <div class="ml-3 md:ml-4 min-w-0 flex-1">
-            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Pemesanan</p>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600">Pemesanan</p>
             <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.pemesanan || 0}</p>
           </div>
         </div>
       </div>
 
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-        <div class="flex items-center">
+        <div class="flex flex-col xl:flex-row xl:items-center gap-3 xl:gap-4">
           <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center text-yellow-600">
             <HeroIcon name="inbox-stack" class="w-5 h-5 md:w-6 md:h-6" />
           </div>
-          <div class="ml-3 md:ml-4 min-w-0 flex-1">
-            <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Proses Packing</p>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs md:text-sm font-medium text-gray-600">Proses Packing</p>
             <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.packing || 0}</p>
           </div>
         </div>
@@ -871,24 +872,24 @@
     {/if}
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-      <div class="flex items-center">
+      <div class="flex flex-col xl:flex-row xl:items-center gap-3 xl:gap-4">
         <div class="w-10 h-10 md:w-12 md:h-12 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
           <HeroIcon name="truck" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
-        <div class="ml-3 md:ml-4 min-w-0 flex-1">
-          <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Dalam Pengiriman</p>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs md:text-sm font-medium text-gray-600">Dalam Pengiriman</p>
           <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.pengiriman || 0}</p>
         </div>
       </div>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
-      <div class="flex items-center">
+      <div class="flex flex-col xl:flex-row xl:items-center gap-3 xl:gap-4">
         <div class="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
           <HeroIcon name="check-circle" class="w-5 h-5 md:w-6 md:h-6" />
         </div>
-        <div class="ml-3 md:ml-4 min-w-0 flex-1">
-          <p class="text-xs md:text-sm font-medium text-gray-600 truncate">Diterima</p>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs md:text-sm font-medium text-gray-600">Diterima</p>
           <p class="text-lg md:text-2xl font-bold text-gray-900">{stats.diterima || 0}</p>
         </div>
       </div>

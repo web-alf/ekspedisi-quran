@@ -1000,7 +1000,7 @@
          tanpa gudang, kerdus dan isinya tidak punya lokasi sama sekali. Sekali dipilih,
          gudangnya tersimpan di tugas dan semua kerdus berikutnya mewarisinya. -->
     {#if task && !gudangTugas && gudangList.length > 0}
-      <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-4 sm:mb-6">
         <div class="flex flex-col sm:flex-row sm:items-end gap-3">
           <div class="flex-1">
             <h3 class="font-semibold text-gray-900">Gudang tugas ini belum ditentukan</h3>
@@ -1035,12 +1035,14 @@
 
     {#if noTaskMessage}
       <!-- No Task State -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sm:p-8 text-center">
         <div class="flex flex-col items-center">
-          <HeroIcon name="cube" class="w-16 h-16 text-gray-400 mb-4" />
-          <h2 class="text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
-          <p class="text-gray-600 mb-6 max-w-md">{noTaskMessage}</p>
-          <div class="flex space-x-4">
+          <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+            <HeroIcon name="cube" class="w-8 h-8 text-gray-400" />
+          </div>
+          <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
+          <p class="text-sm text-gray-600 mb-6 max-w-md">{noTaskMessage}</p>
+          <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <a 
               href="/admin/warehouse"
               class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
@@ -1059,11 +1061,11 @@
     {:else}
       <!-- Normal Packing Interface -->
       <!-- Header with Progress -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Proses Packing</h1>
-            <p class="text-gray-600">Scan QR code mushaf untuk packing</p>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Proses Packing</h1>
+            <p class="text-sm text-gray-500 mt-1">Scan QR code mushaf untuk packing</p>
           </div>
           <a 
             href="/admin/warehouse" 
@@ -1091,7 +1093,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Left: Scanner -->
         <div class="lg:col-span-2">
-          <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
             <!-- Tabs - Mobile Optimized -->
             <div class="flex space-x-1 mb-6 {isMobileDevice ? 'text-sm' : ''}">
               <button
@@ -1468,8 +1470,8 @@
         <!-- Right: Box Info & Items -->
         <div class="space-y-6">
           <!-- Current Box -->
-          <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Kerdus Aktif</h2>
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Kerdus Aktif</h2>
             
             <div class="space-y-4">
               <div class="bg-orange-50 rounded-lg p-4 border border-orange-200">
@@ -1533,8 +1535,8 @@
           
           
           <!-- Packed Items in Current Box -->
-          <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Item dalam Kerdus</h2>
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Item dalam Kerdus</h2>
             
             {#if packedItems.length > 0}
               <div class="space-y-2 max-h-64 overflow-y-auto">

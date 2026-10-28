@@ -277,24 +277,23 @@
   </div>
   {:else}
   <div class="max-w-7xl mx-auto space-y-6">
-    <!-- Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900">Laporan Performa</h1>
-          <p class="text-gray-600">Pantau kinerja packing Anda</p>
-        </div>
-        <a 
-          href="/admin/warehouse" 
-          class="text-gray-600 hover:text-gray-900"
-        >
-          <HeroIcon name="x-mark" class="w-6 h-6" />
-        </a>
+    <!-- Header: judul di luar kartu, sama dengan tampilan SPV/Manager di atas -->
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Laporan Performa</h1>
+        <p class="text-sm sm:text-base text-gray-600 mt-1">Pantau kinerja packing Anda</p>
       </div>
+      <a
+        href="/admin/warehouse"
+        class="p-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+        aria-label="Kembali ke dashboard"
+      >
+        <HeroIcon name="x-mark" class="w-5 h-5" />
+      </a>
     </div>
     
     <!-- Period Selector -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <div class="flex space-x-1">
         <button
           on:click={() => selectedPeriod = 'week'}
@@ -317,61 +316,28 @@
       </div>
     </div>
     
-    <!-- Performance Overview -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Total Target</p>
-            <p class="text-2xl font-bold text-gray-900">{performanceMetrics.totalTarget}</p>
+    <!-- Performance Overview: pola kartu statistik dashboard super-admin (ikon di atas) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {#each [
+        { label: 'Total Target', nilai: performanceMetrics.totalTarget, icon: 'clipboard-document-check', aksen: 'bg-blue-50 text-blue-600', warnaNilai: 'text-gray-900' },
+        { label: 'Total Selesai', nilai: performanceMetrics.totalAchieved, icon: 'check-circle', aksen: 'bg-green-50 text-green-600', warnaNilai: 'text-gray-900' },
+        { label: 'Achievement Rate', nilai: performanceMetrics.achievementRate + '%', icon: 'arrow-trending-up', aksen: 'bg-purple-50 text-purple-600', warnaNilai: performanceMetrics.achievementRate >= 80 ? 'text-green-600' : performanceMetrics.achievementRate >= 60 ? 'text-yellow-600' : 'text-red-600' },
+        { label: 'Rata-rata/Hari', nilai: performanceMetrics.averageDaily, icon: 'chart-bar', aksen: 'bg-orange-50 text-orange-600', warnaNilai: 'text-gray-900' },
+      ] as kartu (kartu.label)}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 {kartu.aksen}">
+            <HeroIcon name={kartu.icon} class="w-5 h-5" />
           </div>
-          <div class="p-3 bg-blue-100 rounded-full">
-            <HeroIcon name="clipboard-document-check" class="w-6 h-6 text-blue-600" />
-          </div>
+          <p class="text-xl md:text-2xl font-bold {kartu.warnaNilai}">{kartu.nilai}</p>
+          <p class="text-xs md:text-sm text-gray-600">{kartu.label}</p>
         </div>
-      </div>
-      
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Total Selesai</p>
-            <p class="text-2xl font-bold text-green-600">{performanceMetrics.totalAchieved}</p>
-          </div>
-          <div class="p-3 bg-green-100 rounded-full">
-            <HeroIcon name="check-circle" class="w-6 h-6 text-green-600" />
-          </div>
-        </div>
-      </div>
-      
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Achievement Rate</p>
-            <p class="text-2xl font-bold {performanceMetrics.achievementRate >= 80 ? 'text-green-600' : performanceMetrics.achievementRate >= 60 ? 'text-yellow-600' : 'text-red-600'}">{performanceMetrics.achievementRate}%</p>
-          </div>
-          <div class="p-3 bg-purple-100 rounded-full">
-            <HeroIcon name="arrow-trending-up" class="w-6 h-6 text-purple-600" />
-          </div>
-        </div>
-      </div>
-      
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-600">Rata-rata/Hari</p>
-            <p class="text-2xl font-bold text-gray-900">{performanceMetrics.averageDaily}</p>
-          </div>
-          <div class="p-3 bg-orange-100 rounded-full">
-            <HeroIcon name="chart-bar" class="w-6 h-6 text-orange-600" />
-          </div>
-        </div>
-      </div>
+      {/each}
     </div>
     
     <!-- Monthly Performance Badge -->
     {#if performance}
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Performa Bulan Ini</h2>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Performa Bulan Ini</h2>
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600">Level Performa</p>
@@ -393,10 +359,10 @@
     {/if}
     
     <!-- Weekly Comparison -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Perbandingan Mingguan</h2>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+      <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Perbandingan Mingguan</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="border border-gray-200 rounded-lg p-4">
+        <div class="border border-gray-200 rounded-xl p-4">
           <h3 class="font-medium text-gray-900 mb-3">Minggu Ini</h3>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
@@ -418,7 +384,7 @@
           </div>
         </div>
         
-        <div class="border border-gray-200 rounded-lg p-4">
+        <div class="border border-gray-200 rounded-xl p-4">
           <h3 class="font-medium text-gray-900 mb-3">Minggu Lalu</h3>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
@@ -466,8 +432,8 @@
     {/if}
     
     <!-- Recent Tasks History -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Riwayat Tugas</h2>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+      <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Riwayat Tugas</h2>
       
       {#if filteredTasks.length > 0}
         <div class="overflow-x-auto">
