@@ -169,6 +169,9 @@
             color: #333;
             text-align: left;
             padding-left: 1mm;
+            /* Label kolom tidak boleh patah baris: "HP Donatur:" yang terbelah di
+               label sempit terbaca seperti baris kosong. */
+            white-space: nowrap;
         }
         
         .info-table .value-col {

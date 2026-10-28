@@ -176,11 +176,14 @@
         }
         
         .info-table .label-col {
-            width: 16mm;
+            /* 16mm membuat "HP Donatur:" patah dua baris di label 90 mm sehingga
+               tampak seperti baris "Donatur:" kosong (temuan 28/10/2026). */
+            width: 19mm;
             font-weight: bold;
             color: #333;
             text-align: left;
             padding-left: 0.8mm;
+            white-space: nowrap;
         }
         
         .info-table .value-col {
