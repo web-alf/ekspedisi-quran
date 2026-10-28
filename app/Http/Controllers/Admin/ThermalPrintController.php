@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\UkuranLabelResi;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CetakResiMassalRequest;
 use App\Models\PackingBox;
 use App\Models\Pengiriman;
 use App\Models\Setting;
@@ -13,8 +15,8 @@ use Illuminate\Http\Request;
 class ThermalPrintController extends Controller
 {
     /**
-     * Generate thermal label untuk single pengiriman
-     * Ukuran: 100×150 mm (portrait)
+     * Generate thermal label untuk single pengiriman.
+     * Ukuran otomatis dari jenis mushaf: 100×150 mm, atau 90×130 mm untuk A6 (UkuranLabelResi).
      */
     public function printSingle(Pengiriman $pengiriman, Request $request)
     {
@@ -31,7 +33,7 @@ class ThermalPrintController extends Controller
             'contactAddress' => $contactAddress ? $contactAddress->value : 'Alamat kontak tidak tersedia',
         ];
 
-        return view('admin.thermal-print.label-100x150', $data);
+        return view(UkuranLabelResi::untukPengiriman($pengiriman)->templateSatuan(), $data);
     }
 
     /**
@@ -77,18 +79,37 @@ class ThermalPrintController extends Controller
 
     /**
      * Generate thermal labels untuk multiple pengiriman
-     * Ukuran: 100×150 mm (portrait)
+     * Ukuran otomatis dari jenis mushaf. Printer thermal hanya memuat satu ukuran rol, jadi
+     * pilihan campuran (mis. A5 + A6) dibawa ke halaman pilih ukuran dan dicetak per ukuran.
      */
-    public function printBulk(Request $request)
+    public function printBulk(CetakResiMassalRequest $request)
     {
-        $request->validate([
-            'pengiriman_ids' => 'required|array',
-            'pengiriman_ids.*' => 'exists:pengiriman,id',
-        ]);
-
         $pengirimanList = Pengiriman::with(['wakafItem', 'jenisQuran', 'donatur', 'status'])
-            ->whereIn('id', $request->pengiriman_ids)
+            ->whereIn('id', $request->validated('pengiriman_ids'))
             ->get();
+
+        $kelompokUkuran = $pengirimanList->groupBy(fn (Pengiriman $pengiriman) => UkuranLabelResi::untukPengiriman($pengiriman)->value);
+        $ukuranDiminta = UkuranLabelResi::tryFrom((string) $request->validated('ukuran'));
+
+        if ($ukuranDiminta === null && $kelompokUkuran->count() > 1) {
+            return view('admin.thermal-print.bulk-pilih-ukuran', [
+                'kelompokUkuran' => collect(UkuranLabelResi::cases())
+                    ->filter(fn (UkuranLabelResi $ukuran) => $kelompokUkuran->has($ukuran->value))
+                    ->map(fn (UkuranLabelResi $ukuran) => [
+                        'ukuran' => $ukuran,
+                        'pengirimanList' => $kelompokUkuran->get($ukuran->value),
+                    ])
+                    ->values(),
+                'totalDipilih' => $pengirimanList->count(),
+            ]);
+        }
+
+        $ukuran = $ukuranDiminta ?? UkuranLabelResi::from($kelompokUkuran->keys()->first());
+        $pengirimanList = $kelompokUkuran->get($ukuran->value, collect());
+
+        if ($pengirimanList->isEmpty()) {
+            abort(404, 'Tidak ada resi berukuran label '.$ukuran->label().' di pilihan ini.');
+        }
 
         // Get logo and contact settings
         $appLogo = Setting::where('key', 'app_logo')->first();
@@ -103,15 +124,17 @@ class ThermalPrintController extends Controller
             'contactAddress' => $contactAddress ? $contactAddress->value : 'Alamat kontak tidak tersedia',
         ];
 
-        return view('admin.thermal-print.bulk-100x150', $data);
+        return view($ukuran->templateMassal(), $data);
     }
 
     /**
      * Generate thermal label preview
-     * Ukuran: 100×150 mm (portrait)
+     * Ukuran: 100×150 mm, atau 90×130 mm (label A6) dengan ?ukuran=90x130.
      */
     public function preview(Request $request)
     {
+        $ukuran = UkuranLabelResi::tryFrom((string) $request->query('ukuran')) ?? UkuranLabelResi::Standar;
+
         // Get logo and contact settings
         $appLogo = Setting::where('key', 'app_logo')->first();
         $contactAddress = Setting::where('key', 'contact_address')->first();
@@ -133,7 +156,7 @@ class ThermalPrintController extends Controller
                 'doa_request' => 'Semoga Allah memberikan keberkahan dan kemudahan',
             ],
             'jenisQuran' => (object) [
-                'nama_jenis' => 'Al-Quran Ukuran A5',
+                'nama_jenis' => $ukuran === UkuranLabelResi::Kecil ? 'Al-Quran A6' : 'Al-Quran Ukuran A5',
             ],
             'status' => (object) [
                 'nama' => 'Proses Packing',
@@ -154,7 +177,7 @@ class ThermalPrintController extends Controller
             'contactAddress' => $contactAddress ? $contactAddress->value : 'Alamat kontak tidak tersedia',
         ];
 
-        return view('admin.thermal-print.label-100x150', $data);
+        return view($ukuran->templateSatuan(), $data);
     }
 
     /**

@@ -715,7 +715,7 @@
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-4 sm:space-y-0">
       <div>
         <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">Generate QR Code & Print Thermal</h2>
-        <p class="text-sm md:text-base text-gray-600">Generate QR Code untuk pengiriman Al-Quran dari <span class="font-semibold text-blue-600">semua status aktif</span> dan print label thermal 100×150mm</p>
+        <p class="text-sm md:text-base text-gray-600">Generate QR Code untuk pengiriman Al-Quran dari <span class="font-semibold text-blue-600">semua status aktif</span> dan print label thermal (ukuran otomatis per jenis: 10×15 cm, A6 9×13 cm)</p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           <div class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm bg-blue-100 text-blue-800">
             <HeroIcon name="information-circle" class="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
@@ -724,7 +724,7 @@
           </div>
           <div class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm bg-green-100 text-green-800">
             <HeroIcon name="printer" class="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-            <span class="hidden sm:inline">Thermal Print 100×150mm dengan data wakif</span>
+            <span class="hidden sm:inline">Thermal Print 10×15 / 9×13 cm dengan data wakif</span>
             <span class="sm:hidden">Thermal Print</span>
           </div>
         </div>
