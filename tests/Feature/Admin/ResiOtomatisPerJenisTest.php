@@ -171,3 +171,36 @@ it('label 9 × 13 cm memuat jenis di kotak resi, doa bertingkat, tanpa mengulang
     expect($satuan)->toMatch('/\.thermal-label \{\s*width: 86mm;\s*height: 126mm;/')
         ->and($massal)->toMatch('/\.thermal-label \{\s*width: 90mm;\s*height: 130mm;/');
 });
+
+it('label 10 × 15 cm: header 14 mm, doa +1px, ruang sisa ke kotak Jenis Wakaf', function () {
+    $resi = (object) [
+        'no_resi' => 'EQ-2026-00989',
+        'donatur' => (object) ['nama_donatur' => 'Ahmad', 'kode_donatur' => 'DON001'],
+        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => 'Semoga berkah'],
+        'jenisQuran' => (object) ['nama_jenis' => 'Iqro'],
+        'qr_code_path' => null,
+    ];
+    $data = ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
+
+    $satuan = view('admin.thermal-print.label-100x150', [...$data, 'pengiriman' => $resi])->render();
+    $massal = view('admin.thermal-print.bulk-100x150', [...$data, 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+
+    foreach ([$satuan, $massal] as $html) {
+        expect($html)->toContain('<div class="jenis-wakaf-nama">Iqro</div>')
+            ->and($html)->toMatch('/\.jenis-wakaf \{\s*flex: 1;/')
+            ->and($html)->toMatch('/\.logo-container \{\s*width: 100%;\s*height: 14mm;/')
+            ->and($html)->not->toContain('<td class="label-col">Jenis:</td>')
+            ->and($html)->toContain('const SKALA_MAKS = 1.35;')
+            ->and($html)->toContain('const CADANGAN_HEADER_MM = 6;')
+            ->and(strpos($html, 'SKALA_MAKS'))->toBeLessThan(strpos($html, 'window.print();'));
+
+        foreach (['12pt', '10pt', '9pt', '8pt'] as $ukuran) {
+            expect($html)->toContain("font-size: calc({$ukuran} * var(--skala, 1));");
+        }
+
+        foreach (['7pt', '6.5pt', '6pt'] as $ukuranDoa) {
+            expect($html)->toContain("font-size: calc({$ukuranDoa} * var(--skala, 1) + 1px);")
+                ->and($html)->not->toContain("font-size: calc({$ukuranDoa} * var(--skala, 1));");
+        }
+    }
+});

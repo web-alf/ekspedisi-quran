@@ -69,9 +69,12 @@
             border-bottom: 2px solid #000;
         }
         
+        /* Header dipendekkan 20 → 14 mm (28/10/2026); logo tetap ±43 mm lebar. Ruang 6 mm
+           yang dihemat diberikan ke kotak Jenis Wakaf, bukan ke ukuran huruf
+           (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 20mm;
+            height: 14mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -100,13 +103,13 @@
         }
         
         .resi-label {
-            font-size: 9pt;
+            font-size: calc(9pt * var(--skala, 1));
             color: #666;
             font-weight: bold;
         }
         
         .resi-number {
-            font-size: 12pt;
+            font-size: calc(12pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
             letter-spacing: 0.3px;
@@ -114,7 +117,7 @@
         }
         
         .resi-date {
-            font-size: 8pt;
+            font-size: calc(8pt * var(--skala, 1));
             color: #666;
         }
         
@@ -150,7 +153,7 @@
         
         .section-header {
             background: #f0f0f0;
-            font-size: 9pt;
+            font-size: calc(9pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
             padding: 1mm;
@@ -158,6 +161,32 @@
             border-bottom: 1px solid #000;
         }
         
+        /* Jenis Wakaf jadi seksi terakhir yang mengisi sisa tinggi label sampai garis bawah.
+           Ruang sisa lainnya dipakai bersama lewat --skala (partials/skala-isi-label), jadi
+           nama jenis tetap di bawah nomor resi dalam urutan besar huruf (28/10/2026). */
+        .jenis-wakaf {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #000;
+        }
+
+        .jenis-wakaf .section-header {
+            display: block;
+        }
+
+        .jenis-wakaf-nama {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.3mm 1.5mm;
+            font-size: calc(10pt * var(--skala, 1));
+            line-height: 1.1;
+            text-align: center;
+            word-break: break-word;
+        }
+
         .section-content {
             padding: 0.5mm;
         }
@@ -166,7 +195,7 @@
         .info-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 8pt;
+            font-size: calc(8pt * var(--skala, 1));
         }
         
         .info-table td {
@@ -192,18 +221,19 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
+           Label 10 × 15 cm menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
-            font-size: 7pt;
+            font-size: calc(7pt * var(--skala, 1) + 1px);
             line-height: 1.25;
         }
 
         .info-table .doa-col.doa-sedang {
-            font-size: 6.5pt;
+            font-size: calc(6.5pt * var(--skala, 1) + 1px);
         }
 
         .info-table .doa-col.doa-panjang {
-            font-size: 6pt;
+            font-size: calc(6pt * var(--skala, 1) + 1px);
             line-height: 1.2;
         }
         
@@ -424,23 +454,13 @@
         </table>
         
         <!-- Jenis Wakaf -->
-        <table class="section-table">
-            <tr>
-                <td class="section-header">Jenis Wakaf</td>
-            </tr>
-            <tr>
-                <td class="section-content">
-                    <table class="info-table">
-                        <tr>
-                            <td class="label-col">Jenis:</td>
-                            <td class="value-col">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran Ukuran A5' }}</td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        <div class="jenis-wakaf">
+            <div class="section-header">Jenis Wakaf</div>
+            <div class="jenis-wakaf-nama">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran Ukuran A5' }}</div>
+        </div>
     </div>
 </div>@endforeach</div>
+@include('admin.thermal-print.partials.skala-isi-label')
 <script>
 // Auto print when images are fully loaded
 window.addEventListener('load', function() {

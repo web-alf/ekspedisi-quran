@@ -17,7 +17,8 @@ use Spatie\Permission\PermissionRegistrar;
  *
  * Doa lebih panjang dulu mendorong bagian "Jenis Wakaf" keluar kotak label. Kini:
  * - doa BARU atau yang DIUBAH maksimal 250 karakter di semua jalur input;
- * - di label, font doa mengecil bertingkat: ≤100 karakter 7pt, ≤180 karakter 6,5pt, selebihnya 6pt;
+ * - di label, font doa mengecil bertingkat: ≤100 karakter 7pt, ≤180 karakter 6,5pt, selebihnya 6pt
+ *   (ukuran dasar; label 10 × 15 cm menambah 1px dan membesarkannya rata lewat --skala bila ruang tersisa);
  * - doa lama yang lebih panjang tetap tersimpan dan diterima selama tidak diubah (form edit
  *   mengirim ulang doa yang ada), tetapi dicetak terpotong dengan "…".
  */
@@ -191,8 +192,8 @@ it('mencetak kelas ukuran font doa yang sama di label satuan dan massal', functi
 
     foreach ([$satuan, $massal] as $html) {
         expect($html)->toContain("class=\"value-col doa-col {$kelas}\"")
-            ->and($html)->toMatch('/\.doa-col\.doa-sedang \{\s*font-size: 6\.5pt;/')
-            ->and($html)->toMatch('/\.doa-col\.doa-panjang \{\s*font-size: 6pt;/');
+            ->and($html)->toMatch('/\.doa-col\.doa-sedang \{\s*font-size: calc\(6\.5pt \* var\(--skala, 1\) \+ 1px\);/')
+            ->and($html)->toMatch('/\.doa-col\.doa-panjang \{\s*font-size: calc\(6pt \* var\(--skala, 1\) \+ 1px\);/');
     }
 })->with([
     [90, 'doa-normal'],
