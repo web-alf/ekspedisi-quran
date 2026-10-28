@@ -37,13 +37,16 @@ class StokMushafController extends Controller
     public function index()
     {
         $user = auth()->user();
-        $tercakupGudang = $user->hasRole(RoleEnum::SPV_GUDANG->value);
+        // Satu cakupan untuk kartu, daftar, dan pergerakan: SPV dan freelancer hanya
+        // gudangnya sendiri, akun tanpa gudang tidak melihat apa pun (User::cakupanGudangStok).
+        $cakupan = $user->cakupanGudangStok();
+        $tercakupGudang = $cakupan !== null;
 
         // Kartu "Isi Stok" memakai SUMBER & KOMPONEN yang sama dengan dashboard
         // (RingkasanGudangService::stokKartu + KartuStok) supaya bentuk kartunya identik
         // di kedua halaman — bukan tabel atau kartu rancangan sendiri (27/10/2026).
         $gudangKartu = Gudang::query()
-            ->when($tercakupGudang, fn ($q) => $q->whereKey($user->gudang_id))
+            ->when($tercakupGudang, fn ($q) => $q->whereKey($cakupan))
             ->orderBy('id')
             ->get(['id', 'kode', 'nama'])
             ->map(fn (Gudang $g) => [
@@ -60,7 +63,7 @@ class StokMushafController extends Controller
             'jenisList' => JenisQuran::daftarUntukFormStok(),
             'stokKartu' => $gudangKartu,
             'stokList' => StokMushaf::with(['gudang', 'jenisQuran'])
-                ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', auth()->user()->gudang_id))
+                ->when($tercakupGudang, fn ($q) => $q->where('gudang_id', $cakupan))
                 ->orderBy('gudang_id')->get()
                 ->map(fn (StokMushaf $stok) => [
                     'id' => $stok->id,
@@ -80,7 +83,7 @@ class StokMushafController extends Controller
             // Perpindahan Mushaf (tab "Stok tanpa muwakif") supaya kedua jenis dokumen
             // perpindahan berada di satu tempat. Halaman ini menyisakan tautan ke sana.
             'pergerakanList' => StokMushafPergerakan::with(['gudang', 'jenisQuran', 'pelaku'])
-                ->when(auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', auth()->user()->gudang_id))
+                ->when($tercakupGudang, fn ($q) => $q->where('gudang_id', $cakupan))
                 ->orderBy('id', 'desc')->limit(30)->get()
                 ->map(fn (StokMushafPergerakan $baris) => [
                     'id' => $baris->id,
@@ -93,11 +96,11 @@ class StokMushafController extends Controller
                     'oleh' => $baris->pelaku->name,
                     'waktu' => $baris->created_at->format('d/m H:i'),
                 ]),
-            'bolehKelola' => auth()->user()->can(PermissionEnum::STOK_UPDATE->value),
-            'gudangSaya' => auth()->user()->gudang_id,
-            // Fase 3 revisi: SPV Gudang tercakup ke gudangnya saja; PJ (gudang@)
-            // dan peran selain spv-gudang melihat kedua gudang.
-            'tercakupGudang' => auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value),
+            'bolehKelola' => $user->can(PermissionEnum::STOK_UPDATE->value),
+            'gudangSaya' => $user->gudang_id,
+            // SPV Gudang dan freelancer tercakup ke gudangnya saja; hanya super-admin
+            // dan PJ murni (gudang@) yang melihat kedua gudang.
+            'tercakupGudang' => $tercakupGudang,
         ]);
     }
 
@@ -121,8 +124,8 @@ class StokMushafController extends Controller
 
         // SPV tercakup hanya boleh menyentuh stok gudangnya sendiri (server-side,
         // bukan sekadar disembunyikan di form).
-        $tercakup = auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value);
-        if ($tercakup && (int) $validated['gudang_id'] !== (int) auth()->user()->gudang_id) {
+        $cakupan = auth()->user()->cakupanGudangStok();
+        if ($cakupan !== null && (int) $validated['gudang_id'] !== $cakupan) {
             return response()->json(['success' => false, 'message' => 'Anda hanya boleh mengelola stok gudang Anda sendiri.'], 403);
         }
 
@@ -157,8 +160,8 @@ class StokMushafController extends Controller
         $tujuan = Gudang::findOrFail($validated['gudang_tujuan_id']);
 
         // SPV tercakup: dokumen dibuat DARI gudangnya sendiri saja.
-        $tercakup = auth()->user()->hasRole(RoleEnum::SPV_GUDANG->value);
-        if ($tercakup && (int) $validated['gudang_asal_id'] !== (int) auth()->user()->gudang_id) {
+        $cakupan = auth()->user()->cakupanGudangStok();
+        if ($cakupan !== null && (int) $validated['gudang_asal_id'] !== $cakupan) {
             return response()->json(['success' => false, 'message' => 'Dokumen transfer hanya bisa dibuat dari gudang Anda sendiri.'], 403);
         }
 

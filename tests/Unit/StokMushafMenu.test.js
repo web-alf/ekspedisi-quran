@@ -63,6 +63,25 @@ describe('Navigasi halaman Stok Mushaf', () => {
         expect(halamanStok).not.toContain('kelompokStok');
     });
 
+    /**
+     * 29/10/2026: kerangka tiap seksi (radius, border, bayangan, kotak ikon beraksen, judul)
+     * sama dengan Dashboard Gudang lewat RingkasanSection — bukan <section> rancangan sendiri
+     * yang radius dan border-nya berbeda dari halaman lain.
+     */
+    it('setiap seksi memakai kerangka kartu RingkasanSection milik dashboard', () => {
+        const markup = halamanStok.slice(halamanStok.indexOf('</script>')).replace(/<!--[\s\S]*?-->/g, '');
+
+        expect(halamanStok).toContain("import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte'");
+        expect(markup).not.toContain('<section');
+        expect(markup.match(/<RingkasanSection/g)).toHaveLength(4);
+        expect(markup).toContain('judul="Isi Stok"');
+        expect(markup).toContain('judul="Catat Pergerakan"');
+        expect(markup).toContain('judul="Dokumen Transfer Antar Gudang"');
+        expect(markup).toContain('judul="Pergerakan Terakhir"');
+        // Tanpa warna hex lepas di luar aksen merek yang sudah dipakai form (#eb3434).
+        expect(markup.match(/#[0-9a-f]{6}/gi).every((hex) => hex.toLowerCase() === '#eb3434')).toBe(true);
+    });
+
     it('aksi tulis stok tergantung izin, bukan keterlihatan saja', () => {
         expect(halamanStok).toContain('{#if bolehKelola}');
     });

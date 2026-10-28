@@ -3,6 +3,7 @@
   import { router } from '@inertiajs/svelte';
   import { gudangUntukEntri } from '../../utils/pilihanGudang.js';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
+  import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
   import { stokSaatIni, hitungHasil, bolehSimpan, labelVarian, jenisPunyaVarian, varianSesudahGantiJenis } from '../../utils/stokPratinjau.js';
 
   // Fase 3: stok mushaf tanpa muwakif per gudang. Dokumen transfer antar gudang sejak
@@ -58,6 +59,18 @@
   // pernah ditawarkan — server juga menolak (403), tapi menawarkan opsi yang pasti ditolak
   // membuat pengguna baru tahu setelah menekan Simpan.
   $: gudangEntri = gudangUntukEntri(gudangList, { gudangSaya, tercakupGudang });
+
+  // Angka besar di kanan judul "Isi Stok", seperti persen packing di dashboard. Dihitung
+  // dari kartu yang dikirim server, jadi ikut tercakup gudang akun.
+  $: totalEks = stokKartu.reduce((jumlah, grup) => jumlah + grup.baris.reduce((n, b) => n + b.eks, 0), 0);
+
+  // Warna pil tipe pergerakan: masuk hijau, keluar amber, transfer biru.
+  const PIL_TIPE = {
+    masuk: 'bg-green-50 text-green-700',
+    keluar: 'bg-amber-50 text-amber-700',
+    transfer_masuk: 'bg-blue-50 text-blue-700',
+    transfer_keluar: 'bg-blue-50 text-blue-700',
+  };
   $: if (tercakupGudang && gudangSaya !== null && String(entriGudang) !== String(gudangSaya)) {
       entriGudang = String(gudangSaya);
   }
@@ -146,28 +159,38 @@
 </script>
 
 <AdminLayout>
-  <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Stok Mushaf (Belum Ada Muwakif)</h1>
+  <!-- Kerangka kartu sama dengan Dashboard Gudang (RingkasanSection): kotak ikon beraksen,
+       judul, keterangan, dan jarak antar-seksi diatur komponennya, bukan di halaman ini. -->
+  <div>
+    <div class="mb-6 sm:mb-8">
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Stok Mushaf (Belum Ada Muwakif)</h1>
       <p class="text-sm text-gray-500 mt-1">
         Mushaf siap di gudang yang belum terkait donatur — per gudang, per varian (terjemahan/tanpa terjemahan).
         Satuan dasar eks; 1 dus = 1 kerdus penuh jenis itu (A5 20 eks, A6 40, IQRO 160).
       </p>
     </div>
 
-    {#if pesan}<div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800">{pesan}</div>{/if}
-    {#if galat}<div class="rounded-lg border border-gray-200 bg-red-50 px-4 py-3 text-sm text-red-700">{galat}</div>{/if}
+    {#if pesan}<div class="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{pesan}</div>{/if}
+    {#if galat}<div class="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{galat}</div>{/if}
 
-    <section class="bg-white rounded-lg border border-gray-200 p-5">
-      <h2 class="font-semibold text-gray-900 mb-3">Isi Stok</h2>
+    <RingkasanSection
+      icon="archive-box"
+      warna="green"
+      judul="Isi Stok"
+      keterangan={tercakupGudang ? 'Saldo gudang Anda per jenis dan varian' : 'Saldo tiap gudang per jenis dan varian'}
+    >
+      <div slot="kanan" class="text-right flex-none">
+        <p class="text-2xl sm:text-3xl font-bold text-green-600 leading-none">{totalEks.toLocaleString('id-ID')}</p>
+        <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">eks tersedia</p>
+      </div>
+
       {#if stokKartu.length > 0}
         {#each stokKartu as grup, i (grup.gudang_id)}
-          <div class={i > 0 ? 'mt-5 pt-4 border-t border-dashed border-gray-200' : ''}>
-            <div class="flex items-baseline gap-2 flex-wrap mb-3">
-              <p class="text-sm font-semibold text-gray-900">{grup.gudang}</p>
-              <p class="text-xs text-gray-500">{grup.baris.length} jenis/varian</p>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div class={i > 0 ? 'mt-5 pt-5 border-t border-gray-100' : ''}>
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              {grup.gudang} · {grup.baris.length} jenis/varian
+            </p>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {#each grup.baris as baris (baris.kode_jenis + (baris.varian || 'x'))}
                 <KartuStok {baris} />
               {/each}
@@ -175,20 +198,20 @@
           </div>
         {/each}
       {:else}
-        <p class="text-sm text-gray-500">Belum ada stok tercatat.</p>
+        <div class="text-center py-8 border border-dashed border-gray-200 rounded-xl">
+          <p class="text-sm text-gray-500">Belum ada stok tercatat.</p>
+        </div>
       {/if}
-    </section>
+    </RingkasanSection>
 
     {#if bolehKelola}
-      <section class="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 class="font-semibold text-gray-900 mb-1">Catat Pergerakan</h2>
-        {#if tercakupGudang}
-          <p class="text-xs text-gray-500 mb-4">
-            Mencatat pergerakan stok <span class="font-medium text-gray-700">{gudangEntri[0]?.nama ?? 'gudang Anda'}</span> — gudang mengikuti akun Anda.
-          </p>
-        {:else}
-          <p class="text-xs text-gray-500 mb-4">Pilih gudang tempat pergerakan ini terjadi.</p>
-        {/if}
+      <RingkasanSection
+        icon="pencil-square"
+        judul="Catat Pergerakan"
+        keterangan={tercakupGudang
+          ? `Mencatat pergerakan stok ${gudangEntri[0]?.nama ?? 'gudang Anda'} — gudang mengikuti akun Anda`
+          : 'Pilih gudang tempat pergerakan ini terjadi'}
+      >
 
         <!-- Baris 1: apa yang terjadi -->
         <div class="flex flex-wrap items-center gap-3 mb-4">
@@ -308,44 +331,56 @@
             Catat pergerakan
           {/if}
         </button>
-      </section>
+      </RingkasanSection>
     {/if}
 
-    <section class="bg-white rounded-lg border border-gray-200 p-5">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <h2 class="font-semibold text-gray-900">Dokumen Transfer Antar Gudang</h2>
-          <p class="text-xs text-gray-500 mt-1">
-            Form dan daftar dokumen transfer pindah ke halaman
-            <span class="font-medium text-gray-700">Perpindahan Mushaf</span> (tab &quot;Stok tanpa muwakif&quot;),
-            supaya kedua jenis dokumen perpindahan ada di satu tempat — dan dokumen yang menunggu diterima
-            ikut muncul di kartu &quot;Perlu Tindakan&quot; dashboard.
-          </p>
-        </div>
+    <RingkasanSection
+      icon="arrow-path"
+      warna="blue"
+      judul="Dokumen Transfer Antar Gudang"
+      keterangan="Dibuat dan diterima di halaman Perpindahan Mushaf"
+    >
+      <div class="rounded-xl border border-dashed border-gray-300 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <p class="flex-1 min-w-0 text-sm text-gray-600">
+          Form dan daftar dokumen transfer ada di halaman
+          <span class="font-medium text-gray-900">Perpindahan Mushaf</span> (tab &quot;Stok tanpa muwakif&quot;),
+          supaya kedua jenis dokumen perpindahan ada di satu tempat — dan dokumen yang menunggu diterima
+          ikut muncul di kartu &quot;Perlu Tindakan&quot; dashboard.
+        </p>
         <a href="/admin/transfer-mushaf"
           class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-800 hover:bg-gray-50 flex-none">
           Buka Perpindahan Mushaf
         </a>
       </div>
-    </section>
+    </RingkasanSection>
 
-    <section class="bg-white rounded-lg border border-gray-200 p-5">
-      <h2 class="font-semibold text-gray-900 mb-3">Pergerakan Terakhir</h2>
+    <RingkasanSection
+      icon="clock"
+      judul="Pergerakan Terakhir"
+      keterangan="30 catatan terbaru beserta pelakunya"
+    >
       {#if pergerakanList.length === 0}
-        <p class="text-sm text-gray-500">Belum ada pergerakan.</p>
+        <div class="text-center py-8 border border-dashed border-gray-200 rounded-xl">
+          <p class="text-sm text-gray-500">Belum ada pergerakan.</p>
+        </div>
       {:else}
-        <ul class="text-sm divide-y divide-gray-100">
-          {#each pergerakanList as baris}
-            <li class="py-2 flex flex-col sm:flex-row sm:justify-between text-gray-700">
-            <span>
-            <span class="font-medium">{baris.gudang}</span> · {baris.jenis} · {baris.terjemahan} · {baris.tipe} · <span class="font-medium text-gray-900">{baris.jumlah_eks} eks</span>
-            {#if baris.catatan}<span class="text-gray-500"> — {baris.catatan}</span>{/if}
-            </span>
-            <span class="text-xs text-gray-500">{baris.oleh} · {baris.waktu}</span>
+        <ul class="divide-y divide-gray-100">
+          {#each pergerakanList as baris (baris.id)}
+            <li class="py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-4">
+              <div class="min-w-0 flex items-center gap-2 flex-wrap text-sm text-gray-700">
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold {PIL_TIPE[baris.tipe] ?? 'bg-gray-100 text-gray-700'}">
+                  {baris.tipe.replace('_', ' ')}
+                </span>
+                <span class="font-semibold text-gray-900">{baris.jumlah_eks} eks</span>
+                <span>{baris.jenis} · {baris.terjemahan}</span>
+                {#if !tercakupGudang}<span class="text-gray-500">· {baris.gudang}</span>{/if}
+                {#if baris.catatan}<span class="text-gray-500">— {baris.catatan}</span>{/if}
+              </div>
+              <p class="text-xs text-gray-400 flex-none">{baris.oleh} · {baris.waktu}</p>
             </li>
           {/each}
         </ul>
       {/if}
-    </section>
+    </RingkasanSection>
   </div>
 </AdminLayout>

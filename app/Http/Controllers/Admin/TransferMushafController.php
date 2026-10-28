@@ -40,7 +40,10 @@ class TransferMushafController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $tercakupGudang = $user->hasRole(RoleEnum::SPV_GUDANG->value);
+        // Freelancer masuk ke halaman ini lewat `stok.read`; ia ikut tercakup gudangnya
+        // sendiri seperti SPV, bukan melihat perpindahan semua gudang.
+        $cakupan = $user->cakupanGudangStok();
+        $tercakupGudang = $cakupan !== null;
 
         // Dua dokumen dalam satu halaman (keputusan pemilik 26/10/2026): mushaf BER-RESI
         // (tab pertama) dan STOK TANPA MUWAKIF (tab kedua). Dua-duanya "perpindahan antar
@@ -53,8 +56,8 @@ class TransferMushafController extends Controller
 
             'transferList' => TransferMushaf::with(['gudangAsal:id,nama', 'gudangTujuan:id,nama', 'pembuat:id,name', 'penerima:id,name'])
                 ->when($tercakupGudang, fn ($q) => $q->where(fn ($q2) => $q2
-                    ->where('gudang_asal_id', $user->gudang_id)
-                    ->orWhere('gudang_tujuan_id', $user->gudang_id)))
+                    ->where('gudang_asal_id', $cakupan)
+                    ->orWhere('gudang_tujuan_id', $cakupan)))
                 ->orderByDesc('id')
                 ->limit(50)
                 ->get()

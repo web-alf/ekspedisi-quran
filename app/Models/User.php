@@ -278,6 +278,28 @@ class User extends Authenticatable
     }
 
     /**
+     * Gudang yang stok mushafnya boleh dilihat akun ini, atau null = semua gudang.
+     *
+     * Stok mushaf dimiliki GUDANG, bukan perorangan: "stok milik freelancer" adalah stok
+     * gudang tempat ia ditempatkan. Hanya super-admin dan PJ murni (manager-repacking tanpa
+     * spv-gudang) yang melihat semua gudang. Selain itu — SPV, freelancer, dan peran apa pun
+     * yang kelak diberi `stok.read` — terikat gudangnya sendiri (gagal-tertutup). Akun
+     * tanpa gudang mendapat 0, id yang tidak pernah ada, sehingga tidak melihat stok apa pun.
+     */
+    public function cakupanGudangStok(): ?int
+    {
+        $lihatSemua = $this->hasRole(RoleEnum::SUPER_ADMIN->value)
+            || ($this->hasRole(RoleEnum::MANAGER_REPACKING->value)
+                && ! $this->hasRole(RoleEnum::SPV_GUDANG->value));
+
+        if ($lihatSemua) {
+            return null;
+        }
+
+        return $this->gudang_id ?? 0;
+    }
+
+    /**
      * Get all user's role display names as array
      */
     public function getRolesDisplayAttribute()

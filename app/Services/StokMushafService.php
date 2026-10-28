@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\RoleEnum;
 use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\KodeSequence;
@@ -204,9 +203,11 @@ class StokMushafService
      */
     public function ringkasanStok(User $user): array
     {
+        $cakupan = $user->cakupanGudangStok();
+
         return StokMushaf::query()
             ->with(['gudang:id,nama', 'jenisQuran:id,kode_jenis,nama_jenis,default_capacity'])
-            ->when($user->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where('gudang_id', $user->gudang_id))
+            ->when($cakupan !== null, fn ($q) => $q->where('gudang_id', $cakupan))
             ->orderBy('gudang_id')->orderBy('jenis_quran_id')->get()
             ->map(fn (StokMushaf $stok) => [
                 'gudang_id' => $stok->gudang_id,
@@ -230,11 +231,13 @@ class StokMushafService
      */
     public function daftarTransfer(User $user, int $limit = 50): array
     {
+        $cakupan = $user->cakupanGudangStok();
+
         return TransferStok::query()
             ->with(['gudangAsal:id,nama', 'gudangTujuan:id,nama', 'jenisQuran:id,nama_jenis', 'pembuat:id,name'])
-            ->when($user->hasRole(RoleEnum::SPV_GUDANG->value), fn ($q) => $q->where(fn ($q2) => $q2
-                ->where('gudang_asal_id', $user->gudang_id)
-                ->orWhere('gudang_tujuan_id', $user->gudang_id)))
+            ->when($cakupan !== null, fn ($q) => $q->where(fn ($q2) => $q2
+                ->where('gudang_asal_id', $cakupan)
+                ->orWhere('gudang_tujuan_id', $cakupan)))
             ->orderByDesc('id')->limit($limit)->get()
             ->map(fn (TransferStok $t) => [
                 'id' => $t->id,
