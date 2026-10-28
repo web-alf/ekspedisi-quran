@@ -44,6 +44,16 @@ describe('isian doa di form', () => {
         expect(sumber).toContain("import { DOA_MAKS_KARAKTER } from '");
     });
 
+    it('Detail per Al-Qur\'an: doa selebar penuh dua baris di bawah Atas Nama dan Hubungan', () => {
+        const sumber = baca('Pages/Admin/Donatur/Create.svelte');
+        const bagian = sumber.slice(sumber.indexOf("Detail per Al-Qur'an"), sumber.indexOf('{/each}', sumber.indexOf("Detail per Al-Qur'an")));
+
+        expect(bagian).toContain('grid grid-cols-1 md:grid-cols-2 gap-4');
+        expect(bagian.indexOf('wakif-name-')).toBeLessThan(bagian.indexOf('wakif-rel-'));
+        expect(bagian.indexOf('wakif-rel-')).toBeLessThan(bagian.indexOf('wakif-doa-'));
+        expect(bagian).toMatch(/<div class="md:col-span-2">[\s\S]*?<textarea\s+id=\{`wakif-doa-\$\{index\}`\}[\s\S]*?rows="2"/);
+    });
+
     it('penghitung memperingatkan doa lama yang lebih dari batas', () => {
         const komponen = baca('Components/PenghitungDoa.svelte');
         expect(komponen).toContain('{panjang}/{DOA_MAKS_KARAKTER}');
