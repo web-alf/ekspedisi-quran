@@ -175,7 +175,6 @@
 
     <RingkasanSection
       icon="archive-box"
-      warna="green"
       judul="Isi Stok"
       keterangan={tercakupGudang ? 'Saldo gudang Anda per jenis dan varian' : 'Saldo tiap gudang per jenis dan varian'}
     >
@@ -336,7 +335,6 @@
 
     <RingkasanSection
       icon="arrow-path"
-      warna="blue"
       judul="Dokumen Transfer Antar Gudang"
       keterangan="Dibuat dan diterima di halaman Perpindahan Mushaf"
     >

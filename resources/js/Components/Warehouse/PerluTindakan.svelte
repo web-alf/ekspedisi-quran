@@ -108,7 +108,7 @@
 
   {#each transferStok as t (t.kode)}
     <div class="border border-gray-200 rounded-xl p-4 mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
-      <div class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 flex-none">
+      <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#eb3434] flex-none">
         <HeroIcon name="cube" class="w-5 h-5" />
       </div>
       <div class="flex-1 min-w-0">
@@ -137,7 +137,7 @@
 <div class="grid grid-cols-1 {muat.length > 1 ? 'sm:grid-cols-2' : ''} gap-3">
   {#each muat as g (g.id)}
     <div class="rounded-xl border border-dashed border-gray-300 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-      <HeroIcon name="truck" class="w-5 h-5 text-indigo-600 flex-none" />
+      <HeroIcon name="truck" class="w-5 h-5 text-[#eb3434] flex-none" />
       <p class="text-sm text-gray-600 flex-1">
         <b class="text-gray-900">{g.kerdus_menunggu_muat} kerdus</b> penuh menunggu dimuat
         {#if muat.length > 1}<span class="text-gray-500">— {g.nama}</span>{/if}

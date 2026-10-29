@@ -116,10 +116,13 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         }
     });
 
-    it('tidak memakai warna hex lepas — hanya palet Tailwind', () => {
-        expect(sumber).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+    // 29/10/2026: satu-satunya hex yang boleh = merah merek #eb3434 milik dashboard super-admin.
+    const tanpaMerahMerek = (teks) => teks.replaceAll('#eb3434', '');
+
+    it('tidak memakai warna hex lepas — hanya palet Tailwind dan merah merek', () => {
+        expect(tanpaMerahMerek(sumber)).not.toMatch(/#[0-9a-fA-F]{6}\b/);
         for (const [nama, isi] of Object.entries(sumberKomponen)) {
-            expect(isi, nama).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+            expect(tanpaMerahMerek(isi), nama).not.toMatch(/#[0-9a-fA-F]{6}\b/);
         }
     });
 
@@ -177,5 +180,25 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(markup).toMatch(/\{#if !adalahPemantau \|\| todayTask\}/);
         expect(markup).toMatch(/\{#if !adalahPemantau \|\| recentBoxes\.length > 0\}/);
         expect(markup).toMatch(/\{#if !adalahPemantau\}[\s\S]*Performa Minggu Ini/);
+    });
+
+    /**
+     * 29/10/2026: kartu disamakan dengan dashboard super-admin — halaman selebar area konten
+     * (dulu max-w-7xl di tengah), kotak ikon seksi 40 px beraksen merah merek #eb3434 untuk semua
+     * seksi (dulu 32 px, hijau/indigo/biru/amber per seksi).
+     */
+    it('mengikuti kartu dashboard super-admin: lebar penuh, kotak ikon 40 px, aksen merah', () => {
+        const seksi = sumberKomponen.RingkasanSection;
+
+        expect(markup).not.toContain('max-w-7xl mx-auto');
+        expect(seksi).toContain('w-10 h-10 rounded-lg bg-red-50 text-[#eb3434]');
+        expect(seksi).toContain('<HeroIcon name={icon} class="w-6 h-6" />');
+        expect(seksi).not.toMatch(/export let warna/);
+        expect(markup).not.toMatch(/<RingkasanSection[^>]*\swarna=/);
+        expect(markup).not.toMatch(/indigo-(50|500|600)"?[^>]*>\s*(\{persen|\{packingManager\.persen|<HeroIcon name="chart-bar")/);
+        expect(sumberKomponen.PerluTindakan).not.toContain('indigo');
+        // Merahnya persis merah merek super-admin, bukan red-600/red-500 bawaan Tailwind.
+        expect(markup).toContain('font-bold text-[#eb3434] leading-none');
+        expect(markup).not.toMatch(/text-red-600 leading-none|rounded-full bg-red-500 transition-all/);
     });
 });

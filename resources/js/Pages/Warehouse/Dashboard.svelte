@@ -300,7 +300,7 @@
 
 <AdminLayout>
   <div class="min-h-screen bg-gray-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
 
       <!-- Header - Responsive -->
       <div class="mb-6 sm:mb-8">
@@ -373,7 +373,7 @@
           keterangan="Gabungan seluruh tugas staf gudang ini"
         >
           <div slot="kanan" class="text-right flex-none">
-            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{persenPacking}%</p>
+            <p class="text-2xl sm:text-3xl font-bold text-[#eb3434] leading-none">{persenPacking}%</p>
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
 
@@ -396,13 +396,12 @@
             <span><b class="text-gray-900">{ringkasanGudang.packing.selesai}</b> / {ringkasanGudang.packing.target} mushaf · {ringkasanGudang.packing.jumlah_staf ?? ringkasanGudang.packing.per_staf.length} staf bertugas</span>
           </div>
           <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
+            <div class="h-full rounded-full bg-[#eb3434] transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
           </div>
         </RingkasanSection>
 
         <RingkasanSection
           icon="archive-box"
-          warna="green"
           judul="Stok {ringkasanGudang.gudang.nama}"
           keterangan="Tahap resi & mushaf belum ada muwakif"
         >
@@ -442,7 +441,6 @@
 
         <RingkasanSection
           icon="exclamation-circle"
-          warna="amber"
           judul="Perlu Tindakan"
           keterangan="Yang menunggu keputusan SPV {ringkasanGudang.gudang.nama}"
         >
@@ -455,7 +453,6 @@
 
         <RingkasanSection
           icon="clipboard-document-list"
-          warna="blue"
           judul="Beban Gudang"
           keterangan="Resi yang tercatat sedang dikerjakan {ringkasanGudang.gudang.nama}"
         >
@@ -469,7 +466,6 @@
 
         <RingkasanSection
           icon="archive-box"
-          warna="green"
           judul="Stok Mushaf"
           keterangan="Stok tanpa muwakif — A5, A6, dan IQRA dipisah varian terjemahannya · {ringkasanGudang.gudang.nama}"
         >
@@ -498,7 +494,6 @@
         {#each gudangManager as g (g.id)}
           <RingkasanSection
             icon="archive-box"
-            warna="green"
             judul="{g.nama}"
             keterangan="Dari pemesanan sampai siap dikirim"
           >
@@ -562,7 +557,7 @@
           keterangan="{packingManager.selesai} dari {packingManager.target} mushaf sudah dikemas"
         >
           <div slot="kanan" class="text-right flex-none">
-            <p class="text-2xl sm:text-3xl font-bold text-indigo-600 leading-none">{packingManager.persen}%</p>
+            <p class="text-2xl sm:text-3xl font-bold text-[#eb3434] leading-none">{packingManager.persen}%</p>
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
 
@@ -581,7 +576,7 @@
           </div>
 
           <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, packingManager.persen)}%"></div>
+            <div class="h-full rounded-full bg-[#eb3434] transition-all duration-500" style="width: {Math.min(100, packingManager.persen)}%"></div>
           </div>
 
           {#if semuaGudang}
@@ -593,7 +588,7 @@
                     <span class="text-gray-500">{g.selesai} / {g.target} · <b class="text-gray-900">{g.persen}%</b></span>
                   </div>
                   <div class="h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                    <div class="h-full rounded-full bg-indigo-500 transition-all duration-500" style="width: {Math.min(100, g.persen)}%"></div>
+                    <div class="h-full rounded-full bg-[#eb3434] transition-all duration-500" style="width: {Math.min(100, g.persen)}%"></div>
                   </div>
                 </div>
               {/each}
@@ -608,7 +603,6 @@
 
         <RingkasanSection
           icon="archive-box"
-          warna="green"
           judul="Stok Belum Ada Wakif — per Jenis"
           keterangan="Eksemplar siap di gudang yang belum masuk resi · {namaCakupan}"
         >
@@ -651,7 +645,6 @@
 
         <RingkasanSection
           icon="exclamation-circle"
-          warna="amber"
           judul="Perlu Tindakan"
           keterangan="Yang menunggu keputusan manager gudang"
         >
@@ -857,8 +850,8 @@
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
           <div class="flex items-center space-x-2 sm:space-x-3 mb-2 sm:mb-0">
-            <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <HeroIcon name="chart-bar" class="w-4 h-4" />
+            <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#eb3434]">
+              <HeroIcon name="chart-bar" class="w-6 h-6" />
             </div>
             <div>
               <h3 class="text-base sm:text-lg font-semibold text-gray-900">Performa Minggu Ini</h3>
