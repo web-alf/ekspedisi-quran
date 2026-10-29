@@ -41,6 +41,26 @@ describe('Card halaman freelancer mengikuti kartu dashboard super-admin', () => 
         }
     });
 
+    /**
+     * 29/10/2026: halaman yang hanya dibuka Manager Gudang & SPV ikut diselaraskan. Kartu
+     * ringkasan Monitor & Penugasan dulu enam kolom sejak `lg` sehingga kartu terakhir
+     * terpotong; Perpindahan Mushaf memakai <section> rounded-lg/border-gray-200.
+     */
+    it('Monitor & Penugasan dan Perpindahan Mushaf memakai kartu yang sama', () => {
+        const monitor = baca('Supervisor/WarehouseMonitor.svelte');
+        const perpindahan = baca('Admin/TransferMushaf/Index.svelte');
+
+        for (const sumber of [monitor, perpindahan]) {
+            expect(sumber).not.toContain('bg-white rounded-lg border border-gray-200');
+        }
+
+        expect(monitor).toContain('grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4');
+        expect(monitor).toContain('w-10 h-10 rounded-lg flex items-center justify-center mb-3 {kartu.aksen}');
+        // Lencana "+0%" dulu angka mati yang tidak pernah dihitung.
+        expect(monitor).not.toContain('+0%');
+        expect(perpindahan.match(/<section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">/g)).toHaveLength(4);
+    });
+
     it('label kartu angka Data Resi tidak dipotong', () => {
         const sumber = baca(HALAMAN['Data Resi']);
         const kartuAngka = sumber.slice(

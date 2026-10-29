@@ -281,7 +281,7 @@
 <AdminLayout>
   <div class="space-y-6">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Perpindahan Mushaf Antar Gudang</h1>
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Perpindahan Mushaf Antar Gudang</h1>
       <p class="text-sm text-gray-500 mt-1">
         Dua jenis dokumen, satu tempat: mushaf yang sudah ber-resi dipindahkan sebagai RESI, sedangkan
         stok tanpa muwakif dipindahkan sebagai EKS per jenis &amp; varian. Keduanya baru berpindah saat
@@ -300,13 +300,13 @@
       </div>
     {/if}
 
-    {#if pesan}<div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800">{pesan}</div>{/if}
-    {#if galat}<div class="rounded-lg border border-gray-200 bg-red-50 px-4 py-3 text-sm text-red-700">{galat}</div>{/if}
+    {#if pesan}<div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{pesan}</div>{/if}
+    {#if galat}<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{galat}</div>{/if}
 
     {#if tabAktif === 'mushaf'}
       {#if bolehTransfer}
-        <section class="bg-white rounded-lg border border-gray-200 p-5">
-          <h2 class="font-semibold text-gray-900 mb-3">Dokumen Perpindahan Baru — Mushaf ber-resi</h2>
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">Dokumen Perpindahan Baru — Mushaf ber-resi</h2>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="block text-sm">
@@ -422,8 +422,8 @@
         </section>
       {/if}
 
-      <section class="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 class="font-semibold text-gray-900 mb-3">Dokumen Perpindahan — Mushaf ber-resi</h2>
+      <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">Dokumen Perpindahan — Mushaf ber-resi</h2>
         {#if transferList.length > 0}
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -477,8 +477,8 @@
       </section>
     {:else}
       {#if bolehTransferStok}
-        <section class="bg-white rounded-lg border border-gray-200 p-5">
-          <h2 class="font-semibold text-gray-900 mb-1">Dokumen Transfer Stok Baru — tanpa muwakif</h2>
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-1">Dokumen Transfer Stok Baru — tanpa muwakif</h2>
           <p class="text-xs text-gray-500 mb-3">
             {#if tercakupGudang}Dari <span class="font-medium text-gray-700">{namaGudang(gudangSaya)}</span>. {/if}Dibuat dulu; stok berpindah saat gudang TUJUAN menerima (barang fisik sudah tiba). Varian harus sama dari asal ke tujuan.
           </p>
@@ -560,8 +560,8 @@
         </section>
       {/if}
 
-      <section class="bg-white rounded-lg border border-gray-200 p-5">
-        <h2 class="font-semibold text-gray-900 mb-3">Dokumen Transfer — Stok tanpa muwakif</h2>
+      <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">Dokumen Transfer — Stok tanpa muwakif</h2>
         {#if transferStokList.length === 0}
           <p class="text-sm text-gray-500">Belum ada dokumen.</p>
         {:else}

@@ -387,85 +387,25 @@
     </div>
   </div>
 
-  <!-- Summary Cards with consistent spacing and responsive design -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6 mb-6 sm:mb-8">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-          <HeroIcon name="document-text" class="w-5 h-5" />
+  <!-- Kartu ringkasan: pola kartu statistik dashboard super-admin (ikon di atas, angka, label).
+       Enam kolom baru di layar xl — di bawahnya kartu terlalu sempit dan kartu terakhir terpotong. -->
+  <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6 sm:mb-8">
+    {#each [
+      { label: 'Task Aktif', nilai: summary.total_active_tasks, icon: 'document-text', aksen: 'bg-blue-50 text-blue-600' },
+      { label: 'Pack Hari Ini', nilai: summary.total_packed_today, icon: 'cube', aksen: 'bg-green-50 text-green-600' },
+      { label: 'Total Bulan Ini', nilai: summary.total_packed_this_month, icon: 'chart-bar', aksen: 'bg-blue-50 text-blue-600' },
+      { label: 'Box Hari Ini', nilai: summary.total_boxes_today, icon: 'inbox-stack', aksen: 'bg-purple-50 text-purple-600' },
+      { label: 'Rata-rata/User', nilai: Math.round(summary.average_per_user), icon: 'users', aksen: 'bg-indigo-50 text-indigo-600' },
+      { label: 'Sisa Kemarin (carry over)', nilai: summary.total_carry_over, icon: 'clock', aksen: 'bg-orange-50 text-orange-600' },
+    ] as kartu (kartu.label)}
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 {kartu.aksen}">
+          <HeroIcon name={kartu.icon} class="w-5 h-5" />
         </div>
-        <span class="text-xs md:text-sm font-medium text-gray-600">Task Aktif</span>
+        <p class="text-xl md:text-2xl font-bold text-gray-900">{formatNumber(kartu.nilai)}</p>
+        <p class="text-xs md:text-sm text-gray-600">{kartu.label}</p>
       </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-gray-900 mb-1">{formatNumber(summary.total_active_tasks)}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Task Aktif</p>
-      </div>
-    </div>
-    
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
-          <HeroIcon name="cube" class="w-5 h-5" />
-        </div>
-        <span class="text-xs md:text-sm font-medium text-green-600">+0%</span>
-      </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-green-600 mb-1">{formatNumber(summary.total_packed_today)}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Pack Hari Ini</p>
-      </div>
-    </div>
-    
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-          <HeroIcon name="chart-bar" class="w-5 h-5" />
-        </div>
-        <span class="text-xs md:text-sm font-medium text-gray-600">Bulan ini</span>
-      </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-blue-600 mb-1">{formatNumber(summary.total_packed_this_month)}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Total Bulan</p>
-      </div>
-    </div>
-    
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-          <HeroIcon name="inbox-stack" class="w-5 h-5" />
-        </div>
-        <span class="text-xs md:text-sm font-medium text-gray-600">Hari ini</span>
-      </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-purple-600 mb-1">{formatNumber(summary.total_boxes_today)}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Box Hari Ini</p>
-      </div>
-    </div>
-    
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-          <HeroIcon name="users" class="w-5 h-5" />
-        </div>
-        <span class="text-xs md:text-sm font-medium text-gray-600">Avg</span>
-      </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-indigo-600 mb-1">{formatNumber(Math.round(summary.average_per_user))}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Rata-rata/User</p>
-      </div>
-    </div>
-    
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6 hover:shadow-lg transition-shadow">
-      <div class="flex items-center justify-between mb-4">
-        <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
-          <HeroIcon name="clock" class="w-5 h-5" />
-        </div>
-        <span class="text-xs md:text-sm font-medium text-orange-600">Carry over</span>
-      </div>
-      <div>
-        <h3 class="text-xl md:text-2xl font-bold text-orange-600 mb-1">{formatNumber(summary.total_carry_over)}</h3>
-        <p class="text-xs md:text-sm text-gray-600">Sisa Kemarin</p>
-      </div>
-    </div>
+    {/each}
   </div>
 
   <!-- Main Content Grid with consistent spacing -->
@@ -488,23 +428,23 @@
       </div>
       <div class="p-4 sm:p-6">
       {#if kartuGudang}
-    <section class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-xs font-medium text-gray-500">Proses Pemesanan</p>
-        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.pemesanan}</p>
+    <section class="mb-6 grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="border border-gray-200 rounded-xl p-3 min-w-0">
+        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Proses Pemesanan</p>
+        <p class="text-2xl font-bold text-gray-900">{kartuGudang.pemesanan}</p>
         <p class="text-xs text-gray-500">resi menunggu</p>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-xs font-medium text-gray-500">Quran Ready di Gudang — belum ada muwakif</p>
+      <div class="border border-gray-200 rounded-xl p-3 min-w-0">
+        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Quran Ready di Gudang — belum ada muwakif</p>
         <ul class="mt-1 text-sm text-gray-800 space-y-0.5">
           {#each kartuGudang.ready as baris}
             <li>{baris.gudang}: <span class="font-semibold">{baris.dus}</span> dus · {baris.eks} eks</li>
           {/each}
         </ul>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-xs font-medium text-gray-500">Proses Packing</p>
-        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.packing.total}</p>
+      <div class="border border-gray-200 rounded-xl p-3 min-w-0">
+        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Proses Packing</p>
+        <p class="text-2xl font-bold text-gray-900">{kartuGudang.packing.total}</p>
         <p class="text-xs text-gray-500">resi di tahap packing</p>
         <ul class="mt-1 text-xs text-gray-600 space-y-0.5">
           {#each kartuGudang.packing.per_gudang as baris}
@@ -512,9 +452,9 @@
           {/each}
         </ul>
       </div>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-xs font-medium text-gray-500">Selesai Packing — siap distribusi</p>
-        <p class="text-2xl font-bold text-gray-900 mt-1">{kartuGudang.selesai.total}</p>
+      <div class="border border-gray-200 rounded-xl p-3 min-w-0">
+        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Selesai Packing — siap distribusi</p>
+        <p class="text-2xl font-bold text-gray-900">{kartuGudang.selesai.total}</p>
         <p class="text-xs text-gray-500">resi siap dimuat</p>
         <ul class="mt-1 text-xs text-gray-600 space-y-0.5">
           {#each kartuGudang.selesai.per_gudang as baris}
@@ -528,7 +468,7 @@
     {#if dailyTasks.length > 0}
           <div class="space-y-4">
             {#each dailyTasks as task}
-              <div class="border border-gray-200 rounded-lg p-4 sm:p-5 hover:bg-gray-50 transition-colors">
+              <div class="border border-gray-200 rounded-xl p-4 sm:p-5 hover:bg-gray-50 transition-colors">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 space-y-2 sm:space-y-0">
                   <div class="flex-1">
                     <h3 class="font-semibold text-gray-900 text-base sm:text-lg">
