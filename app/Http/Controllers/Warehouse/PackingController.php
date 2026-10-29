@@ -16,6 +16,7 @@ use App\Models\SharedBoxAssignment;
 use App\Models\User;
 use App\Services\ConcurrencyMonitorService;
 use App\Services\PackingAssignmentService;
+use App\Support\CakupanGudang;
 use App\Support\PerPage;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -72,8 +73,16 @@ class PackingController extends Controller
             ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'gudang_id', 'jenis_quran_id', 'terjemahan')
             ->first();
 
-        if (! $todayTask) {
-            // No task assigned today - show empty state
+        // Closure: partial reload (mis. setelah mencatat kerdus) tidak menjalankan query riwayat.
+        $riwayat = [
+            'riwayatPacking' => fn () => $this->riwayatPacking($user),
+            'riwayatSemuaStaf' => fn () => $this->lihatRiwayatSemuaStaf($user),
+        ];
+
+        // Tanpa tugas aktif hari ini — belum ditugaskan, atau tugasnya sudah selesai — halaman
+        // tetap menampilkan riwayat. Dulu tugas selesai dialihkan ke dashboard dan halaman
+        // tanpa tugas hanya berisi pesan kosong (29/10/2026).
+        if (! $todayTask || $todayTask->is_completed) {
             return Inertia::render('Warehouse/Packing', [
                 'task' => null,
                 'currentBox' => null,
@@ -81,13 +90,12 @@ class PackingController extends Controller
                 'nextItems' => [],
                 'packedItems' => [],
                 'jenisList' => $jenisList,
-                'noTaskMessage' => 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor untuk mendapatkan tugas.',
+                'noTaskMessage' => $todayTask
+                    ? "Tugas packing hari ini sudah selesai: {$todayTask->total_selesai} dari {$todayTask->total_target} mushaf. Terima kasih!"
+                    : 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor untuk mendapatkan tugas.',
+                'tugasSelesai' => (bool) $todayTask,
+                ...$riwayat,
             ]);
-        }
-
-        if ($todayTask->is_completed) {
-            return redirect()->route('admin.warehouse.dashboard')
-                ->with('success', 'Tugas hari ini sudah selesai!');
         }
 
         // Start task if not started
@@ -144,6 +152,7 @@ class PackingController extends Controller
         }
 
         return Inertia::render('Warehouse/Packing', [
+            ...$riwayat,
             'jenisList' => $jenisList,
             'task' => [
                 'id' => $todayTask->id,
@@ -978,6 +987,57 @@ class PackingController extends Controller
         return Inertia::render('Warehouse/PackingHistory', [
             'history' => $history,
         ]);
+    }
+
+    /**
+     * Sepuluh tugas packing terakhir untuk seksi "Riwayat Packing" di halaman Proses Packing.
+     *
+     * Cakupan ditegakkan di sini, bukan di tampilan: freelancer hanya melihat tugasnya sendiri;
+     * pemantau melihat semua petugas — SPV dibatasi gudangnya (+ tugas yang belum berlabel
+     * gudang, aturan CakupanGudang), PJ dan super-admin semua gudang.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function riwayatPacking(User $user): array
+    {
+        $semuaStaf = $this->lihatRiwayatSemuaStaf($user);
+
+        $query = DailyPackingTask::query()
+            ->with(['user:id,name', 'gudang:id,nama', 'jenisQuran'])
+            ->withCount('packingBoxes')
+            ->orderByDesc('tanggal_tugas')
+            ->orderByDesc('id')
+            ->limit(10);
+
+        if ($semuaStaf) {
+            CakupanGudang::terapkan($query, $user);
+        } else {
+            $query->where('user_id', $user->id);
+        }
+
+        return $query->get()->map(fn (DailyPackingTask $tugas) => [
+            'id' => $tugas->id,
+            'tanggal' => $tugas->tanggal_tugas->locale('id')->translatedFormat('D, d M Y'),
+            'hari_ini' => $tugas->tanggal_tugas->isToday(),
+            'petugas' => $tugas->user?->name,
+            'gudang' => $tugas->gudang?->nama,
+            'jenis' => $tugas->labelJenis(),
+            'target' => $tugas->total_target,
+            'selesai' => $tugas->total_selesai,
+            'kerdus' => $tugas->packing_boxes_count,
+            'status' => $tugas->status,
+        ])->values()->all();
+    }
+
+    /**
+     * Pemantau (SPV, PJ, super-admin) melihat riwayat semua petugas.
+     *
+     * Gate viewAllHistory saja tidak cukup: role `warehouse` memegang
+     * `warehouse.box.update_any`, jadi freelancer murni ikut lolos gate itu.
+     */
+    private function lihatRiwayatSemuaStaf(User $user): bool
+    {
+        return ! $user->isFreelancerMurni() && Gate::allows('viewAllHistory', $user);
     }
 
     /**

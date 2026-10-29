@@ -3,6 +3,8 @@
   import { router } from '@inertiajs/svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
+  import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
+  import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import { fade } from 'svelte/transition';
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
@@ -20,6 +22,22 @@
   export let packedItems = [];
   // export let assignedItems = [];
   export let noTaskMessage = null;
+  // true = tugas hari ini sudah selesai (halaman menampilkan ringkasan, bukan pesan "tidak ada tugas").
+  export let tugasSelesai = false;
+  // RIWAYAT PACKING (29/10/2026): 10 tugas terakhir, dicakup di server per role —
+  // freelancer tugasnya sendiri; SPV gudangnya; PJ & super-admin semua (riwayatSemuaStaf).
+  export let riwayatPacking = [];
+  export let riwayatSemuaStaf = false;
+
+  const STATUS_RIWAYAT = {
+    assigned: { label: 'Belum mulai', warna: 'amber' },
+    in_progress: { label: 'Berjalan', warna: 'indigo' },
+    completed: { label: 'Selesai', warna: 'green' },
+    expired: { label: 'Kedaluwarsa', warna: 'gray' },
+  };
+
+  const statusRiwayat = (status) => STATUS_RIWAYAT[status] ?? { label: status, warna: 'gray' };
+  const persenRiwayat = (baris) => (baris.target > 0 ? Math.min(100, Math.round((baris.selesai / baris.target) * 100)) : 0);
   // LOKASI MUSHAF (2026-10-15): gudang tugas hari ini. Tugas dari cron lahir tanpa gudang,
   // dan tanpa gudang kerdus yang dibuat tidak punya lokasi — jadi pilihannya disodorkan sekali.
   export let gudangTugas = null;
@@ -933,7 +951,8 @@
         // abaikan kegagalan haptic
       }
 
-      router.reload({ only: ['task', 'currentBox', 'allBoxes', 'packedItems'] });
+      // noTaskMessage ikut: kerdus terakhir bisa menyelesaikan tugas (halaman beralih ke ringkasan).
+      router.reload({ only: ['task', 'currentBox', 'allBoxes', 'packedItems', 'noTaskMessage', 'tugasSelesai', 'riwayatPacking'] });
     } catch (error) {
       kardusError = error?.message || 'Gagal mencatat kerdus.';
     } finally {
@@ -1037,10 +1056,17 @@
       <!-- No Task State -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sm:p-8 text-center">
         <div class="flex flex-col items-center">
-          <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-            <HeroIcon name="cube" class="w-8 h-8 text-gray-400" />
-          </div>
-          <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
+          {#if tugasSelesai}
+            <div class="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-4">
+              <HeroIcon name="check-circle" class="w-8 h-8 text-green-600" />
+            </div>
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Tugas Hari Ini Selesai</h2>
+          {:else}
+            <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+              <HeroIcon name="cube" class="w-8 h-8 text-gray-400" />
+            </div>
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
+          {/if}
           <p class="text-sm text-gray-600 mb-6 max-w-md">{noTaskMessage}</p>
           <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <a 
@@ -1557,6 +1583,102 @@
         </div>
       </div>
     {/if}
+
+    <!-- Riwayat Packing: tampil dengan atau tanpa tugas hari ini (29/10/2026). -->
+    <div class="mt-6">
+      <RingkasanSection
+        icon="clock"
+        judul="Riwayat Packing"
+        keterangan={riwayatSemuaStaf ? '10 tugas packing terakhir semua petugas' : '10 tugas packing terakhir Anda'}
+      >
+        <svelte:fragment slot="kanan">
+          {#if !riwayatSemuaStaf && riwayatPacking.length > 0}
+            <a href="/admin/warehouse/packing/history" class="inline-flex items-center gap-1 text-sm font-medium text-[#eb3434] hover:underline">
+              Lihat semua
+              <HeroIcon name="arrow-right" class="w-4 h-4" />
+            </a>
+          {/if}
+        </svelte:fragment>
+
+        {#if riwayatPacking.length > 0}
+          <!-- Desktop: tabel -->
+          <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-200 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                  <th class="py-2 pr-4">Tanggal</th>
+                  {#if riwayatSemuaStaf}
+                    <th class="py-2 pr-4">Petugas</th>
+                    <th class="py-2 pr-4">Gudang</th>
+                  {/if}
+                  <th class="py-2 pr-4">Jenis</th>
+                  <th class="py-2 pr-4">Dikemas</th>
+                  <th class="py-2 pr-4">Kerdus</th>
+                  <th class="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {#each riwayatPacking as baris (baris.id)}
+                  <tr>
+                    <td class="py-3 pr-4 whitespace-nowrap text-gray-900">
+                      {baris.tanggal}
+                      {#if baris.hari_ini}<span class="ml-1 text-xs text-gray-400">hari ini</span>{/if}
+                    </td>
+                    {#if riwayatSemuaStaf}
+                      <td class="py-3 pr-4 text-gray-900">{baris.petugas ?? '-'}</td>
+                      <td class="py-3 pr-4 text-gray-600">{baris.gudang ?? 'Belum ditentukan'}</td>
+                    {/if}
+                    <td class="py-3 pr-4 text-gray-600">{baris.jenis ?? 'Semua jenis'}</td>
+                    <td class="py-3 pr-4 min-w-[160px]">
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-gray-900 whitespace-nowrap">{baris.selesai}<span class="text-xs font-medium text-gray-400"> / {baris.target}</span></span>
+                        <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div class="h-full rounded-full {baris.status === 'completed' ? 'bg-green-500' : 'bg-[#eb3434]'}" style="width: {persenRiwayat(baris)}%"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="py-3 pr-4 text-gray-900">{baris.kerdus}</td>
+                    <td class="py-3"><PilTitik warna={statusRiwayat(baris.status).warna}>{statusRiwayat(baris.status).label}</PilTitik></td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile: kartu -->
+          <div class="md:hidden grid grid-cols-1 gap-3">
+            {#each riwayatPacking as baris (baris.id)}
+              <div class="border border-gray-200 rounded-xl p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-gray-900">{baris.tanggal}</p>
+                    <p class="text-xs text-gray-500">
+                      {#if riwayatSemuaStaf}{baris.petugas ?? '-'} · {baris.gudang ?? 'Belum ditentukan'} · {/if}{baris.jenis ?? 'Semua jenis'}
+                    </p>
+                  </div>
+                  <PilTitik warna={statusRiwayat(baris.status).warna}>{statusRiwayat(baris.status).label}</PilTitik>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">{baris.selesai}<span class="text-xs font-medium text-gray-400"> / {baris.target} mushaf</span></span>
+                  <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full {baris.status === 'completed' ? 'bg-green-500' : 'bg-[#eb3434]'}" style="width: {persenRiwayat(baris)}%"></div>
+                  </div>
+                  <span class="text-xs text-gray-500 whitespace-nowrap">{baris.kerdus} kerdus</span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="flex flex-col items-center text-center py-6">
+            <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+              <HeroIcon name="clock" class="w-6 h-6 text-gray-400" />
+            </div>
+            <p class="font-semibold text-gray-900">Belum ada riwayat packing</p>
+            <p class="text-sm text-gray-500 mt-1">Tugas packing yang pernah diberikan akan tercatat di sini.</p>
+          </div>
+        {/if}
+      </RingkasanSection>
+    </div>
   </div>
 
   <!-- Jenis Warning Modal -->
