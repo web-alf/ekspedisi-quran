@@ -2,10 +2,13 @@
   import AdminLayout from '@/Layouts/AdminLayout.svelte'
   import HeroIcon from '@/Components/UI/HeroIcon.svelte'
   import JatahGudang from '@/Components/Warehouse/JatahGudang.svelte'
+  import KartuTargetPeriode from '@/Components/Warehouse/KartuTargetPeriode.svelte'
+  import PilTitik from '@/Components/Warehouse/PilTitik.svelte'
+  import { opsiPeriode, jumlahHariPeriode, statusLaju } from '../../utils/targetPeriode.js'
   import { onMount } from 'svelte'
   import { router } from '@inertiajs/svelte'
   import axios from 'axios'
-  import { toast } from '../../utils/notifications.js'
+  import { toast, dialog } from '../../utils/notifications.js'
   import { isianJenis, gudangTugas, bolehSimpanTarget } from '../../utils/penugasanTarget.js'
   
   export let warehouseUsers = []
@@ -13,6 +16,70 @@
   export let kartuGudang = null
   // Jatah dari Manager Gudang vs yang sudah dibagi ke freelancer, per gudang dalam cakupan (30/10/2026).
   export let jatahGudang = []
+  // Target mingguan/bulanan per gudang (30/10/2026): yang belum berakhir, dalam cakupan akun.
+  export let targetPeriode = []
+  // Hanya Manager Gudang & super-admin yang menambah/mengubah/menghapus target periode.
+  export let bolehAturTargetPeriode = false
+  export let gudangAktif = []
+
+  let showTargetPeriodeModal = false
+  let targetPeriodeSibuk = false
+  let targetPeriodeGalat = ''
+  let formTargetPeriode = {}
+
+  $: pilihanPeriode = opsiPeriode(formTargetPeriode.tipe ?? 'bulanan')
+  $: hariPeriode = jumlahHariPeriode(formTargetPeriode.tipe, formTargetPeriode.tanggal_acuan)
+  $: perkiraanPerHari = hariPeriode > 0 && formTargetPeriode.target > 0 ? Math.ceil(formTargetPeriode.target / hariPeriode) : 0
+
+  function bukaTargetPeriode(target = null) {
+    targetPeriodeGalat = ''
+    formTargetPeriode = target
+      ? {
+          id: target.id,
+          gudang_id: target.gudang_id,
+          tipe: target.tipe,
+          tanggal_acuan: target.tanggal_mulai,
+          jenis: target.jenis_nilai ?? '',
+          target: target.target,
+          catatan: target.catatan ?? '',
+        }
+      : { id: null, gudang_id: gudangAktif[0]?.id ?? null, tipe: 'bulanan', tanggal_acuan: opsiPeriode('bulanan')[0].nilai, jenis: '', target: null, catatan: '' }
+    showTargetPeriodeModal = true
+  }
+
+  function gantiTipePeriode(tipe) {
+    formTargetPeriode = { ...formTargetPeriode, tipe, tanggal_acuan: opsiPeriode(tipe)[0].nilai }
+  }
+
+  async function simpanTargetPeriode() {
+    targetPeriodeSibuk = true
+    targetPeriodeGalat = ''
+    const { id, ...isian } = formTargetPeriode
+    try {
+      const response = id
+        ? await axios.put(`/admin/supervisor/target-periode/${id}`, isian)
+        : await axios.post('/admin/supervisor/target-periode', isian)
+      toast.success(response.data.message)
+      showTargetPeriodeModal = false
+      await refreshData()
+    } catch (error) {
+      const galat = error.response?.data?.errors
+      targetPeriodeGalat = galat ? Object.values(galat).flat()[0] : (error.response?.data?.message ?? 'Gagal menyimpan target periode.')
+    } finally {
+      targetPeriodeSibuk = false
+    }
+  }
+
+  async function hapusTargetPeriode(target) {
+    if (!(await dialog.confirmDelete(`target ${target.gudang} ${target.periode}`))) return
+    try {
+      const response = await axios.delete(`/admin/supervisor/target-periode/${target.id}`)
+      toast.success(response.data.message)
+      await refreshData()
+    } catch (error) {
+      toast.error(error.response?.data?.message ?? 'Gagal menghapus target periode.')
+    }
+  }
   // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026): [{nilai, jenis_quran_id,
   // terjemahan, label}]. Gudang tugas tidak dipilih — mengikuti penempatan staf.
   export let pilihanJenis = []
@@ -126,6 +193,9 @@
         }
         if (Array.isArray(response.data.jatahGudang)) {
           jatahGudang = response.data.jatahGudang;
+        }
+        if (Array.isArray(response.data.targetPeriode)) {
+          targetPeriode = response.data.targetPeriode;
         }
         if (Array.isArray(response.data.recentActivities)) {
           recentActivities = response.data.recentActivities;
@@ -380,6 +450,16 @@
             <span class="hidden sm:inline">Stok Gudang</span>
             <span class="sm:hidden">Stok</span>
           </button>
+          {#if bolehAturTargetPeriode}
+            <button
+              on:click={() => bukaTargetPeriode()}
+              class="flex items-center gap-2 px-3 sm:px-4 py-2 border-2 border-[#eb3434] text-[#eb3434] rounded-lg hover:bg-red-50 transition-colors text-sm sm:text-base font-medium touch-manipulation"
+            >
+              <HeroIcon name="calendar" class="w-4 h-4 sm:w-5 sm:h-5" />
+              <span class="hidden sm:inline">Target Periode</span>
+              <span class="sm:hidden">Periode</span>
+            </button>
+          {/if}
           <button 
             on:click={() => openAssignModal()}
             class="flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors text-sm sm:text-base font-medium touch-manipulation"
@@ -427,6 +507,77 @@
           <JatahGudang jatah={g} nama={jatahGudang.length > 1 ? g.nama : ''} />
         {/each}
       </div>
+    </section>
+  {/if}
+
+  <!-- Target Periode (30/10/2026): target mingguan/bulanan per gudang dari Manager Gudang. -->
+  {#if targetPeriode.length > 0 || bolehAturTargetPeriode}
+    <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+      <h2 class="text-lg md:text-xl font-semibold text-gray-900">Target Periode</h2>
+      <p class="text-xs sm:text-sm text-gray-500 mb-4">
+        Periode berjalan dan yang akan datang{#if bolehAturTargetPeriode} · hanya Manager Gudang yang bisa menambah, mengubah, atau menghapus{/if}
+      </p>
+      {#if targetPeriode.length > 0}
+        <!-- HP: kartu, supaya aksi Ubah/Hapus tidak tersembunyi di tabel yang digeser. -->
+        <div class="md:hidden grid grid-cols-1 gap-3">
+          {#each targetPeriode as target (target.id)}
+            <div>
+              <KartuTargetPeriode {target} tampilGudang />
+              {#if bolehAturTargetPeriode}
+                <div class="flex justify-end gap-4 mt-1.5 text-xs">
+                  <button type="button" class="text-blue-700 hover:underline" on:click={() => bukaTargetPeriode(target)}>Ubah</button>
+                  <button type="button" class="text-red-600 hover:underline" on:click={() => hapusTargetPeriode(target)}>Hapus</button>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                <th class="py-2 pr-4">Gudang</th>
+                <th class="py-2 pr-4">Periode</th>
+                <th class="py-2 pr-4">Jenis</th>
+                <th class="py-2 pr-4">Progres</th>
+                <th class="py-2 pr-4">Laju</th>
+                {#if bolehAturTargetPeriode}<th class="py-2"></th>{/if}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {#each targetPeriode as target (target.id)}
+                <tr class={target.status === 'akan_datang' ? 'text-gray-500' : ''}>
+                  <td class="py-3 pr-4 whitespace-nowrap">{target.gudang}</td>
+                  <td class="py-3 pr-4 whitespace-nowrap">{target.tipe === 'bulanan' ? 'Bulanan' : 'Mingguan'} · {target.periode}</td>
+                  <td class="py-3 pr-4 text-gray-600">{target.jenis ?? 'Semua jenis'}</td>
+                  <td class="py-3 pr-4 min-w-[200px]">
+                    {#if target.status === 'akan_datang'}
+                      <span class="text-xs">Belum dimulai · target {formatNumber(target.target)}</span>
+                    {:else}
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-gray-900 whitespace-nowrap">{formatNumber(target.dikemas)}<span class="text-xs font-medium text-gray-400"> / {formatNumber(target.target)}</span></span>
+                        <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div class="h-full rounded-full {target.persen >= 100 ? 'bg-green-500' : 'bg-[#eb3434]'}" style="width: {target.persen}%"></div>
+                        </div>
+                      </div>
+                    {/if}
+                  </td>
+                  <td class="py-3 pr-4 whitespace-nowrap"><PilTitik warna={statusLaju(target).warna}>{statusLaju(target).teks}</PilTitik></td>
+                  {#if bolehAturTargetPeriode}
+                    <td class="py-3 text-right whitespace-nowrap text-xs">
+                      <button type="button" class="text-blue-700 hover:underline mr-3" on:click={() => bukaTargetPeriode(target)}>Ubah</button>
+                      <button type="button" class="text-red-600 hover:underline" on:click={() => hapusTargetPeriode(target)}>Hapus</button>
+                    </td>
+                  {/if}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {:else}
+        <p class="text-sm text-gray-500">Belum ada target mingguan atau bulanan. Tambahkan lewat tombol Target Periode.</p>
+      {/if}
     </section>
   {/if}
 
@@ -800,6 +951,96 @@
   {/if}
 
   <!-- Assign Target Modal -->
+  {#if showTargetPeriodeModal}
+    <div class="fixed inset-0 z-[9998] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="judul-target-periode">
+      <div class="flex items-center justify-center min-h-screen px-4 py-8">
+        <div
+          class="fixed inset-0 bg-gray-500 bg-opacity-75"
+          role="button"
+          tabindex="0"
+          aria-label="Tutup target periode"
+          on:click={() => showTargetPeriodeModal = false}
+          on:keydown={(e) => { if (e.key === 'Escape') showTargetPeriodeModal = false; }}
+        ></div>
+
+        <form class="relative bg-white rounded-xl shadow-xl w-full max-w-md p-5 sm:p-6 space-y-4" on:submit|preventDefault={simpanTargetPeriode}>
+          <div class="flex items-center justify-between">
+            <h3 id="judul-target-periode" class="text-lg font-semibold text-gray-900">{formTargetPeriode.id ? 'Ubah Target Periode' : 'Target Periode Baru'}</h3>
+            <button type="button" class="text-gray-400 hover:text-gray-600" aria-label="Tutup" on:click={() => showTargetPeriodeModal = false}>
+              <HeroIcon name="x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+
+          <div>
+            <p class="text-sm text-gray-700 mb-1">Gudang</p>
+            <div class="inline-flex flex-wrap p-1 bg-gray-100 rounded-lg text-sm">
+              {#each gudangAktif as gudang (gudang.id)}
+                <button type="button" class="px-3 py-1.5 rounded-md {formTargetPeriode.gudang_id === gudang.id ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-600'}" on:click={() => formTargetPeriode.gudang_id = gudang.id}>
+                  {gudang.nama.replace('Gudang ', '')}
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <div>
+            <p class="text-sm text-gray-700 mb-1">Periode</p>
+            <div class="inline-flex p-1 bg-gray-100 rounded-lg text-sm mb-2">
+              {#each [['mingguan', 'Mingguan'], ['bulanan', 'Bulanan']] as [nilai, label]}
+                <button type="button" class="px-3 py-1.5 rounded-md {formTargetPeriode.tipe === nilai ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-600'}" on:click={() => gantiTipePeriode(nilai)}>{label}</button>
+              {/each}
+            </div>
+            <select bind:value={formTargetPeriode.tanggal_acuan} class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" aria-label="Pilih minggu atau bulan">
+              {#each pilihanPeriode as opsi (opsi.nilai)}
+                <option value={opsi.nilai}>{opsi.label}</option>
+              {/each}
+              {#if formTargetPeriode.id && !pilihanPeriode.some((o) => o.nilai === formTargetPeriode.tanggal_acuan)}
+                <option value={formTargetPeriode.tanggal_acuan}>{formTargetPeriode.tanggal_acuan}</option>
+              {/if}
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Mingguan = Senin–Minggu. Minggu atau bulan yang sudah lewat tidak bisa dipilih.</p>
+          </div>
+
+          <label class="block">
+            <span class="block text-sm text-gray-700 mb-1">Jenis mushaf <span class="text-gray-400">(opsional)</span></span>
+            <select bind:value={formTargetPeriode.jenis} class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">Semua jenis</option>
+              {#each pilihanJenis as jenis (jenis.nilai)}
+                <option value={jenis.nilai}>{jenis.label}</option>
+              {/each}
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="block text-sm text-gray-700 mb-1">Target</span>
+            <div class="flex items-center gap-2">
+              <input type="number" min="1" max="100000" bind:value={formTargetPeriode.target} class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" required />
+              <span class="text-sm text-gray-500">mushaf</span>
+            </div>
+            {#if perkiraanPerHari > 0}
+              <span class="block text-xs text-gray-500 mt-1">≈ {perkiraanPerHari} mushaf per hari selama {hariPeriode} hari</span>
+            {/if}
+          </label>
+
+          <label class="block">
+            <span class="block text-sm text-gray-700 mb-1">Catatan <span class="text-gray-400">(opsional)</span></span>
+            <input type="text" maxlength="255" bind:value={formTargetPeriode.catatan} placeholder="mis. program wakaf Ramadan" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </label>
+
+          {#if targetPeriodeGalat}
+            <p class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{targetPeriodeGalat}</p>
+          {/if}
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 text-sm" on:click={() => showTargetPeriodeModal = false}>Batal</button>
+            <button type="submit" disabled={targetPeriodeSibuk || !formTargetPeriode.gudang_id || !formTargetPeriode.target} class="px-4 py-2 rounded-lg bg-[#eb3434] text-white text-sm font-medium hover:bg-red-600 disabled:opacity-50">
+              {targetPeriodeSibuk ? 'Menyimpan...' : 'Simpan target'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
   {#if showAssignTargetModal}
     <div class="fixed inset-0 z-[9998] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
       <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">

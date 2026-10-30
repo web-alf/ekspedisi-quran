@@ -74,7 +74,12 @@ describe('bolehSimpanTarget', () => {
 
 describe('Halaman Monitor — modal Assign Target', () => {
     it('tidak lagi menawarkan pilihan gudang penugasan', () => {
-        expect(monitor).not.toMatch(/pilihGudang|gudangKerja|assign-gudang|gudang_id:/);
+        // Modal Target Periode (30/10/2026) memang memilih gudang — target per gudang — jadi
+        // bagiannya dikeluarkan sebelum memeriksa Assign Target.
+        const tanpaTargetPeriode = monitor
+            .replace(/\{#if showTargetPeriodeModal\}[\s\S]*?\{#if showAssignTargetModal\}/, '{#if showAssignTargetModal}')
+            .replace(/function bukaTargetPeriode[\s\S]*?function gantiTipePeriode/, '');
+        expect(tanpaTargetPeriode).not.toMatch(/pilihGudang|gudangKerja|assign-gudang|gudang_id:/);
         expect(monitor).toContain('Gudang tugas mengikuti penempatan staf');
     });
 

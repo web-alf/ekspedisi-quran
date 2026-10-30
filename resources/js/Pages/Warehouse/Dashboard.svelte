@@ -10,6 +10,7 @@
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
   import StatTile from '../../Components/Warehouse/StatTile.svelte';
   import JatahGudang from '../../Components/Warehouse/JatahGudang.svelte';
+  import KartuTargetPeriode from '../../Components/Warehouse/KartuTargetPeriode.svelte';
   import KartuAlur from '../../Components/Warehouse/KartuAlur.svelte';
   import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
@@ -99,6 +100,8 @@
   $: semuaGudang = stokAktif === SEMUA_GUDANG;
   $: namaCakupan = semuaGudang ? 'Semua Gudang' : (gudangManager[0]?.nama ?? '');
   $: packingManager = packingCakupan(ringkasanManager, stokAktif);
+  // Target periode yang berjalan di gudang yang sedang ditampilkan (tab gudang).
+  $: targetPeriodeManager = gudangManager.flatMap((g) => g.target_periode ?? []);
   $: stokJenisManager = stokPerJenis(gudangManager);
   $: stokHabisManager = stokHabisDiSatuGudang(ringkasanManager?.per_gudang ?? [])
     .filter((s) => semuaGudang || s.gudang === gudangManager[0]?.nama);
@@ -407,6 +410,23 @@
           </div>
         </RingkasanSection>
 
+        <!-- Target mingguan/bulanan dari Manager Gudang (30/10/2026). -->
+        <RingkasanSection
+          icon="calendar"
+          judul="Target Periode — {ringkasanGudang.gudang.nama}"
+          keterangan="Dari Manager Gudang · progres dijumlah dari tugas harian freelancer"
+        >
+          {#if (ringkasanGudang.target_periode ?? []).length > 0}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {#each ringkasanGudang.target_periode as target (target.id)}
+                <KartuTargetPeriode {target} />
+              {/each}
+            </div>
+          {:else}
+            <p class="text-sm text-gray-500">Belum ada target mingguan atau bulanan dari Manager Gudang untuk periode ini.</p>
+          {/if}
+        </RingkasanSection>
+
         <RingkasanSection
           icon="archive-box"
           judul="Stok {ringkasanGudang.gudang.nama}"
@@ -613,6 +633,22 @@
                 {ringkasanManager.gabungan.tugas_tanpa_gudang} tugas hari ini belum bertagih gudang dan tidak termasuk angka di atas.
               </p>
             {/if}
+          {/if}
+        </RingkasanSection>
+
+        <RingkasanSection
+          icon="calendar"
+          judul="Target Periode — {namaCakupan}"
+          keterangan="Target mingguan/bulanan per gudang · diatur di Monitor & Penugasan"
+        >
+          {#if targetPeriodeManager.length > 0}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {#each targetPeriodeManager as target (target.id)}
+                <KartuTargetPeriode {target} tampilGudang={semuaGudang} />
+              {/each}
+            </div>
+          {:else}
+            <p class="text-sm text-gray-500">Belum ada target mingguan atau bulanan yang berjalan. Tambahkan lewat tombol Target Periode di Monitor & Penugasan.</p>
           {/if}
         </RingkasanSection>
 

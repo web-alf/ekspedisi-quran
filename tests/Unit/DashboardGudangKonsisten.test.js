@@ -59,6 +59,8 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
     it('SPV mempertahankan urutan bagiannya', () => {
         expect(bagian(blokSpv)).toEqual([
             ['cube', 'Packing Hari Ini'],
+            // 30/10/2026: target mingguan/bulanan dari Manager Gudang.
+            ['calendar', 'Target Periode'],
             // 27/10/2026: satu seksi "Stok" (tahap resi + mushaf belum ada muwakif).
             ['archive-box', 'Stok {ringkasanGudang.gudang.nama}'],
             ['users', 'Freelancer yang Kerja Hari Ini'],
@@ -72,6 +74,7 @@ describe('Dashboard Gudang — ringkasan SPV & Manager seragam', () => {
         expect(bagian(blokManager)).toEqual([
             ['archive-box', '{g.nama}'],
             ['cube', 'Packing Hari Ini'],
+            ['calendar', 'Target Periode'],
             ['archive-box', 'Stok Belum Ada Wakif'],
             ['users', 'Freelancer yang Kerja Hari Ini'],
             ['exclamation-circle', 'Perlu Tindakan'],

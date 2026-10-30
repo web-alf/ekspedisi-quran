@@ -44,6 +44,7 @@ use App\Http\Controllers\Public\MushafRequestController;
 use App\Http\Controllers\Public\MushafTrackingController;
 use App\Http\Controllers\Public\TrackingController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\Supervisor\TargetPeriodeController;
 use App\Http\Controllers\Supervisor\WarehouseMonitorController;
 use App\Http\Controllers\Warehouse\BoxScannerController;
 use App\Http\Controllers\Warehouse\JobMonitorController;
@@ -632,6 +633,17 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/assign-target', [WarehouseMonitorController::class, 'assignTargetToUser'])
                 ->middleware('permission:supervisor.warehouse.assign')
                 ->name('assign-target');
+            // Target mingguan/bulanan per gudang (30/10/2026) — hanya Manager Gudang,
+            // dijaga SimpanTargetPeriodeRequest / User::bolehAturTargetPeriode().
+            Route::post('/target-periode', [TargetPeriodeController::class, 'store'])
+                ->middleware('permission:supervisor.warehouse.assign')
+                ->name('target-periode.store');
+            Route::put('/target-periode/{targetPeriode}', [TargetPeriodeController::class, 'update'])
+                ->middleware('permission:supervisor.warehouse.assign')
+                ->name('target-periode.update');
+            Route::delete('/target-periode/{targetPeriode}', [TargetPeriodeController::class, 'destroy'])
+                ->middleware('permission:supervisor.warehouse.assign')
+                ->name('target-periode.destroy');
 
             // DEPRECATED ROUTES - Kept for backward compatibility but return 410 Gone
             Route::get('/manual-assignment', function () {

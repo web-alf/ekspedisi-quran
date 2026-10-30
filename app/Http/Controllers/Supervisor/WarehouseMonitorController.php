@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use App\Services\PackingAssignmentService;
 use App\Services\RingkasanGudangService;
+use App\Services\TargetPeriodeService;
 use App\Support\CakupanGudang;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -52,6 +53,7 @@ class WarehouseMonitorController extends Controller
                 'summary' => $this->getSummaryStats(),
                 'stockInfo' => $this->getWarehouseStockInfo(),
                 'jatahGudang' => $this->jatahGudang($tercakupGudang),
+                'targetPeriode' => $this->targetPeriode($tercakupGudang),
                 'timestamp' => now()->toISOString(),
             ]);
         } catch (\Exception $e) {
@@ -168,6 +170,11 @@ class WarehouseMonitorController extends Controller
             'kartuGudang' => $this->kartuGudang($tercakupGudang),
             // Jatah dari Manager Gudang vs yang sudah dibagi SPV ke freelancer (30/10/2026).
             'jatahGudang' => $this->jatahGudang($tercakupGudang),
+            // Target mingguan/bulanan per gudang (30/10/2026): SPV melihat gudangnya,
+            // hanya Manager Gudang yang mengelola.
+            'targetPeriode' => $this->targetPeriode($tercakupGudang),
+            'bolehAturTargetPeriode' => $user->bolehAturTargetPeriode(),
+            'gudangAktif' => Gudang::where('is_active', true)->orderBy('id')->get(['id', 'nama']),
             // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026). Gudang tugas tidak
             // lagi dipilih: mengikuti penempatan staf yang ditugasi.
             'pilihanJenis' => JenisQuran::pilihanTugasPacking(),
@@ -984,6 +991,18 @@ class WarehouseMonitorController extends Controller
             ->map(fn (Gudang $gudang) => ['id' => $gudang->id, 'nama' => $gudang->nama] + $ringkasan->jatahGudang($gudang->id))
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function targetPeriode(?int $gudangTercakup): array
+    {
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return [];
+        }
+
+        return app(TargetPeriodeService::class)->belumBerakhir($gudangTercakup);
     }
 
     private function gudangTercakup(): ?int

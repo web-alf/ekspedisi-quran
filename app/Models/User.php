@@ -136,6 +136,17 @@ class User extends Authenticatable
     }
 
     /**
+     * Manager Gudang (PJ murni) atau super-admin: yang memberi target mingguan/bulanan per
+     * gudang (30/10/2026). SPV — walau ikut memegang manager-repacking — hanya menerima.
+     */
+    public function bolehAturTargetPeriode(): bool
+    {
+        return $this->hasRole(RoleEnum::SUPER_ADMIN->value)
+            || ($this->hasRole(RoleEnum::MANAGER_REPACKING->value)
+                && ! $this->hasRole(RoleEnum::SPV_GUDANG->value));
+    }
+
+    /**
      * Apakah pengguna ini manager distribusi.
      */
     public function adalahManager(): bool

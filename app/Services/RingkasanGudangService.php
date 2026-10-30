@@ -47,6 +47,8 @@ class RingkasanGudangService
         return [
             'gudang' => ['id' => $gudang->id, 'kode' => $gudang->kode, 'nama' => $gudang->nama],
             'packing' => $this->packingHariIni($gudang->id),
+            // Target mingguan/bulanan dari Manager Gudang yang sedang berjalan (30/10/2026).
+            'target_periode' => app(TargetPeriodeService::class)->berjalan($gudang->id),
             'perlu_tindakan' => $this->perluTindakan($gudang->id),
             'beban' => $beban,
             'stok_kartu' => $stokKartu,
@@ -70,7 +72,7 @@ class RingkasanGudangService
      * @return array{
      *     gudangList: array<int, array{id: int, kode: string, nama: string}>,
      *     gabungan: array{target: int, selesai: int, kerdus_tersegel: int, staf_bertugas: int, staf_belum_mulai: int, tugas_tanpa_gudang: int},
-     *     per_gudang: array<int, array{id: int, nama: string, kode: string, target: int, selesai: int, jatah: array<string, mixed>, kerdus_tersegel: int, staf_total: int, staf_belum_mulai: int, staf_kerja: array<int, array<string, mixed>>, persen: int, kerdus_menunggu_muat: int, beban: array<string, int>, stok_kartu: array<int, array<string, mixed>>, stok: array<string, mixed>}>,
+     *     per_gudang: array<int, array{id: int, nama: string, kode: string, target: int, selesai: int, jatah: array<string, mixed>, target_periode: array<int, array<string, mixed>>, kerdus_tersegel: int, staf_total: int, staf_belum_mulai: int, staf_kerja: array<int, array<string, mixed>>, persen: int, kerdus_menunggu_muat: int, beban: array<string, int>, stok_kartu: array<int, array<string, mixed>>, stok: array<string, mixed>}>,
      *     stok: array<string, mixed>,
      *     transfer_menunggu: array<int, array{kode: string, asal: string|null, tujuan: string|null, jumlah_resi: int, jumlah_eks: int, dibuat_pada: string|null}>,
      *     transfer_stok_menunggu: array<int, array<string, mixed>>,
@@ -94,6 +96,7 @@ class RingkasanGudangService
                 'id' => $g->id, 'nama' => $g->nama, 'kode' => $g->kode,
                 'target' => $packing['target'], 'selesai' => $packing['selesai'],
                 'jatah' => $packing['jatah'],
+                'target_periode' => app(TargetPeriodeService::class)->berjalan($g->id),
                 'kerdus_tersegel' => $packing['kerdus_tersegel'],
                 'staf_total' => $packing['jumlah_staf'],
                 'staf_belum_mulai' => $packing['staf_belum_mulai'],
