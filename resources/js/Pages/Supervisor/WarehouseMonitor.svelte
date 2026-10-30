@@ -1,6 +1,7 @@
 <script>
   import AdminLayout from '@/Layouts/AdminLayout.svelte'
   import HeroIcon from '@/Components/UI/HeroIcon.svelte'
+  import JatahGudang from '@/Components/Warehouse/JatahGudang.svelte'
   import { onMount } from 'svelte'
   import { router } from '@inertiajs/svelte'
   import axios from 'axios'
@@ -10,6 +11,8 @@
   export let warehouseUsers = []
   export let dailyTasks = []
   export let kartuGudang = null
+  // Jatah dari Manager Gudang vs yang sudah dibagi ke freelancer, per gudang dalam cakupan (30/10/2026).
+  export let jatahGudang = []
   // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026): [{nilai, jenis_quran_id,
   // terjemahan, label}]. Gudang tugas tidak dipilih — mengikuti penempatan staf.
   export let pilihanJenis = []
@@ -120,6 +123,9 @@
         }
         if (Array.isArray(response.data.dailyTasks)) {
           dailyTasks = response.data.dailyTasks;
+        }
+        if (Array.isArray(response.data.jatahGudang)) {
+          jatahGudang = response.data.jatahGudang;
         }
         if (Array.isArray(response.data.recentActivities)) {
           recentActivities = response.data.recentActivities;
@@ -407,6 +413,22 @@
       </div>
     {/each}
   </div>
+
+  <!-- Jatah dari Manager Gudang (30/10/2026): SPV melihat jatah gudangnya dan berapa yang sudah
+       dibagi ke freelancer; PJ melihat semua gudang berdampingan. -->
+  {#if jatahGudang.length > 0}
+    <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
+      <h2 class="text-lg md:text-xl font-semibold text-gray-900">Jatah Gudang Hari Ini</h2>
+      <p class="text-xs sm:text-sm text-gray-500 mb-4">
+        Target dari Manager Gudang ke SPV, dan berapa yang sudah dibagi ke freelancer lewat Assign Target
+      </p>
+      <div class="grid grid-cols-1 {jatahGudang.length > 1 ? 'md:grid-cols-2' : ''} gap-3">
+        {#each jatahGudang as g (g.id)}
+          <JatahGudang jatah={g} nama={jatahGudang.length > 1 ? g.nama : ''} />
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <!-- Main Content Grid with consistent spacing -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 sm:mb-8">

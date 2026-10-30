@@ -70,7 +70,7 @@ class RingkasanGudangService
      * @return array{
      *     gudangList: array<int, array{id: int, kode: string, nama: string}>,
      *     gabungan: array{target: int, selesai: int, kerdus_tersegel: int, staf_bertugas: int, staf_belum_mulai: int, tugas_tanpa_gudang: int},
-     *     per_gudang: array<int, array{id: int, nama: string, kode: string, target: int, selesai: int, kerdus_tersegel: int, staf_total: int, staf_belum_mulai: int, staf_kerja: array<int, array<string, mixed>>, persen: int, kerdus_menunggu_muat: int, beban: array<string, int>, stok_kartu: array<int, array<string, mixed>>, stok: array<string, mixed>}>,
+     *     per_gudang: array<int, array{id: int, nama: string, kode: string, target: int, selesai: int, jatah: array<string, mixed>, kerdus_tersegel: int, staf_total: int, staf_belum_mulai: int, staf_kerja: array<int, array<string, mixed>>, persen: int, kerdus_menunggu_muat: int, beban: array<string, int>, stok_kartu: array<int, array<string, mixed>>, stok: array<string, mixed>}>,
      *     stok: array<string, mixed>,
      *     transfer_menunggu: array<int, array{kode: string, asal: string|null, tujuan: string|null, jumlah_resi: int, jumlah_eks: int, dibuat_pada: string|null}>,
      *     transfer_stok_menunggu: array<int, array<string, mixed>>,
@@ -93,6 +93,7 @@ class RingkasanGudangService
             return [
                 'id' => $g->id, 'nama' => $g->nama, 'kode' => $g->kode,
                 'target' => $packing['target'], 'selesai' => $packing['selesai'],
+                'jatah' => $packing['jatah'],
                 'kerdus_tersegel' => $packing['kerdus_tersegel'],
                 'staf_total' => $packing['jumlah_staf'],
                 'staf_belum_mulai' => $packing['staf_belum_mulai'],
@@ -296,6 +297,11 @@ class RingkasanGudangService
     /**
      * Gabungan seluruh tugas staf gudang ini hari ini — bukan tugas SPV sendiri.
      *
+     * Tugas milik SPV adalah JATAH dari Manager Gudang (hierarki 27/10/2026) yang diteruskan
+     * SPV ke freelancer, bukan pekerjaan packing tambahan. Dulu ikut dijumlah sehingga target
+     * gudang terhitung dua kali (jatah 120 + tugas freelancer 90 tampil 210) — sejak
+     * 30/10/2026 dipisah ke kunci `jatah`.
+     *
      * @return array<string, mixed>
      */
     private function packingHariIni(int $gudangId): array
@@ -304,6 +310,7 @@ class RingkasanGudangService
         $tugas = DailyPackingTask::query()
             ->whereDate('tanggal_tugas', today())
             ->where('gudang_id', $gudangId)
+            ->whereDoesntHave('user.roles', fn (Builder $roles) => $roles->where('name', RoleEnum::SPV_GUDANG->value))
             // roles ikut dimuat: baris daftar memakai label PERAN pemilik tugas, supaya
             // akun PJ/SPV yang juga punya tugas tidak tampil seolah-olah freelancer.
             ->with(['user:id,name', 'user.roles'])
@@ -313,6 +320,7 @@ class RingkasanGudangService
         return [
             'target' => (int) $tugas->sum('total_target'),
             'selesai' => (int) $tugas->sum('total_selesai'),
+            'jatah' => $this->jatahGudang($gudangId, (int) $tugas->sum('total_target')),
             'jumlah_staf' => $tugas->count(),
             'staf_belum_mulai' => $tugas->where('started_at', null)->count(),
             'kerdus_tersegel' => PackingBox::query()
@@ -346,6 +354,40 @@ class RingkasanGudangService
                 })
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * Jatah packing hari ini yang diberikan Manager Gudang ke SPV gudang ini, dibanding yang
+     * sudah dibagi SPV ke freelancer (jumlah target tugas non-SPV di gudang yang sama).
+     *
+     * @param  int|null  $dibagi  jumlah target tugas freelancer bila sudah dihitung pemanggil
+     * @return array{target: int, jenis: array<int, string>, spv: array<int, string>, dibagi: int, sisa: int, lebih: int}
+     */
+    public function jatahGudang(int $gudangId, ?int $dibagi = null): array
+    {
+        $tugasSpv = DailyPackingTask::query()
+            ->whereDate('tanggal_tugas', today())
+            ->where('gudang_id', $gudangId)
+            ->whereHas('user.roles', fn (Builder $roles) => $roles->where('name', RoleEnum::SPV_GUDANG->value))
+            ->with(['user:id,name', 'jenisQuran'])
+            ->get();
+
+        $dibagi ??= (int) DailyPackingTask::query()
+            ->whereDate('tanggal_tugas', today())
+            ->where('gudang_id', $gudangId)
+            ->whereDoesntHave('user.roles', fn (Builder $roles) => $roles->where('name', RoleEnum::SPV_GUDANG->value))
+            ->sum('total_target');
+
+        $target = (int) $tugasSpv->sum('total_target');
+
+        return [
+            'target' => $target,
+            'jenis' => $tugasSpv->map(fn (DailyPackingTask $t) => $t->labelJenis())->filter()->unique()->values()->all(),
+            'spv' => $tugasSpv->map(fn (DailyPackingTask $t) => $t->user?->name)->filter()->values()->all(),
+            'dibagi' => $dibagi,
+            'sisa' => max(0, $target - $dibagi),
+            'lebih' => $target > 0 ? max(0, $dibagi - $target) : 0,
         ];
     }
 

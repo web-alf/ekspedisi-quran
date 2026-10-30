@@ -9,6 +9,7 @@
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
   import StatTile from '../../Components/Warehouse/StatTile.svelte';
+  import JatahGudang from '../../Components/Warehouse/JatahGudang.svelte';
   import KartuAlur from '../../Components/Warehouse/KartuAlur.svelte';
   import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import KartuStok from '../../Components/Warehouse/KartuStok.svelte';
@@ -370,12 +371,18 @@
         <RingkasanSection
           icon="cube"
           judul="Packing Hari Ini — {ringkasanGudang.gudang.nama}"
-          keterangan="Gabungan seluruh tugas staf gudang ini"
+          keterangan="Gabungan tugas freelancer gudang ini — jatah SPV tidak ikut dijumlah"
         >
           <div slot="kanan" class="text-right flex-none">
             <p class="text-2xl sm:text-3xl font-bold text-[#eb3434] leading-none">{persenPacking}%</p>
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
+
+          {#if ringkasanGudang.packing.jatah}
+            <div class="mb-3">
+              <JatahGudang jatah={ringkasanGudang.packing.jatah} />
+            </div>
+          {/if}
 
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <StatTile label="Target hari ini" nilai={ringkasanGudang.packing.target} satuan="mushaf" />
@@ -554,11 +561,19 @@
         <RingkasanSection
           icon="cube"
           judul="Packing Hari Ini — {namaCakupan}"
-          keterangan="{packingManager.selesai} dari {packingManager.target} mushaf sudah dikemas"
+          keterangan="{packingManager.selesai} dari {packingManager.target} mushaf sudah dikemas · jatah SPV tidak ikut dijumlah"
         >
           <div slot="kanan" class="text-right flex-none">
             <p class="text-2xl sm:text-3xl font-bold text-[#eb3434] leading-none">{packingManager.persen}%</p>
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
+          </div>
+
+          <div class="grid grid-cols-1 {gudangManager.length > 1 ? 'md:grid-cols-2' : ''} gap-3 mb-3">
+            {#each gudangManager as g (g.id)}
+              {#if g.jatah}
+                <JatahGudang jatah={g.jatah} nama={g.nama} />
+              {/if}
+            {/each}
           </div>
 
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">

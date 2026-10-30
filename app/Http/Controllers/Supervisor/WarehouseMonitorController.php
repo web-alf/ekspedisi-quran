@@ -14,6 +14,7 @@ use App\Models\StokMushaf;
 use App\Models\User;
 use App\Services\Cache\StatusPengirimanCache;
 use App\Services\PackingAssignmentService;
+use App\Services\RingkasanGudangService;
 use App\Support\CakupanGudang;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -50,6 +51,7 @@ class WarehouseMonitorController extends Controller
                 'recentActivities' => $this->getRecentActivities(),
                 'summary' => $this->getSummaryStats(),
                 'stockInfo' => $this->getWarehouseStockInfo(),
+                'jatahGudang' => $this->jatahGudang($tercakupGudang),
                 'timestamp' => now()->toISOString(),
             ]);
         } catch (\Exception $e) {
@@ -164,6 +166,8 @@ class WarehouseMonitorController extends Controller
             'recentActivities' => $this->getRecentActivities(),
             'summary' => $this->getSummaryStats(),
             'kartuGudang' => $this->kartuGudang($tercakupGudang),
+            // Jatah dari Manager Gudang vs yang sudah dibagi SPV ke freelancer (30/10/2026).
+            'jatahGudang' => $this->jatahGudang($tercakupGudang),
             // Pilihan "Jenis Mushaf" modal Assign Target (28/10/2026). Gudang tugas tidak
             // lagi dipilih: mengikuti penempatan staf yang ditugasi.
             'pilihanJenis' => JenisQuran::pilihanTugasPacking(),
@@ -959,6 +963,29 @@ class WarehouseMonitorController extends Controller
      * (kedua gudang). SPV yang belum ditempatkan ditangani lewat
      * CakupanGudang::belumDitempatkan() — tidak melihat dan tidak menugaskan apa pun.
      */
+    /**
+     * Jatah tiap gudang dalam cakupan: SPV gudangnya sendiri, PJ/super-admin semua gudang aktif.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function jatahGudang(?int $gudangTercakup): array
+    {
+        if (CakupanGudang::belumDitempatkan(auth()->user())) {
+            return [];
+        }
+
+        $ringkasan = app(RingkasanGudangService::class);
+
+        return Gudang::query()
+            ->where('is_active', true)
+            ->when($gudangTercakup !== null, fn ($q) => $q->whereKey($gudangTercakup))
+            ->orderBy('id')
+            ->get(['id', 'nama'])
+            ->map(fn (Gudang $gudang) => ['id' => $gudang->id, 'nama' => $gudang->nama] + $ringkasan->jatahGudang($gudang->id))
+            ->values()
+            ->all();
+    }
+
     private function gudangTercakup(): ?int
     {
         $user = auth()->user();
