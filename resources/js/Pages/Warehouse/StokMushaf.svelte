@@ -270,7 +270,7 @@
             <div class="inline-flex items-stretch border border-gray-300 rounded-lg overflow-hidden">
               <button type="button" on:click={() => (entriJumlah = Math.max(1, (Number(entriJumlah) || 0) - 1))}
                 class="w-9 bg-gray-50 text-gray-700 hover:bg-gray-100" aria-label="Kurangi jumlah">−</button>
-              <input id="entri-jumlah" type="number" inputmode="numeric" min="1" max="500" bind:value={entriJumlah}
+              <input id="entri-jumlah" type="number" inputmode="numeric" min="1" max="100000" bind:value={entriJumlah}
                 class="w-20 text-center border-0 text-sm focus:outline-none" />
               <button type="button" on:click={() => (entriJumlah = (Number(entriJumlah) || 0) + 1)}
                 class="w-9 bg-gray-50 text-gray-700 hover:bg-gray-100" aria-label="Tambah jumlah">+</button>

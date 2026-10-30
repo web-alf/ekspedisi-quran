@@ -531,7 +531,7 @@
 
             <label class="block text-sm">
               <span class="block text-gray-700 mb-1">Jumlah (eks)</span>
-              <input type="number" min="1" max="500" bind:value={stokJumlah}
+              <input type="number" min="1" max="100000" bind:value={stokJumlah}
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </label>
 

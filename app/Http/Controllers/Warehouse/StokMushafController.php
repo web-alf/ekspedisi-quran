@@ -29,6 +29,13 @@ use Inertia\Inertia;
  */
 class StokMushafController extends Controller
 {
+    /**
+     * Batas jumlah eks per sekali catat stok atau dokumen transfer (30/10/2026). Dulu 500 —
+     * kemungkinan sisa saat stok masih dicatat dalam dus — padahal stok satu gudang sudah
+     * ribuan eks, sehingga penerimaan 2.000 eks ditolak.
+     */
+    private const MAKS_EKS_SEKALI_CATAT = 100000;
+
     public function __construct(
         private StokMushafService $stokMushaf,
         private RingkasanGudangService $ringkasanGudang,
@@ -114,9 +121,9 @@ class StokMushafController extends Controller
             // tak bisa dijawab. IQRA tidak punya varian (lihat config stok_varian_jenis).
             'terjemahan' => $this->aturanVarian($request),
             'tipe' => ['required', 'in:masuk,keluar'],
-            'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
+            'jumlah_eks' => ['required', 'integer', 'min:1', 'max:'.self::MAKS_EKS_SEKALI_CATAT],
             'catatan' => ['nullable', 'string', 'max:255'],
-        ]);
+        ], $this->pesanJumlahEks());
 
         $gudang = Gudang::findOrFail($validated['gudang_id']);
         $jenis = JenisQuran::findOrFail($validated['jenis_quran_id']);
@@ -151,9 +158,9 @@ class StokMushafController extends Controller
             'gudang_tujuan_id' => ['required', 'integer', 'exists:gudang,id'],
             'jenis_quran_id' => ['required', 'integer', 'exists:jenis_quran,id'],
             'terjemahan' => $this->aturanVarian($request),
-            'jumlah_eks' => ['required', 'integer', 'min:1', 'max:500'],
+            'jumlah_eks' => ['required', 'integer', 'min:1', 'max:'.self::MAKS_EKS_SEKALI_CATAT],
             'catatan' => ['nullable', 'string', 'max:255'],
-        ]);
+        ], $this->pesanJumlahEks());
 
         $jenis = JenisQuran::findOrFail($validated['jenis_quran_id']);
         $asal = Gudang::findOrFail($validated['gudang_asal_id']);
@@ -263,6 +270,19 @@ class StokMushafController extends Controller
      *
      * @return array<int, mixed>
      */
+    /**
+     * @return array<string, string>
+     */
+    private function pesanJumlahEks(): array
+    {
+        return [
+            'jumlah_eks.required' => 'Isi jumlah eks.',
+            'jumlah_eks.integer' => 'Jumlah eks harus bilangan bulat.',
+            'jumlah_eks.min' => 'Jumlah minimal 1 eks.',
+            'jumlah_eks.max' => 'Jumlah maksimal 100.000 eks sekali catat.',
+        ];
+    }
+
     private function aturanVarian(Request $request): array
     {
         return [
