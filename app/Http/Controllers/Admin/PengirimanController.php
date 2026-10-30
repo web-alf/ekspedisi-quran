@@ -43,6 +43,13 @@ class PengirimanController extends Controller
     public const UKURAN_HALAMAN_BAWAAN = PerPage::DEFAULT;
 
     /**
+     * Filter `tahap=keluar-gudang` (30/10/2026): resi yang sudah terdistribusi, dibuka dari
+     * tautan di seksi Siap Dikemas supaya halaman Proses Packing hanya berisi resi yang
+     * belum dikemas. Filter status biasa hanya menerima satu status.
+     */
+    public const TAHAP_KELUAR_GUDANG = ['pengiriman', Pengiriman::SLUG_TIBA, 'diterima'];
+
+    /**
      * Display a listing of pengiriman
      */
     public function index(Request $request)
@@ -95,6 +102,10 @@ class PengirimanController extends Controller
         // Filter by status
         if ($request->status) {
             $query->where('status_id', $request->status);
+        }
+
+        if ($request->tahap === 'keluar-gudang') {
+            $query->whereHas('status', fn ($q) => $q->whereIn('slug', self::TAHAP_KELUAR_GUDANG));
         }
 
         // Filter by jenis Qur'an
@@ -259,7 +270,7 @@ class PengirimanController extends Controller
 
         return Inertia::render('Admin/Pengiriman/Index', [
             'pengiriman' => $pengiriman,
-            'filters' => $request->only(['search', 'status', 'jenis_quran', 'gudang', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
+            'filters' => $request->only(['search', 'status', 'tahap', 'jenis_quran', 'gudang', 'alamat_status', 'tanggal_mulai', 'tanggal_akhir', 'donatur_id', 'sort_by', 'sort_order', 'number_from', 'number_to', 'per_page']),
             'perPage' => $perPage,
             'perPageOptions' => self::UKURAN_HALAMAN,
             // LOKASI MUSHAF: pilihan filter gudang di Data Resi. Selalu dikirim (walau

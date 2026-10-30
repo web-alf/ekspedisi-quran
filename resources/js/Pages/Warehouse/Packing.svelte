@@ -39,6 +39,24 @@
   $: siapKurang = siapDikemas ? Math.max(0, siapDikemas.sisa_tugas - siapDikemas.jumlah_eks) : 0;
   $: siapLainnya = siapDikemas ? Math.max(0, siapDikemas.jumlah_resi - siapDikemas.contoh.length) : 0;
 
+  // Resi yang sudah dikemas / terdistribusi tidak ditampilkan di sini; tautannya ke halaman tahapnya.
+  const TAUTAN_TAHAP_LANJUT = [
+    {
+      href: '/admin/box-tracking?selesai_packing=1',
+      icon: 'cube',
+      label: 'Sudah dikemas',
+      judul: 'Daftar Kerdus → Selesai Packing',
+      keterangan: 'Kerdus tersegel, siap dimuat',
+    },
+    {
+      href: '/admin/pengiriman?tahap=keluar-gudang',
+      icon: 'truck',
+      label: 'Sudah terdistribusi',
+      judul: 'Data Resi → Dalam Pengiriman / Diterima',
+      keterangan: 'Resi yang sudah keluar gudang',
+    },
+  ];
+
   function muatUlangSiapDikemas() {
     router.reload({ only: ['siapDikemas'] });
   }
@@ -1181,6 +1199,25 @@
               <p class="text-sm text-gray-500 mt-1">Resi baru bisa dikemas setelah statusnya Proses Packing. Hubungi SPV gudang Anda.</p>
             </div>
           {/if}
+
+          <div class="mt-5 pt-4 border-t border-gray-100">
+            <p class="text-xs text-gray-500 mb-3">Resi yang sudah lewat tahap ini tidak tampil di sini. Lihat di:</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {#each TAUTAN_TAHAP_LANJUT as tautan (tautan.href)}
+                <a href={tautan.href} class="flex items-center gap-3 border border-gray-200 rounded-xl p-3 min-w-0 hover:bg-gray-50 transition-colors">
+                  <div class="w-9 h-9 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center flex-none">
+                    <HeroIcon name={tautan.icon} class="w-5 h-5" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{tautan.label}</p>
+                    <p class="text-sm font-semibold text-gray-900">{tautan.judul}</p>
+                    <p class="text-xs text-gray-500">{tautan.keterangan}</p>
+                  </div>
+                  <HeroIcon name="arrow-right" class="w-5 h-5 text-gray-400 flex-none" />
+                </a>
+              {/each}
+            </div>
+          </div>
         </RingkasanSection>
       {/if}
 

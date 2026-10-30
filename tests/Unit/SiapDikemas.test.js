@@ -31,3 +31,20 @@ describe('Seksi Siap Dikemas', () => {
         expect(sumber).toMatch(/only: \[[^\]]*'riwayatPacking', 'siapDikemas'\]/);
     });
 });
+
+describe('Tautan tahap lanjut di Siap Dikemas', () => {
+    const seksi = markup.slice(markup.indexOf('judul="Siap Dikemas'), markup.indexOf('</RingkasanSection>', markup.indexOf('judul="Siap Dikemas')));
+
+    it('mengarah ke Daftar Kerdus (Selesai Packing) dan Data Resi (keluar gudang)', () => {
+        expect(sumber).toContain("href: '/admin/box-tracking?selesai_packing=1'");
+        expect(sumber).toContain("href: '/admin/pengiriman?tahap=keluar-gudang'");
+        expect(sumber).toContain("judul: 'Daftar Kerdus → Selesai Packing'");
+        expect(sumber).toContain("judul: 'Data Resi → Dalam Pengiriman / Diterima'");
+    });
+
+    it('tampil di dalam seksi, setelah keadaan ada resi maupun kosong', () => {
+        expect(seksi).toContain('{#each TAUTAN_TAHAP_LANJUT as tautan');
+        expect(seksi.indexOf('{#each TAUTAN_TAHAP_LANJUT')).toBeGreaterThan(seksi.lastIndexOf('{/if}', seksi.indexOf('{#each TAUTAN_TAHAP_LANJUT')));
+        expect(seksi).toContain('Resi yang sudah lewat tahap ini tidak tampil di sini.');
+    });
+});

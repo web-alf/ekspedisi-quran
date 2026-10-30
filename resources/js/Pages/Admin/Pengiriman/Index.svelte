@@ -48,6 +48,7 @@
   // Initialize filter values to prevent undefined errors
   $: if (!filters.search) filters.search = '';
   $: if (!filters.status) filters.status = '';
+  $: if (!filters.tahap) filters.tahap = '';
   $: if (!filters.jenis_quran) filters.jenis_quran = '';
   $: if (!filters.gudang) filters.gudang = '';
   $: if (!filters.tanggal_mulai) filters.tanggal_mulai = '';
@@ -556,6 +557,9 @@
     if (filters.status) {
       params.set('status', filters.status);
     }
+    if (filters.tahap) {
+      params.set('tahap', filters.tahap);
+    }
     if (filters.jenis_quran) {
       params.set('jenis_quran', filters.jenis_quran);
     }
@@ -594,6 +598,7 @@
 
     if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
     if (filters.status) params.set('status', filters.status);
+    if (filters.tahap) params.set('tahap', filters.tahap);
     if (filters.jenis_quran) params.set('jenis_quran', filters.jenis_quran);
     if (filters.gudang) params.set('gudang', filters.gudang);
     if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
@@ -611,6 +616,7 @@
     numberFrom = '';
     numberTo = '';
     filters.status = '';
+    filters.tahap = '';
     filters.jenis_quran = '';
     filters.gudang = '';
     filters.alamat_status = '';
@@ -768,6 +774,7 @@
     // Preserve current filters
     if (filters.search) params.set('search', filters.search);
     if (filters.status) params.set('status', filters.status);
+    if (filters.tahap) params.set('tahap', filters.tahap);
     if (filters.jenis_quran) params.set('jenis_quran', filters.jenis_quran);
     if (filters.gudang) params.set('gudang', filters.gudang);
     if (filters.alamat_status) params.set('alamat_status', filters.alamat_status);
@@ -1040,7 +1047,7 @@
       </div>
 
       <!-- Clear Filters -->
-      {#if filters.search || filters.status || filters.jenis_quran || startDate || endDate || numberFrom || numberTo}
+      {#if filters.search || filters.status || filters.tahap || filters.jenis_quran || startDate || endDate || numberFrom || numberTo}
         <div class="mt-4">
           <button
             on:click={() => clearFilters()}
@@ -1076,6 +1083,18 @@
               </div>
             {/if}
             
+            {#if filters.tahap === 'keluar-gudang'}
+              <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
+                <span>Tahap: Sudah keluar gudang (Dalam Pengiriman, Tiba, Diterima)</span>
+                <button
+                  on:click={() => { filters.tahap = ''; handleFilter(); }}
+                  class="ml-2 text-green-600 hover:text-green-800"
+                >
+                  <HeroIcon name="x-mark" class="w-3 h-3" />
+                </button>
+              </div>
+            {/if}
+
             {#if filters.jenis_quran}
               <div class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
                 <span>Jenis: {jenisQuranList.find(j => j.id == filters.jenis_quran)?.nama_jenis}</span>
