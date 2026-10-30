@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
+use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\PackingItem;
 use App\Models\PackingNotification;
@@ -676,6 +677,61 @@ class PackingAssignmentService
                 'tugas_selesai' => (bool) $task->is_completed,
             ];
         });
+    }
+
+    /**
+     * Resi yang siap dikemas untuk tugas ini — seksi "Siap Dikemas" di Proses Packing (30/10/2026).
+     *
+     * Aturannya sama dengan kandidat mode Kardus (status Proses Packing, belum masuk kerdus,
+     * belum diambil tugas mana pun, urut resi terlama), ditambah: jenis tugas (bila tugas
+     * berjenis) dan gudang tugas — resi gudang itu atau yang belum punya gudang, karena
+     * pemindaianlah yang memberinya gudang. Varian terjemahan tidak bisa disaring: resi tidak
+     * menyimpannya.
+     *
+     * @return array{jenis: string|null, gudang: string|null, jumlah_resi: int, jumlah_eks: int, sisa_tugas: int, contoh: array<int, array{no_resi: string, penerima: string|null, jenis: string|null, eks: int}>}
+     */
+    public function siapDikemas(DailyPackingTask $task, int $jumlahContoh = 5): array
+    {
+        $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
+        $gudangId = $task->gudang_id ?? $task->user?->gudang_id;
+
+        $query = Pengiriman::query()
+            ->where('status_id', $packingStatusId)
+            ->when($task->jenis_quran_id !== null, fn ($q) => $q->where('jenis_quran_id', $task->jenis_quran_id))
+            ->when($gudangId !== null, fn ($q) => $q->where(fn ($g) => $g->where('gudang_id', $gudangId)->orWhereNull('gudang_id')))
+            ->whereDoesntHave('packingItem')
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('daily_packing_task_items')
+                    ->whereColumn('daily_packing_task_items.pengiriman_id', 'pengiriman.id');
+            });
+
+        $jumlah = (clone $query)
+            ->selectRaw('count(*) as resi, coalesce(sum(greatest(coalesce(jumlah_quran, 1), 1)), 0) as eks')
+            ->first();
+
+        $contoh = (clone $query)
+            ->with('jenisQuran:id,kode_jenis')
+            ->orderBy('id')
+            ->limit($jumlahContoh)
+            ->get(['id', 'no_resi', 'nama_penerima', 'nama_lembaga', 'jenis_quran_id', 'jumlah_quran'])
+            ->map(fn (Pengiriman $p) => [
+                'no_resi' => $p->no_resi,
+                'penerima' => $p->nama_lembaga ?: $p->nama_penerima,
+                'jenis' => $p->jenisQuran?->labelSingkat(),
+                'eks' => max(1, (int) ($p->jumlah_quran ?? 1)),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'jenis' => $task->jenisQuran?->labelSingkat(),
+            'gudang' => $gudangId ? Gudang::whereKey($gudangId)->value('nama') : null,
+            'jumlah_resi' => (int) ($jumlah->resi ?? 0),
+            'jumlah_eks' => (int) ($jumlah->eks ?? 0),
+            'sisa_tugas' => max(0, (int) $task->total_target - (int) $task->total_selesai),
+            'contoh' => $contoh,
+        ];
     }
 
     /**

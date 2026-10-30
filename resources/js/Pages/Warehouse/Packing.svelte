@@ -4,6 +4,8 @@
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
+  import StatTile from '../../Components/Warehouse/StatTile.svelte';
+  import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import { fade } from 'svelte/transition';
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
@@ -30,6 +32,16 @@
   // Capaian tetap terbaca dari kolom Dikemas (selesai / target).
   export let riwayatPacking = [];
   export let riwayatSemuaStaf = false;
+  // SIAP DIKEMAS (30/10/2026): jumlah & 5 resi terlama yang bisa dikerjakan, sesuai jenis
+  // dan gudang tugas. null = tidak ada tugas aktif.
+  export let siapDikemas = null;
+
+  $: siapKurang = siapDikemas ? Math.max(0, siapDikemas.sisa_tugas - siapDikemas.jumlah_eks) : 0;
+  $: siapLainnya = siapDikemas ? Math.max(0, siapDikemas.jumlah_resi - siapDikemas.contoh.length) : 0;
+
+  function muatUlangSiapDikemas() {
+    router.reload({ only: ['siapDikemas'] });
+  }
   const persenRiwayat = (baris) => (baris.target > 0 ? Math.min(100, Math.round((baris.selesai / baris.target) * 100)) : 0);
   // LOKASI MUSHAF (2026-10-15): gudang tugas hari ini. Tugas dari cron lahir tanpa gudang,
   // dan tanpa gudang kerdus yang dibuat tidak punya lokasi — jadi pilihannya disodorkan sekali.
@@ -547,6 +559,7 @@
         };
         
         recentScans = [newScan, ...recentScans.slice(0, 9)]; // Keep last 10
+        muatUlangSiapDikemas();
         
         // Update local data with error handling
         // Sync task progress from server when provided
@@ -945,7 +958,7 @@
       }
 
       // noTaskMessage ikut: kerdus terakhir bisa menyelesaikan tugas (halaman beralih ke ringkasan).
-      router.reload({ only: ['task', 'currentBox', 'allBoxes', 'packedItems', 'noTaskMessage', 'tugasSelesai', 'riwayatPacking'] });
+      router.reload({ only: ['task', 'currentBox', 'allBoxes', 'packedItems', 'noTaskMessage', 'tugasSelesai', 'riwayatPacking', 'siapDikemas'] });
     } catch (error) {
       kardusError = error?.message || 'Gagal mencatat kerdus.';
     } finally {
@@ -1109,6 +1122,68 @@
         </div>
       </div>
       
+      <!-- Siap Dikemas (30/10/2026): resi yang bisa dikerjakan sesuai jenis & gudang tugas. -->
+      {#if siapDikemas}
+        <RingkasanSection
+          icon="archive-box"
+          judul="Siap Dikemas{siapDikemas.jenis ? ` — ${siapDikemas.jenis}` : ''}"
+          keterangan="Resi {siapDikemas.jenis ?? ''} berstatus Proses Packing{siapDikemas.gudang ? ` di ${siapDikemas.gudang}` : ''} yang belum dikemas"
+        >
+          <svelte:fragment slot="kanan">
+            {#if siapDikemas.sisa_tugas > 0}
+              {#if siapKurang > 0}
+                <PilTitik warna="amber">Kurang {siapKurang.toLocaleString('id-ID')} dari sisa tugas</PilTitik>
+              {:else}
+                <PilTitik warna="green">Cukup untuk sisa tugas</PilTitik>
+              {/if}
+            {/if}
+          </svelte:fragment>
+
+          {#if siapDikemas.jumlah_resi > 0}
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+              <StatTile label="Resi siap" nilai={siapDikemas.jumlah_resi.toLocaleString('id-ID')} satuan="resi" />
+              <StatTile label="Mushaf siap" nilai={siapDikemas.jumlah_eks.toLocaleString('id-ID')} satuan="mushaf" />
+              <StatTile label="Sisa tugas Anda" nilai={siapDikemas.sisa_tugas.toLocaleString('id-ID')} satuan="mushaf" />
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    <th class="py-2 pr-4">No. Resi</th>
+                    <th class="py-2 pr-4">Penerima</th>
+                    <th class="py-2 pr-4">Jenis</th>
+                    <th class="py-2">Mushaf</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  {#each siapDikemas.contoh as resi (resi.no_resi)}
+                    <tr>
+                      <td class="py-3 pr-4 whitespace-nowrap text-gray-900">{resi.no_resi}</td>
+                      <td class="py-3 pr-4 text-gray-600">{resi.penerima ?? '-'}</td>
+                      <td class="py-3 pr-4 text-gray-600">{resi.jenis ?? '-'}</td>
+                      <td class="py-3 text-gray-900">{resi.eks}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">
+              {siapDikemas.contoh.length} resi terlama ditampilkan{#if siapLainnya > 0} · {siapLainnya.toLocaleString('id-ID')} resi lainnya{/if}.
+              {#if siapDikemas.jenis}Varian terjemahan belum dibedakan karena resi tidak mencatatnya.{/if}
+            </p>
+          {:else}
+            <div class="flex flex-col items-center text-center py-6">
+              <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                <HeroIcon name="archive-box" class="w-6 h-6 text-gray-400" />
+              </div>
+              <p class="font-semibold text-gray-900">Belum ada resi {siapDikemas.jenis ?? ''} yang siap dikemas</p>
+              <p class="text-sm text-gray-500 mt-1">Resi baru bisa dikemas setelah statusnya Proses Packing. Hubungi SPV gudang Anda.</p>
+            </div>
+          {/if}
+        </RingkasanSection>
+      {/if}
+
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Left: Scanner -->
         <div class="lg:col-span-2">

@@ -153,6 +153,9 @@ class PackingController extends Controller
 
         return Inertia::render('Warehouse/Packing', [
             ...$riwayat,
+            // Resi yang bisa dikerjakan sesuai jenis & gudang tugas (30/10/2026). Closure:
+            // dimuat ulang parsial setelah tiap scan / catat kerdus.
+            'siapDikemas' => fn () => $this->assignmentService->siapDikemas($todayTask),
             'jenisList' => $jenisList,
             'task' => [
                 'id' => $todayTask->id,
