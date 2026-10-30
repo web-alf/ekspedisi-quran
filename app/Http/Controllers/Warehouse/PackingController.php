@@ -502,8 +502,10 @@ class PackingController extends Controller
                     $task = $taskItem->dailyPackingTask;
                     $this->updateProgressTracking($task, $box, $pengiriman, auth()->id());
 
-                    // Update daily task progress
-                    $task->incrementProgress();
+                    // Progres tugas dihitung per EKS, sama seperti kerdus dan mode Kardus
+                    // (30/10/2026): dulu +1 per resi, sehingga resi permintaan lembaga yang
+                    // berisi banyak mushaf terhitung kurang di tugas dan Target Periode.
+                    $task->incrementProgress(max(1, (int) $packingItem->quantity));
 
                     // Note: Status tetap "packing" - admin akan update manual ke "dokumentasi"
 
@@ -712,8 +714,8 @@ class PackingController extends Controller
                 'packed_at' => now(),
             ]);
 
-            // Update task progress
-            $todayTask->incrementProgress();
+            // Per eks, sama seperti scanItem() (lihat komentarnya).
+            $todayTask->incrementProgress(max(1, (int) $packingItem->quantity));
 
             DB::commit();
 
