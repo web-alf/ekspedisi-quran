@@ -17,6 +17,7 @@
   import PerluTindakan from '../../Components/Warehouse/PerluTindakan.svelte';
   import FreelancerKerjaHariIni from '../../Components/Warehouse/FreelancerKerjaHariIni.svelte';
   import { hasPermission } from '../../utils/permissions.js';
+  import { headerCsrfTerbaru } from '../../utils/auth.js';
   import { can } from '../../utils/permissions.js';
   import {
     SEMUA_GUDANG,
@@ -148,25 +149,42 @@
     
     isStartingTask = true;
     try {
+      // Accept JSON: tanpa ini sesi habis dijawab halaman HTML / redirect login, lalu
+      // response.json() gagal dan pengguna hanya melihat "Terjadi kesalahan".
       const response = await fetch('/admin/warehouse/start-scanning', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...headerCsrfTerbaru(),
         }
       });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Redirect to packing page
+
+      // 419 = token sesi basi, 401 = sesi sudah berakhir. Muat ulang halaman: token baru
+      // terpasang, atau pengguna diarahkan ke halaman login.
+      if (response.status === 419 || response.status === 401) {
+        showError('Sesi Berakhir', 'Halaman dimuat ulang. Silakan tekan tombolnya sekali lagi.');
+        window.location.reload();
+        return;
+      }
+
+      const data = await response.json().catch(() => null);
+
+      if (data?.success) {
         router.visit('/admin/warehouse/packing');
-      } else {
-        showError('Gagal Memulai Scanning', data.message || 'Gagal memulai scanning');
+        return;
+      }
+
+      showError('Gagal Memulai Packing', data?.message || `Server sedang bermasalah (kode ${response.status}). Coba lagi sebentar lagi.`);
+
+      // Tugas dihapus / sudah selesai sejak dashboard dibuka: segarkan kartunya.
+      if (response.status === 404 || response.status === 400) {
+        router.reload({ only: ['todayTask', 'activeBox'] });
       }
     } catch (error) {
       console.error('Error starting task:', error);
-      showError('Kesalahan', 'Terjadi kesalahan saat memulai tugas');
+      showError('Koneksi Terputus', 'Periksa koneksi internet, lalu coba lagi.');
     } finally {
       isStartingTask = false;
     }
@@ -230,12 +248,19 @@
         if (result.success) {
           const data = result.data;
           
-          // Update task data if changed
-          if (data.todayTask) {
-            // Check if task progress changed
-            if (!todayTask || todayTask.progress_percentage !== data.todayTask.progress_percentage) {
-              todayTask = data.todayTask;
-            }
+          // Kartu tugas ikut status terbaru: tugas yang dihapus / diganti SPV atau selesai
+          // dari perangkat lain tidak boleh menyisakan tombol "Lanjutkan Packing" yang gagal.
+          // Poling tidak membawa tanggal & jam mulai, jadi data lama tugas yang sama dipertahankan.
+          if (!data.todayTask) {
+            todayTask = null;
+          } else if (
+            !todayTask ||
+            todayTask.id !== data.todayTask.id ||
+            todayTask.status !== data.todayTask.status ||
+            todayTask.total_target !== data.todayTask.total_target ||
+            todayTask.progress_percentage !== data.todayTask.progress_percentage
+          ) {
+            todayTask = todayTask?.id === data.todayTask.id ? { ...todayTask, ...data.todayTask } : data.todayTask;
           }
           
           // Update active box if changed

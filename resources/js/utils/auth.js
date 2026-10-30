@@ -191,6 +191,29 @@ export function getCsrfToken() {
 }
 
 /**
+ * Header CSRF untuk fetch() dari halaman yang dibiarkan terbuka lama (30/10/2026).
+ *
+ * Meta csrf-token hanya diisi saat halaman pertama dimuat, jadi basi begitu sesi berganti
+ * (HP lama terkunci, login ulang di tab lain) dan POST berikutnya ditolak 419. Cookie
+ * XSRF-TOKEN diperbarui di setiap respons — termasuk poling — sehingga dipakai lebih dulu.
+ * Isinya terenkripsi, jadi wajib dikirim sebagai X-XSRF-TOKEN, bukan X-CSRF-TOKEN.
+ *
+ * @returns {Record<string, string>}
+ */
+export function headerCsrfTerbaru() {
+    const cookieXsrf = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.slice('XSRF-TOKEN='.length);
+
+    if (cookieXsrf) {
+        return { 'X-XSRF-TOKEN': decodeURIComponent(cookieXsrf) };
+    }
+
+    return { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' };
+}
+
+/**
  * Check if user is authenticated based on current page props
  */
 export function isAuthenticated(pageProps) {
