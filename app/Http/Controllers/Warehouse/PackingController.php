@@ -1043,18 +1043,21 @@ class PackingController extends Controller
     /**
      * Riwayat scan yang gagal/dibatalkan (packing_scan_logs).
      *
-     * Petugas gudang melihat jejaknya sendiri; pemegang gate viewAllHistory
-     * (supervisor/super-admin) melihat seluruh petugas sekaligus — lengkap
-     * dengan nama siapa yang melakukan scan-nya.
+     * Cakupannya sama dengan Riwayat Packing (30/10/2026): freelancer hanya melihat jejaknya
+     * sendiri — dulu ia lolos gate viewAllHistory dan melihat scan gagal semua petugas beserta
+     * namanya. Pemantau melihat seluruh petugas lengkap dengan nama: SPV dibatasi petugas
+     * gudangnya (+ yang belum ditempatkan), PJ dan super-admin semua gudang.
      */
     public function scanLogs()
     {
         $user = auth()->user();
-        $semuaStaf = Gate::allows('viewAllHistory', $user);
+        $semuaStaf = $this->lihatRiwayatSemuaStaf($user);
 
         $logs = PackingScanLog::query()
             ->with('user:id,name')
             ->when(! $semuaStaf, fn ($query) => $query->where('user_id', $user->id))
+            ->when($semuaStaf && CakupanGudang::berlaku($user), fn ($query) => $query
+                ->whereHas('user', fn ($petugas) => CakupanGudang::terapkan($petugas, $user)))
             ->orderByDesc('id')
             ->limit(20)
             ->get()

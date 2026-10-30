@@ -3,6 +3,7 @@
 use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
 use App\Models\DailyPackingTaskItem;
+use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\PackingBox;
 use App\Models\PackingItem;
@@ -158,20 +159,17 @@ it('menampilkan siapa yang melakukan scan; petugas tanpa akses packing ditolak',
 
     expect(PackingScanLog::count())->toBe(2);
 
-    // Staf gudang lolos gate viewAllHistory (warehouse.box.update_any),
-    // jadi riwayat menampilkan seluruh petugas beserta namanya — inilah
-    // yang diminta tim: "beserta orang yang melakukan scannya".
+    // 30/10/2026: freelancer hanya melihat scan gagalnya sendiri. Dulu ia lolos gate
+    // viewAllHistory (warehouse.box.update_any) dan melihat scan gagal semua petugas.
     $responsA = $this->actingAs($petugasA)
         ->getJson('/admin/warehouse/packing/scan-logs')
         ->assertOk()
         ->assertJsonPath('success', true)
-        ->assertJsonPath('semua_staf', true);
+        ->assertJsonPath('semua_staf', false);
     $logA = collect($responsA->json('data'));
-    expect($logA->count())->toBe(2)
-        ->and($logA->pluck('oleh')->sort()->values()->all())
-        ->toBe(collect([$petugasA->name, $petugasB->name])->sort()->values()->all());
+    expect($logA->pluck('oleh')->all())->toBe([$petugasA->name]);
 
-    // Super-admin juga melihat semuanya (gate viewAllHistory).
+    // Super-admin melihat semuanya, lengkap dengan nama petugasnya.
     $superAdmin = User::factory()->create(['is_active' => true]);
     $superAdmin->assignRole(RoleEnum::SUPER_ADMIN->value);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -266,4 +264,65 @@ it('menolak konfirmasi jenis untuk resi yang sudah dipacking tanpa error SQL', f
 
     expect($respons->json('message'))->toContain('sudah dipacking')
         ->and(PackingItem::where('pengiriman_id', $pengiriman->id)->count())->toBe(1);
+});
+
+/**
+ * Cakupan riwayat scan gagal sama dengan Riwayat Packing (30/10/2026): freelancer dirinya
+ * sendiri, SPV petugas gudangnya (+ yang belum ditempatkan), PJ & super-admin semua.
+ */
+function scanGagalOleh(User $petugas): PackingScanLog
+{
+    return PackingScanLog::create([
+        'user_id' => $petugas->id,
+        'qr_data' => 'qr-'.$petugas->id,
+        'type' => 'invalid_qr',
+        'message' => 'QR tidak valid',
+    ]);
+}
+
+function akunScanGagal(array $peran, ?Gudang $gudang = null): User
+{
+    $user = User::factory()->create(['is_active' => true, 'gudang_id' => $gudang?->id]);
+    $user->syncRoles($peran);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    return $user->fresh();
+}
+
+/**
+ * @return array<int, string> nama petugas di riwayat scan gagal, urut abjad
+ */
+function scanGagalDilihat(User $akun): array
+{
+    return collect(test()->actingAs($akun)->getJson('/admin/warehouse/packing/scan-logs')->assertOk()->json('data'))
+        ->pluck('oleh')
+        ->sort()
+        ->values()
+        ->all();
+}
+
+it('membatasi riwayat scan gagal per role seperti Riwayat Packing', function () {
+    $smg = Gudang::byKode('SMG');
+    $btl = Gudang::byKode('BTL');
+
+    $freelancerSmg = akunScanGagal([RoleEnum::WAREHOUSE->value], $smg);
+    $rekanSmg = akunScanGagal([RoleEnum::WAREHOUSE->value], $smg);
+    $freelancerBtl = akunScanGagal([RoleEnum::WAREHOUSE->value], $btl);
+    $belumDitempatkan = akunScanGagal([RoleEnum::WAREHOUSE->value]);
+
+    foreach ([$freelancerSmg, $rekanSmg, $freelancerBtl, $belumDitempatkan] as $petugas) {
+        scanGagalOleh($petugas);
+    }
+
+    $urut = fn (User ...$akun) => collect($akun)->pluck('name')->sort()->values()->all();
+
+    $spvSmg = akunScanGagal([RoleEnum::SPV_GUDANG->value, RoleEnum::MANAGER_REPACKING->value], $smg);
+    $pj = akunScanGagal([RoleEnum::MANAGER_REPACKING->value, RoleEnum::WAREHOUSE->value]);
+
+    expect(scanGagalDilihat($freelancerSmg))->toBe([$freelancerSmg->name])
+        ->and(scanGagalDilihat($rekanSmg))->toBe([$rekanSmg->name])
+        ->and(scanGagalDilihat($spvSmg))->toBe($urut($freelancerSmg, $rekanSmg, $belumDitempatkan))
+        ->and(scanGagalDilihat($pj))->toBe($urut($freelancerSmg, $rekanSmg, $freelancerBtl, $belumDitempatkan));
+
+    $this->actingAs($spvSmg)->getJson('/admin/warehouse/packing/scan-logs')->assertJsonPath('semua_staf', true);
 });
