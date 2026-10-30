@@ -33,6 +33,14 @@ describe('Seksi Riwayat Packing', () => {
         expect(markup).toContain('Belum ada riwayat packing');
     });
 
+    it('tidak lagi menampilkan kolom Status (30/10/2026)', () => {
+        const seksi = markup.slice(markup.indexOf('judul="Riwayat Packing"'));
+
+        expect(seksi).not.toContain('>Status</th>');
+        expect(seksi).not.toMatch(/Kedaluwarsa|Kadaluarsa/);
+        expect(sumber).not.toContain('STATUS_RIWAYAT');
+    });
+
     it('partial reload setelah mencatat kerdus ikut memuat pesan tugas selesai', () => {
         expect(sumber).toMatch(/only: \[[^\]]*'noTaskMessage'[^\]]*'tugasSelesai'[^\]]*\]/);
     });

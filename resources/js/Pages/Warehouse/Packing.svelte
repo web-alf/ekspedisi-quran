@@ -4,7 +4,6 @@
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
-  import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
   import { fade } from 'svelte/transition';
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
@@ -26,17 +25,11 @@
   export let tugasSelesai = false;
   // RIWAYAT PACKING (29/10/2026): 10 tugas terakhir, dicakup di server per role —
   // freelancer tugasnya sendiri; SPV gudangnya; PJ & super-admin semua (riwayatSemuaStaf).
+  // Kolom Status dihapus 30/10/2026 atas permintaan pemilik: status `expired` ("Kedaluwarsa")
+  // terbaca seperti tugas rusak, padahal artinya target hari itu tidak tercapai.
+  // Capaian tetap terbaca dari kolom Dikemas (selesai / target).
   export let riwayatPacking = [];
   export let riwayatSemuaStaf = false;
-
-  const STATUS_RIWAYAT = {
-    assigned: { label: 'Belum mulai', warna: 'amber' },
-    in_progress: { label: 'Berjalan', warna: 'indigo' },
-    completed: { label: 'Selesai', warna: 'green' },
-    expired: { label: 'Kedaluwarsa', warna: 'gray' },
-  };
-
-  const statusRiwayat = (status) => STATUS_RIWAYAT[status] ?? { label: status, warna: 'gray' };
   const persenRiwayat = (baris) => (baris.target > 0 ? Math.min(100, Math.round((baris.selesai / baris.target) * 100)) : 0);
   // LOKASI MUSHAF (2026-10-15): gudang tugas hari ini. Tugas dari cron lahir tanpa gudang,
   // dan tanpa gudang kerdus yang dibuat tidak punya lokasi — jadi pilihannya disodorkan sekali.
@@ -1613,8 +1606,7 @@
                   {/if}
                   <th class="py-2 pr-4">Jenis</th>
                   <th class="py-2 pr-4">Dikemas</th>
-                  <th class="py-2 pr-4">Kerdus</th>
-                  <th class="py-2">Status</th>
+                  <th class="py-2">Kerdus</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
@@ -1637,8 +1629,7 @@
                         </div>
                       </div>
                     </td>
-                    <td class="py-3 pr-4 text-gray-900">{baris.kerdus}</td>
-                    <td class="py-3"><PilTitik warna={statusRiwayat(baris.status).warna}>{statusRiwayat(baris.status).label}</PilTitik></td>
+                    <td class="py-3 text-gray-900">{baris.kerdus}</td>
                   </tr>
                 {/each}
               </tbody>
@@ -1649,14 +1640,11 @@
           <div class="md:hidden grid grid-cols-1 gap-3">
             {#each riwayatPacking as baris (baris.id)}
               <div class="border border-gray-200 rounded-xl p-3">
-                <div class="flex items-start justify-between gap-2 mb-2">
-                  <div class="min-w-0">
-                    <p class="font-semibold text-gray-900">{baris.tanggal}</p>
-                    <p class="text-xs text-gray-500">
-                      {#if riwayatSemuaStaf}{baris.petugas ?? '-'} · {baris.gudang ?? 'Belum ditentukan'} · {/if}{baris.jenis ?? 'Semua jenis'}
-                    </p>
-                  </div>
-                  <PilTitik warna={statusRiwayat(baris.status).warna}>{statusRiwayat(baris.status).label}</PilTitik>
+                <div class="min-w-0 mb-2">
+                  <p class="font-semibold text-gray-900">{baris.tanggal}</p>
+                  <p class="text-xs text-gray-500">
+                    {#if riwayatSemuaStaf}{baris.petugas ?? '-'} · {baris.gudang ?? 'Belum ditentukan'} · {/if}{baris.jenis ?? 'Semua jenis'}
+                  </p>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">{baris.selesai}<span class="text-xs font-medium text-gray-400"> / {baris.target} mushaf</span></span>
