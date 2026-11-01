@@ -70,11 +70,11 @@ it('hanya menampilkan satu entri per tahap dan menyembunyikan langkah yang ditar
 
     $riwayat = rpRiwayat($p, $this);
 
-    // Terbaru di atas; kedatangan (tahap internal) dan selesai-packing (sudah ditarik) hilang.
-    // Pemesanan memakai waktu resi dibuat, bukan waktu koreksi 15/10 — supaya tidak tampil
-    // lebih baru daripada Produksi.
-    expect(array_column($riwayat, 'slug'))->toBe(['packing', 'produksi', 'pemesanan'])
-        ->and(array_column($riwayat, 'waktu'))->toBe(['16/10/2026 08:30', '13/10/2026 08:23', '01/10/2026 07:00']);
+    // Terbaru di atas; kedatangan (tahap internal), produksi (dinonaktifkan 27/10/2026, tetapi
+    // masih ada di riwayat lama) dan selesai-packing (sudah ditarik) hilang. Pemesanan memakai
+    // waktu resi dibuat, bukan waktu koreksi 15/10.
+    expect(array_column($riwayat, 'slug'))->toBe(['packing', 'pemesanan'])
+        ->and(array_column($riwayat, 'waktu'))->toBe(['16/10/2026 08:30', '01/10/2026 07:00']);
 });
 
 it('status sekarang yang dicapai ulang tanpa riwayat memakai waktu terakhir resi diperbarui', function () {
@@ -90,8 +90,20 @@ it('status sekarang yang dicapai ulang tanpa riwayat memakai waktu terakhir resi
 
     $riwayat = rpRiwayat($p->fresh(), $this);
 
-    expect(array_column($riwayat, 'slug'))->toBe(['selesai-packing', 'packing', 'produksi', 'pemesanan'])
-        ->and(array_column($riwayat, 'waktu'))->toBe(['16/10/2026 08:38', '16/10/2026 08:30', '13/10/2026 08:23', '01/10/2026 07:00']);
+    expect(array_column($riwayat, 'slug'))->toBe(['selesai-packing', 'packing', 'pemesanan'])
+        ->and(array_column($riwayat, 'waktu'))->toBe(['16/10/2026 08:38', '16/10/2026 08:30', '01/10/2026 07:00']);
+});
+
+it('pemesanan selalu memakai waktu pesanan masuk walau resi dikoreksi mundur ke pemesanan', function () {
+    $p = rpResi('pemesanan', ['created_at' => '2026-10-01 07:00:00']);
+    rpPindah($p, 'pemesanan', 'packing', '2026-10-10 08:00:00');
+    rpPindah($p, 'packing', 'pemesanan', '2026-10-12 08:00:00');
+    DB::table('pengiriman')->where('id', $p->id)->update(['updated_at' => '2026-10-12 08:00:00']);
+
+    $riwayat = rpRiwayat($p->fresh(), $this);
+
+    expect(array_column($riwayat, 'slug'))->toBe(['pemesanan'])
+        ->and(array_column($riwayat, 'waktu'))->toBe(['01/10/2026 07:00']);
 });
 
 it('waktu tiap tahap tidak pernah lebih baru daripada tahap di atasnya', function () {
@@ -110,8 +122,8 @@ it('waktu tiap tahap tidak pernah lebih baru daripada tahap di atasnya', functio
 
 it('tidak mengirim catatan petugas, nama petugas, isi doa, maupun no HP donatur ke halaman publik', function () {
     $donatur = Donatur::factory()->create(['no_hp' => '081299998888']);
-    $p = rpResi('produksi', ['donatur_id' => $donatur->id]);
-    rpPindah($p, 'pemesanan', 'produksi', '2026-10-13 08:00:00', [
+    $p = rpResi('packing', ['donatur_id' => $donatur->id]);
+    rpPindah($p, 'pemesanan', 'packing', '2026-10-13 08:00:00', [
         'catatan' => 'Donatur: Tito | Doa: Semoga menjadi imam yang soleh',
         'created_by' => User::factory()->create(['name' => 'Administrator System'])->id,
     ]);
@@ -126,11 +138,11 @@ it('tidak mengirim catatan petugas, nama petugas, isi doa, maupun no HP donatur 
     $riwayat = rpRiwayat($p, $this);
     expect($riwayat[0])->toHaveKeys(['slug', 'nama', 'icon', 'waktu', 'keterangan', 'lokasi', 'foto'])
         ->not->toHaveKeys(['catatan', 'creator', 'user', 'petugas'])
-        ->and($riwayat[0]['keterangan'])->toBe(StatusPengiriman::where('slug', 'produksi')->value('deskripsi'));
+        ->and($riwayat[0]['keterangan'])->toBe(StatusPengiriman::where('slug', 'packing')->value('deskripsi'));
 });
 
 it('catatan resi dan doa wakaf tidak tampil di halaman lacak, tetapi tetap tercetak di lembar resi', function () {
-    $p = rpResi('produksi', ['catatan' => 'Donatur: Tito | Doa: Semoga rezekinya lancar']);
+    $p = rpResi('packing', ['catatan' => 'Donatur: Tito | Doa: Semoga rezekinya lancar']);
     // Pengiriman::wakafItem() adalah belongsTo lewat pengiriman.wakaf_item_id.
     $item = WakafItem::factory()->create(['pengiriman_id' => $p->id, 'donatur_id' => $p->donatur_id, 'doa_request' => 'Semoga rezekinya lancar']);
     $p->update(['wakaf_item_id' => $item->id]);
@@ -184,12 +196,12 @@ it('menggabungkan riwayat status dan tracking pada tahap yang sama tanpa duplika
 });
 
 it('membaca foto dokumentasi lama dalam berbagai format', function (mixed $dokumentasi, int $jumlah) {
-    $p = rpResi('produksi');
+    $p = rpResi('packing');
 
     DB::table('status_histories')->insert([
         'pengiriman_id' => $p->id,
         'status_from' => rpStatus('pemesanan'),
-        'status_to' => rpStatus('produksi'),
+        'status_to' => rpStatus('packing'),
         'catatan' => 'x',
         'created_by' => User::factory()->create()->id,
         'dokumentasi' => $dokumentasi,
@@ -197,12 +209,12 @@ it('membaca foto dokumentasi lama dalam berbagai format', function (mixed $dokum
         'updated_at' => now(),
     ]);
 
-    $produksi = collect(rpRiwayat($p, $this))->firstWhere('slug', 'produksi');
+    $packing = collect(rpRiwayat($p, $this))->firstWhere('slug', 'packing');
 
-    expect($produksi['foto'])->toHaveCount($jumlah);
+    expect($packing['foto'])->toHaveCount($jumlah);
 
     if ($jumlah > 0) {
-        expect($produksi['foto'][0])->toContain('storage/');
+        expect($packing['foto'][0])->toContain('storage/');
     }
 })->with([
     'larik path' => [json_encode(['status_updates/1.jpg', 'status_updates/2.jpg']), 2],
@@ -248,12 +260,12 @@ it('menandai penyerahan di tengah jalan tanpa menyebut tujuan awalnya', function
 });
 
 it('API lacak memakai riwayat publik yang sama tanpa nama petugas', function () {
-    $p = rpResi('produksi');
-    rpPindah($p, 'pemesanan', 'produksi', '2026-10-13 08:00:00');
+    $p = rpResi('packing');
+    rpPindah($p, 'pemesanan', 'packing', '2026-10-13 08:00:00');
 
     $this->getJson('/api/tracking/'.$p->no_resi)
         ->assertOk()
-        ->assertJsonPath('data.riwayat.0.slug', 'produksi')
+        ->assertJsonPath('data.riwayat.0.slug', 'packing')
         ->assertJsonMissingPath('data.status_history')
         ->assertJsonMissingPath('data.tracking_history')
         ->assertDontSee('Staff Gudang');
@@ -263,12 +275,12 @@ it('tetap cepat dengan banyak riwayat', function () {
     $p = rpResi('selesai-packing');
 
     foreach (range(1, 40) as $i) {
-        rpPindah($p, 'produksi', ['produksi', 'packing', 'selesai-packing'][$i % 3], now()->subMinutes(100 - $i)->toDateTimeString());
+        rpPindah($p, 'pemesanan', ['pemesanan', 'packing', 'selesai-packing'][$i % 3], now()->subMinutes(100 - $i)->toDateTimeString());
     }
 
     $mulai = microtime(true);
     $riwayat = rpRiwayat($p, $this);
 
     expect(microtime(true) - $mulai)->toBeLessThan(1.0)
-        ->and(array_column($riwayat, 'slug'))->toBe(['selesai-packing', 'packing', 'produksi', 'pemesanan']);
+        ->and(array_column($riwayat, 'slug'))->toBe(['selesai-packing', 'packing', 'pemesanan']);
 });

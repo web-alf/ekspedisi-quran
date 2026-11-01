@@ -22,7 +22,8 @@ use Illuminate\Support\Collection;
  * Aturannya:
  *   1. Hanya tahap di `config('pengiriman.riwayat_publik_tahap')`.
  *   2. Satu entri per tahap — waktu TERAKHIR tahap itu dicapai, sehingga koreksi bolak-
- *      balik tidak tampil berulang.
+ *      balik tidak tampil berulang. Kecuali Pemesanan: waktu PALING AWAL, yaitu saat pesanan
+ *      masuk — koreksi mundur ke Pemesanan bukan pesanan baru (keputusan pemilik 01/11/2026).
  *   3. Tahap yang sudah "dibatalkan" oleh koreksi mundur (urutannya di atas status
  *      sekarang) tidak ditampilkan — publik tidak perlu melihat langkah yang ditarik.
  *   4. Keterangan = deskripsi baku tahap, BUKAN catatan petugas. Pengecualian hanya untuk
@@ -60,9 +61,13 @@ class RiwayatPublikService
             $kejadian->push(['status_id' => $pemesanan->id, 'waktu' => $pengiriman->created_at, 'lokasi' => null, 'foto' => []]);
         }
 
+        // Pemesanan hanya memakai waktu paling awal. Dulu tahap Produksi di atasnya kebetulan
+        // menahan waktu koreksi mundur; sejak Produksi dinonaktifkan (27/10/2026) koreksi
+        // selesai packing → pemesanan 15/10 sempat tampil sebagai waktu pemesanan.
         $perTahap = $kejadian->groupBy('status_id')->map(fn (Collection $grup, int $statusId) => [
             'status' => $status[$statusId],
-            'kandidat' => $grup->pluck('waktu')->filter()->sort()->values(),
+            'kandidat' => $grup->pluck('waktu')->filter()->sort()->values()
+                ->when($statusId === $pemesanan?->id, fn (Collection $kandidat) => $kandidat->take(1)),
             'lokasi' => $grup->sortBy('waktu')->pluck('lokasi')->filter()->last(),
             'foto' => $grup->pluck('foto')->flatten()->filter()->unique()->values()->all(),
         ]);
@@ -96,7 +101,7 @@ class RiwayatPublikService
 
         // Waktu per tahap: dari tahap tertinggi turun, tiap tahap memakai waktu TERAKHIR
         // yang tidak melewati tahap di atasnya. Tanpa ini, koreksi mundur (selesai packing →
-        // pemesanan pada 15/10) membuat "Pemesanan" tampil lebih baru daripada "Produksi".
+        // pemesanan pada 15/10) bisa membuat tahap bawah tampil lebih baru daripada tahap atasnya.
         $batas = null;
         $perTahap = $perTahap
             ->sortByDesc(fn (array $t) => $t['status']->urutan)
