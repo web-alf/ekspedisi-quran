@@ -16,7 +16,7 @@ class ThermalPrintController extends Controller
 {
     /**
      * Generate thermal label untuk single pengiriman.
-     * Ukuran otomatis dari jenis mushaf: 100×150 mm, atau 90×130 mm untuk A6 (UkuranLabelResi).
+     * Ukuran otomatis dari jenis mushaf: kertas A5, atau kertas A6 untuk mushaf A6 (UkuranLabelResi).
      */
     public function printSingle(Pengiriman $pengiriman, Request $request)
     {
@@ -79,7 +79,7 @@ class ThermalPrintController extends Controller
 
     /**
      * Generate thermal labels untuk multiple pengiriman
-     * Ukuran otomatis dari jenis mushaf. Printer thermal hanya memuat satu ukuran rol, jadi
+     * Ukuran otomatis dari jenis mushaf. Printer hanya memuat satu ukuran kertas sekali cetak, jadi
      * pilihan campuran (mis. A5 + A6) dibawa ke halaman pilih ukuran dan dicetak per ukuran.
      */
     public function printBulk(CetakResiMassalRequest $request)
@@ -128,8 +128,55 @@ class ThermalPrintController extends Controller
     }
 
     /**
+     * Cetak lembar muwakif (lembar wakaf alfatihah.com) — TERPISAH dari resi biasa.
+     *
+     * Resi lama (printSingle/printBulk, tombol "Generate & Print") tidak berubah; lembar ini
+     * punya tombol sendiri "Cetak Lembar Muwakif". Kertas mengikuti jenis mushaf (A5/A6) seperti
+     * resi; pilihan campuran dibawa ke halaman pilih ukuran. QR dibuat saat dicetak, jadi resi
+     * yang belum punya berkas QR pun bisa dicetak.
+     */
+    public function printLembarWakaf(CetakResiMassalRequest $request)
+    {
+        $pengirimanList = Pengiriman::with(['wakafItem', 'jenisQuran', 'donatur'])
+            ->whereIn('id', $request->validated('pengiriman_ids'))
+            ->orderBy('id')
+            ->get();
+
+        $kelompokUkuran = $pengirimanList->groupBy(fn (Pengiriman $pengiriman) => UkuranLabelResi::untukPengiriman($pengiriman)->value);
+        $ukuranDiminta = UkuranLabelResi::tryFrom((string) $request->validated('ukuran'));
+
+        if ($ukuranDiminta === null && $kelompokUkuran->count() > 1) {
+            return view('admin.thermal-print.bulk-pilih-ukuran', [
+                'kelompokUkuran' => collect(UkuranLabelResi::cases())
+                    ->filter(fn (UkuranLabelResi $ukuran) => $kelompokUkuran->has($ukuran->value))
+                    ->map(fn (UkuranLabelResi $ukuran) => [
+                        'ukuran' => $ukuran,
+                        'pengirimanList' => $kelompokUkuran->get($ukuran->value),
+                    ])
+                    ->values(),
+                'totalDipilih' => $pengirimanList->count(),
+                'aksi' => route('admin.thermal-print.lembar-wakaf'),
+                'judul' => 'Cetak Lembar Muwakif',
+            ]);
+        }
+
+        $ukuran = $ukuranDiminta ?? UkuranLabelResi::from($kelompokUkuran->keys()->first());
+        $daftar = $kelompokUkuran->get($ukuran->value, collect());
+
+        if ($daftar->isEmpty()) {
+            abort(404, 'Tidak ada resi berukuran '.$ukuran->label().' di pilihan ini.');
+        }
+
+        return view('admin.thermal-print.partials.lembar-wakaf-halaman', [
+            'daftar' => $daftar,
+            'kertas' => strtoupper($ukuran->value),
+            'judulHalaman' => 'Lembar Muwakif '.strtoupper($ukuran->value).' - '.$daftar->count().' lembar',
+        ]);
+    }
+
+    /**
      * Generate thermal label preview
-     * Ukuran: 100×150 mm, atau 90×130 mm (label A6) dengan ?ukuran=90x130.
+     * Ukuran: kertas A5, atau kertas A6 dengan ?ukuran=a6.
      */
     public function preview(Request $request)
     {

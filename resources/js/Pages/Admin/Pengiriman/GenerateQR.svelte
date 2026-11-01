@@ -700,6 +700,45 @@
     }
   }
   
+  // Cetak lembar muwakif (lembar wakaf) — terpisah dari Generate & Print / resi biasa.
+  // Tidak butuh berkas QR: QR dibuat server saat lembar dicetak.
+  function cetakLembarMuwakif() {
+    if (!canBulkThermalPrint) {
+      error = 'Anda tidak memiliki izin untuk mencetak lembar muwakif.';
+      return;
+    }
+
+    const ids = selectedPengiriman.map(p => p.id);
+    if (ids.length === 0) {
+      error = 'Pilih minimal satu pengiriman';
+      return;
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/thermal-print/lembar-wakaf';
+    form.target = '_blank';
+
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = document.querySelector('meta[name="csrf-token"]')?.content;
+    form.appendChild(csrfInput);
+
+    ids.forEach(id => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'pengiriman_ids[]';
+      input.value = id;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+    success = `Membuka cetak lembar muwakif untuk ${ids.length} pengiriman...`;
+  }
+
   function thermalPrintSingle(pengiriman) {
     const url = `/admin/thermal-print/single/${pengiriman.id}`;
     window.open(url, '_blank', 'width=800,height=600,scrollbars=yes');
@@ -1002,6 +1041,18 @@
                 <span class="hidden sm:inline">Generate & Print ({selectedPengiriman.length})</span>
                 <span class="sm:hidden">Generate ({selectedPengiriman.length})</span>
               {/if}
+            </button>
+
+            <!-- Cetak Lembar Muwakif (lembar wakaf) — terpisah dari Generate & Print -->
+            <button
+              on:click={cetakLembarMuwakif}
+              disabled={loading || selectedPengiriman.length === 0 || !canBulkThermalPrint}
+              class="px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-medium"
+              title="Cetak lembar wakaf untuk muwakif (kertas A5/A6 mengikuti jenis mushaf)"
+            >
+              <HeroIcon name="document-text" class="w-4 h-4" />
+              <span class="hidden sm:inline">Cetak Lembar Muwakif ({selectedPengiriman.length})</span>
+              <span class="sm:hidden">Muwakif ({selectedPengiriman.length})</span>
             </button>
           </div>
         </div>

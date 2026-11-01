@@ -19,11 +19,12 @@ class WakafItem extends Model
     public const DOA_MAKS_KARAKTER = 250;
 
     /**
-     * Doa untuk dicetak di label: doa lama yang lebih panjang dipotong dengan "…".
+     * Doa untuk dicetak di label: pilihan doa standar dari halaman website dibuang
+     * (lihat buangOpsiDoaWebsite()), lalu doa lama yang lebih panjang dipotong dengan "…".
      */
     public static function doaUntukLabel(?string $doa): ?string
     {
-        $doa = $doa !== null ? trim($doa) : null;
+        $doa = $doa !== null ? self::buangOpsiDoaWebsite($doa) : null;
 
         if ($doa === null || $doa === '') {
             return null;
@@ -34,6 +35,55 @@ class WakafItem extends Model
         }
 
         return Str::limit($doa, self::DOA_MAKS_KARAKTER - 1, '…', preserveWords: true);
+    }
+
+    /**
+     * Doa untuk lembar wakaf (resi kertas A5/A6): SAMA dengan yang tersimpan di database —
+     * tidak dipotong, baris barunya dipertahankan (keputusan pemilik 30/10/2026). Hanya
+     * pilihan doa standar dari halaman website yang dibuang (buangOpsiDoaWebsite()), dan
+     * "\n" yang tersimpan sebagai teks (sisa impor) dibaca sebagai baris baru.
+     */
+    public static function doaUntukLembar(?string $doa): ?string
+    {
+        if ($doa === null) {
+            return null;
+        }
+
+        $doa = self::buangOpsiDoaWebsite(str_replace(['\\r\\n', '\\n', '\\r'], "\n", $doa));
+
+        return $doa === '' ? null : $doa;
+    }
+
+    /**
+     * Buang bagian "DOA MUWAKIF YANG MASIH HIDUP" / "DOA MUWAKIF YANG SUDAH MENINGGAL"
+     * beserta doa standarnya dari teks doa.
+     *
+     * Kedua bagian itu pilihan doa di halaman website (keputusan pemilik 30/10/2026: tidak
+     * dicetak), tetapi pada data impor Des 2025 – Jun 2026 ikut tersalin utuh ke doa_request
+     * di depan doa pribadi. Yang tersisa hanya doa pribadi; penyambung di awal ("&", "dan")
+     * ikut dibuang. Data asli tidak diubah.
+     */
+    public static function buangOpsiDoaWebsite(string $doa): string
+    {
+        // Hanya teks yang memuat judul pilihan atau doa standarnya yang diproses; doa biasa
+        // (termasuk yang menyebut kata "muwakif") dikembalikan apa adanya.
+        if (! preg_match('/DOA\s+MUWAKIF\s+YANG\s+(?:MASIH\s+HIDUP|SUDAH\s+MENINGGAL)|limpahkan rahmat-Mu kepada muwakif dan keluarganya|ampunilah dosa-dosa almarhum\/ah/iu', $doa)) {
+            return trim($doa);
+        }
+
+        $teks = str_replace(['\\r\\n', '\\n', '\\r'], ' ', $doa);
+        $teks = str_replace(['“', '”', '„'], '"', $teks);
+
+        // Judul pilihan + doa standar dalam tanda kutip (bila ada).
+        $teks = preg_replace('/DOA\s+MUWAKIF\s+YANG\s+(?:MASIH\s+HIDUP|SUDAH\s+MENINGGAL)\s*:?\s*(?:"[^"]*"?)?/iu', ' ', $teks);
+        // Doa standar yang tertinggal tanpa judul atau tanpa tanda kutip.
+        $teks = preg_replace('/Ya Allah, limpahkan rahmat-Mu kepada muwakif dan keluarganya\..*?Rabbal [\'’]aalamiin\.?"?/isu', ' ', $teks);
+        $teks = preg_replace('/Ya Allah, ampunilah dosa-dosa almarhum\/ah,.*?Rabbal [\'’]aalamiin\.?"?/isu', ' ', $teks);
+
+        $teks = trim(preg_replace('/[ \t]+/u', ' ', preg_replace('/\s*\R\s*/u', "\n", $teks)));
+        $teks = preg_replace('/^(?:(?:&|\+|-|,|\.|\||dan\b)\s*)+/iu', '', $teks);
+
+        return trim($teks, " \n\"'");
     }
 
     /**

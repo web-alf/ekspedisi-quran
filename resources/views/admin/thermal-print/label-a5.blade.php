@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Label Thermal 100×150mm Portrait - {{ $pengiriman->no_resi ?? 'Preview' }}</title>
+    <title>Label Resi A5 - {{ $pengiriman->no_resi ?? 'Preview' }}</title>
     <style>
-        /* Custom thermal label 100×150 mm (Portrait) */
+        /* Label resi di kertas A5 (148 × 210 mm) printer biasa, sisa 10 mm tiap sisi
+           (keputusan pemilik 29/10/2026): kotak label 128 × 190 mm. */
         @page {
-            size: 100mm 150mm;
-            margin: 2mm;
+            size: 148mm 210mm; /* A5 */
+            margin: 10mm;
         }
         
         * {
@@ -28,8 +29,8 @@
         }
         
         .thermal-label {
-            width: 96mm;
-            height: 146mm;
+            width: 128mm;
+            height: 190mm;
             border: 1px solid #000;
             padding: 1.5mm;
             background: white;
@@ -53,7 +54,7 @@
            (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 14mm;
+            height: 18mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -109,8 +110,8 @@
         }
         
         .resi-qr-container {
-            width: 20mm;
-            height: 20mm;
+            width: 28mm;
+            height: 28mm;
             border: 1px solid #000;
             padding: 0.5mm;
             background: white;
@@ -193,7 +194,7 @@
         }
         
         .info-table .label-col {
-            width: 20mm;
+            width: 24mm;
             font-weight: bold;
             color: #333;
             text-align: left;
@@ -211,7 +212,7 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
-           Label 10 × 15 cm menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
+           Label A5 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
             font-size: calc(7pt * var(--skala, 1) + 1px);
@@ -298,7 +299,8 @@
             
             .thermal-label {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                transform: scale(0.8);
+                transform: scale(0.7);
+                transform-origin: top center;
                 margin: 20px auto;
             }
             
@@ -324,6 +326,19 @@
                 display: inline-block;
             }
             
+    
+        .pengingat-cetak {
+            font-size: 12px;
+            color: #92400e;
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-bottom: 8px;
+            font-weight: normal;
+            line-height: 1.4;
+        }
+
             .btn-primary {
                 background: #007bff;
                 color: white;
@@ -343,12 +358,13 @@
 <body>
     @if(!isset($isPreview) || !$isPreview)
         <div class="no-print preview-controls">
+            <div class="pengingat-cetak">Kertas <b>A5</b> · skala <b>100%</b> (Actual size, bukan "Fit to page") · margin <b>Default</b></div>
             <button onclick="window.print()" class="btn btn-primary">Print</button>
             <a href="{{ url()->previous() }}" class="btn btn-secondary">← Kembali</a>
         </div>
     @endif
 
-    <div class="thermal-label">
+    <div class="thermal-label" data-skala-maks="1.9">
         <!-- Header dengan Logo Full Width -->
         <div class="label-header">
             @php
@@ -470,7 +486,7 @@
                                 </td>
                             </tr>
                             @endif
-                            @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
+                            @if(\App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request ?? null))
                             <tr>
                                 <td class="label-col">Doa:</td>
                                 <td class="value-col doa-col {{ \App\Models\WakafItem::kelasUkuranDoaLabel($pengiriman->wakafItem->doa_request) }}">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
@@ -526,7 +542,7 @@
         @if(isset($isPreview) && $isPreview)
             // Auto print untuk preview mode
             setTimeout(() => {
-                if(confirm('Cetak label thermal sekarang?')) {
+                if(confirm('Cetak label resi A5 sekarang?')) {
                     thermalPrint();
                 }
             }, 500);

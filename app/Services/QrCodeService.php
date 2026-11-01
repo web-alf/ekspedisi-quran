@@ -74,6 +74,22 @@ class QrCodeService
     }
 
     /**
+     * QR resi sebagai SVG siap disisipkan ke halaman cetak.
+     *
+     * Isi dan pengaturannya sama dengan berkas yang dibuat buatUntuk(), tetapi dibuat langsung
+     * saat dicetak: lembar wakaf tidak boleh bergantung pada berkas QR di disk, yang bisa hilang
+     * (per 30/10/2026 hanya 41 dari 26.101 resi yang berkasnya masih ada).
+     */
+    public function svgUntuk(string $noResi): string
+    {
+        return (string) QrCode::format('svg')
+            ->size(300)
+            ->margin(1)
+            ->errorCorrection('L')
+            ->generate($noResi);
+    }
+
+    /**
      * Apakah QR-nya sudah ada DAN berkasnya benar-benar masih ada di disk?
      *
      * Keduanya diperiksa: kolom `qr_code_path` bisa terisi sementara berkasnya

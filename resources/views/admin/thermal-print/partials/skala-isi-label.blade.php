@@ -23,11 +23,17 @@
     function sesuaikanSkala(label) {
         const seksiTerakhir = label.querySelector('.label-content').lastElementChild;
         seksiTerakhir.style.flex = 'none';
-        label.style.setProperty('--skala', '1');
+
+        // Batas skala per ukuran kertas lewat atribut .thermal-label: A5 (128 × 190 mm) boleh
+        // membesar sampai data-skala-maks; A6 (85 × 128 mm) memakai tata letak yang sama
+        // dengan A5 sehingga mulai dari data-skala-min < 1. Tanpa atribut: 1 … SKALA_MAKS.
+        const skalaMin = parseFloat(label.dataset.skalaMin) || 1;
+        const skalaMaks = parseFloat(label.dataset.skalaMaks) || SKALA_MAKS;
+        label.style.setProperty('--skala', String(skalaMin));
 
         if (!meluap(label, seksiTerakhir)) {
-            let bawah = 1;
-            let atas = SKALA_MAKS;
+            let bawah = skalaMin;
+            let atas = skalaMaks;
             for (let i = 0; i < 10; i++) {
                 const tengah = (bawah + atas) / 2;
                 label.style.setProperty('--skala', String(tengah));

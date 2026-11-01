@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Label Thermal 90×130mm Portrait - {{ $pengiriman->no_resi ?? 'Preview' }}</title>
+    <title>Label Resi A6 - {{ $pengiriman->no_resi ?? 'Preview' }}</title>
     <style>
-        /* Label thermal 90×130 mm (Portrait) untuk mushaf bersampul kecil (A6, sampul 14 × 10 cm);
-           ukuran dipilih otomatis lewat App\Enums\UkuranLabelResi. */
+        /* Label resi di kertas A6 (105 × 148 mm) printer biasa, sisa 10 mm tiap sisi:
+           kotak label 85 × 128 mm. Tata letak SAMA dengan label A5 (label-a5), hanya
+           diperkecil ±2/3 — keputusan pemilik 30/10/2026. */
         @page {
-            size: 90mm 130mm;
-            margin: 2mm;
+            size: 105mm 148mm; /* A6 */
+            margin: 10mm;
         }
         
         * {
@@ -29,8 +30,8 @@
         }
         
         .thermal-label {
-            width: 86mm;
-            height: 126mm;
+            width: 85mm;
+            height: 128mm;
             border: 1px solid #000;
             padding: 1.5mm;
             background: white;
@@ -49,9 +50,12 @@
             border-bottom: 2px solid #000000 !important;
         }
         
+        /* Header dipendekkan 20 → 14 mm (28/10/2026); logo tetap ±43 mm lebar. Ruang 6 mm
+           yang dihemat diberikan ke kotak Jenis Wakaf, bukan ke ukuran huruf
+           (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 14mm;
+            height: 13mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -75,13 +79,12 @@
         /* Resi + QR Combined Section with Space Between */
         .resi-qr-section {
             background: #f0f0f0;
-            padding: 1.5mm;
+            padding: 2mm;
             margin-bottom: 1mm;
             border: 1px solid #000;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 2mm;
         }
         
         .resi-info {
@@ -89,13 +92,13 @@
         }
         
         .resi-label {
-            font-size: 7pt;
+            font-size: calc(9pt * var(--skala, 1));
             color: #666;
             font-weight: bold;
         }
         
         .resi-number {
-            font-size: 11pt;
+            font-size: calc(12pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
             letter-spacing: 0.3px;
@@ -103,18 +106,8 @@
         }
         
         .resi-date {
-            font-size: 7pt;
+            font-size: calc(8pt * var(--skala, 1));
             color: #666;
-        }
-
-        /* Jenis mushaf tampil di kotak resi (pengganti seksi "Jenis Wakaf" pada label 10 × 15 cm). */
-        .jenis-badge {
-            display: inline-block;
-            margin-top: 1mm;
-            border: 1.5px solid #000;
-            padding: 0.3mm 1.5mm;
-            font-size: 9pt;
-            background: white;
         }
         
         .resi-qr-container {
@@ -143,20 +136,46 @@
             border: 1px solid #000;
             border-collapse: collapse;
             /* Jarak antarseksi cukup dari gap .label-content (dirapatkan 28/10/2026 supaya
-               nama/alamat panjang + doa panjang tetap muat di 130 mm). */
+               nama/alamat panjang + doa panjang tetap muat di 150 mm). */
             margin-bottom: 0;
         }
         
         .section-header {
             background: #f0f0f0;
-            font-size: 8pt;
+            font-size: calc(9pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
-            padding: 0.7mm;
+            padding: 1mm;
             text-align: center;
             border-bottom: 1px solid #000;
         }
         
+        /* Jenis Wakaf jadi seksi terakhir yang mengisi sisa tinggi label sampai garis bawah.
+           Ruang sisa lainnya dipakai bersama lewat --skala (partials/skala-isi-label), jadi
+           nama jenis tetap di bawah nomor resi dalam urutan besar huruf (28/10/2026). */
+        .jenis-wakaf {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #000;
+        }
+
+        .jenis-wakaf .section-header {
+            display: block;
+        }
+
+        .jenis-wakaf-nama {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.3mm 1.5mm;
+            font-size: calc(10pt * var(--skala, 1));
+            line-height: 1.1;
+            text-align: center;
+            word-break: break-word;
+        }
+
         .section-content {
             padding: 0.5mm;
         }
@@ -165,24 +184,24 @@
         .info-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 7.5pt;
+            font-size: calc(8pt * var(--skala, 1));
         }
         
         .info-table td {
-            padding: 0.4mm 1mm;
+            padding: 0.5mm 1.2mm;
             vertical-align: top;
             border: none;
-            line-height: 1.25;
+            line-height: 1.3;
         }
         
         .info-table .label-col {
-            /* 16mm membuat "HP Donatur:" patah dua baris di label 90 mm sehingga
-               tampak seperti baris "Donatur:" kosong (temuan 28/10/2026). */
-            width: 19mm;
+            width: 17mm;
             font-weight: bold;
             color: #333;
             text-align: left;
-            padding-left: 0.8mm;
+            padding-left: 1mm;
+            /* Label kolom tidak boleh patah baris: "HP Donatur:" yang terbelah di
+               label sempit terbaca seperti baris kosong. */
             white-space: nowrap;
         }
         
@@ -194,25 +213,26 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
+           Label A5/A6 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
-            font-size: 7pt;
+            font-size: calc(7pt * var(--skala, 1) + 1px);
             line-height: 1.25;
         }
 
         .info-table .doa-col.doa-sedang {
-            font-size: 6.5pt;
+            font-size: calc(6.5pt * var(--skala, 1) + 1px);
         }
 
         .info-table .doa-col.doa-panjang {
-            font-size: 6pt;
+            font-size: calc(6pt * var(--skala, 1) + 1px);
             line-height: 1.2;
         }
         
         .address-content {
             padding: 1.5mm;
             line-height: 1.5;
-            font-size: 8pt;
+            font-size: calc(8pt * var(--skala, 1));
             font-weight: bold;
         }
         
@@ -280,7 +300,8 @@
             
             .thermal-label {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                transform: scale(0.8);
+                transform: scale(1);
+                transform-origin: top center;
                 margin: 20px auto;
             }
             
@@ -306,6 +327,19 @@
                 display: inline-block;
             }
             
+    
+        .pengingat-cetak {
+            font-size: 12px;
+            color: #92400e;
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-bottom: 8px;
+            font-weight: normal;
+            line-height: 1.4;
+        }
+
             .btn-primary {
                 background: #007bff;
                 color: white;
@@ -325,12 +359,13 @@
 <body>
     @if(!isset($isPreview) || !$isPreview)
         <div class="no-print preview-controls">
+            <div class="pengingat-cetak">Kertas <b>A6</b> · skala <b>100%</b> (Actual size, bukan "Fit to page") · margin <b>Default</b></div>
             <button onclick="window.print()" class="btn btn-primary">Print</button>
             <a href="{{ url()->previous() }}" class="btn btn-secondary">← Kembali</a>
         </div>
     @endif
 
-    <div class="thermal-label">
+    <div class="thermal-label" data-skala-min="0.8" data-skala-maks="1.3">
         <!-- Header dengan Logo Full Width -->
         <div class="label-header">
             @php
@@ -364,7 +399,6 @@
                 <div class="resi-label">No:</div>
                 <div class="resi-number">{{ $pengiriman->no_resi ?? 'EQ-2025-001234' }}</div>
                 <div class="resi-date">{{ $printDate }}, {{ $printTime }} WIB</div>
-                <div class="jenis-badge">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran A6' }}</div>
             </div>
             <div class="resi-qr-container">
                 @if($qrUrl && file_exists(public_path('storage/' . str_replace('public/', '', $pengiriman->qr_code_path ?? ''))))
@@ -395,6 +429,14 @@
                             <tr>
                                 <td class="label-col">Nama:</td>
                                 <td class="value-col">Ekspedisi Quran</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Resi:</td>
+                                <td class="value-col">{{ $pengiriman->no_resi ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label-col">Tanggal:</td>
+                                <td class="value-col">{{ $printDate }}</td>
                             </tr>
                             <tr>
                                 <td class="label-col">Alamat:</td>
@@ -445,7 +487,7 @@
                                 </td>
                             </tr>
                             @endif
-                            @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
+                            @if(\App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request ?? null))
                             <tr>
                                 <td class="label-col">Doa:</td>
                                 <td class="value-col doa-col {{ \App\Models\WakafItem::kelasUkuranDoaLabel($pengiriman->wakafItem->doa_request) }}">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
@@ -455,10 +497,18 @@
                     </td>
                 </tr>
             </table>
-
+            
+            
+            <!-- Jenis Wakaf -->
+            <div class="jenis-wakaf">
+                <div class="section-header">Jenis Wakaf</div>
+                <div class="jenis-wakaf-nama">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran Ukuran A6' }}</div>
+            </div>
+            
         </div>
     </div>
     
+    @include('admin.thermal-print.partials.skala-isi-label')
     <script>
         // Auto print untuk thermal printer
         function thermalPrint() {
@@ -493,7 +543,7 @@
         @if(isset($isPreview) && $isPreview)
             // Auto print untuk preview mode
             setTimeout(() => {
-                if(confirm('Cetak label thermal sekarang?')) {
+                if(confirm('Cetak label resi A6 sekarang?')) {
                     thermalPrint();
                 }
             }, 500);

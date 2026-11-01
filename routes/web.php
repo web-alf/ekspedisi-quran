@@ -423,6 +423,10 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/bulk', [ThermalPrintController::class, 'printBulk'])
                 ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
                 ->name('bulk');
+            // Lembar muwakif (lembar wakaf) — tombol terpisah, resi lama tidak berubah.
+            Route::post('/lembar-wakaf', [ThermalPrintController::class, 'printLembarWakaf'])
+                ->middleware('permission:qr.bulk_operations|warehouse.qr.bulk_generate')
+                ->name('lembar-wakaf');
             Route::get('/preview', [ThermalPrintController::class, 'preview'])
                 ->middleware(['auth'])
                 ->name('preview');

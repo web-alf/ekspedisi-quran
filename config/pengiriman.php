@@ -161,14 +161,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Jenis mushaf yang memakai label resi kecil 9 × 13 cm
+    | Jenis mushaf yang memakai label resi kertas A6
     |--------------------------------------------------------------------------
     |
     | Ukuran sampul diukur pemilik 28/10/2026: A5 21,4 × 14,8 cm, A6 14 × 10 cm.
-    | Resi 10 × 15 cm muat di A5 tetapi tidak di A6, jadi jenis di sini dicetak
-    | dengan label 9 × 13 cm (App\Enums\UkuranLabelResi). Jenis lain tetap
-    | 10 × 15 cm. Cetak massal campuran dipisah per ukuran karena printer thermal
-    | hanya memuat satu ukuran rol.
+    | Resi dicetak printer biasa di kertas yang sudah dipotong A5 / A6, sisa 10 mm
+    | tiap sisi (29/10/2026): jenis di sini memakai kertas A6 (label 8,5 × 12,8 cm),
+    | jenis lain kertas A5 (label 12,8 × 19 cm) — App\Enums\UkuranLabelResi.
+    | Cetak massal campuran dipisah per ukuran kertas.
     |
     */
 

@@ -6,16 +6,18 @@ use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 
 /**
- * Ukuran label resi thermal, dipilih otomatis dari jenis mushaf (keputusan pemilik 28/10/2026).
+ * Ukuran label resi, dipilih otomatis dari jenis mushaf.
  *
- * Resi ditempel di sampul tiap mushaf. Sampul A6 hanya 14 × 10 cm, jadi resi 10 × 15 cm
- * tidak muat; jenis di `pengiriman.jenis_label_resi_kecil` memakai label 9 × 13 cm.
- * Jenis lain (A5, Iqro) tetap 10 × 15 cm.
+ * Resi dicetak printer biasa di kertas yang sudah dipotong A5 (148 × 210 mm) atau
+ * A6 (105 × 148 mm), satu label per lembar, sisa 10 mm tiap sisi (keputusan pemilik
+ * 29/10/2026; sebelumnya label thermal 10 × 15 cm dan 9 × 13 cm yang terlalu kecil).
+ * Jenis di `pengiriman.jenis_label_resi_kecil` (A6, sampul 14 × 10 cm) memakai kertas A6;
+ * jenis lain (A5, Iqro) memakai kertas A5.
  */
 enum UkuranLabelResi: string
 {
-    case Standar = '100x150';
-    case Kecil = '90x130';
+    case Standar = 'a5';
+    case Kecil = 'a6';
 
     public static function untukJenis(?JenisQuran $jenisQuran): self
     {
@@ -31,22 +33,25 @@ enum UkuranLabelResi: string
         return self::untukJenis($pengiriman->jenisQuran);
     }
 
+    /**
+     * Nama ukuran yang tampil di halaman, mis. "A5 (12,8 × 19 cm)".
+     */
     public function label(): string
     {
         return match ($this) {
-            self::Standar => '10 × 15 cm',
-            self::Kecil => '9 × 13 cm',
+            self::Standar => 'A5 (12,8 × 19 cm)',
+            self::Kecil => 'A6 (8,5 × 12,8 cm)',
         };
     }
 
     /**
-     * Ukuran rol stiker yang harus terpasang di printer thermal.
+     * Kertas yang harus dimasukkan ke printer.
      */
-    public function rolStiker(): string
+    public function kertas(): string
     {
         return match ($this) {
-            self::Standar => '100 × 150 mm',
-            self::Kecil => '90 × 130 mm',
+            self::Standar => 'A5 (148 × 210 mm)',
+            self::Kecil => 'A6 (105 × 148 mm)',
         };
     }
 

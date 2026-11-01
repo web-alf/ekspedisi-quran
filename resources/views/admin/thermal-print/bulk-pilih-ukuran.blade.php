@@ -6,8 +6,8 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Pilih Ukuran Label - Cetak Massal</title>
     <style>
-        /* Resi terpilih campuran ukuran label (A5/Iqro 10 × 15 cm, A6 9 × 13 cm). Printer thermal
-           hanya memuat satu ukuran rol, jadi setiap ukuran dicetak terpisah (28/10/2026). */
+        /* Resi terpilih campuran ukuran kertas (A5/Iqro di kertas A5, A6 di kertas A6). Printer
+           hanya memuat satu ukuran kertas sekali cetak, jadi setiap ukuran dicetak terpisah. */
         * {
             margin: 0;
             padding: 0;
@@ -128,15 +128,15 @@
 <body>
     <div class="container">
         <div>
-            <h1>Cetak Label Massal</h1>
+            <h1>{{ $judul ?? 'Cetak Label Massal' }}</h1>
             <p class="subjudul">{{ $totalDipilih }} resi dipilih, terdiri dari {{ $kelompokUkuran->count() }} ukuran label.</p>
         </div>
 
-        <p class="pengingat">Printer thermal hanya memuat satu ukuran rol. Cetak satu ukuran dulu, ganti rol stiker, lalu cetak ukuran berikutnya.</p>
+        <p class="pengingat">Printer hanya memuat satu ukuran kertas sekali cetak. Cetak satu ukuran dulu, ganti kertas, lalu cetak ukuran berikutnya. Di dialog cetak pilih ukuran kertas yang sama dan skala 100%.</p>
 
         <div class="daftar-ukuran">
             @foreach($kelompokUkuran as $kelompok)
-                <form method="POST" action="{{ route('admin.thermal-print.bulk') }}" target="_blank" class="kartu-ukuran">
+                <form method="POST" action="{{ $aksi ?? route('admin.thermal-print.bulk') }}" target="_blank" class="kartu-ukuran">
                     @csrf
                     <input type="hidden" name="ukuran" value="{{ $kelompok['ukuran']->value }}">
                     @foreach($kelompok['pengirimanList'] as $pengiriman)
@@ -145,7 +145,7 @@
 
                     <div class="kepala-kartu">
                         <div>
-                            <div class="rol">Rol stiker {{ $kelompok['ukuran']->rolStiker() }}</div>
+                            <div class="rol">Kertas {{ $kelompok['ukuran']->kertas() }}</div>
                             <div class="ukuran">Label {{ $kelompok['ukuran']->label() }}</div>
                         </div>
                         <div class="jumlah">{{ $kelompok['pengirimanList']->count() }}</div>

@@ -5,13 +5,14 @@ use App\Enums\UkuranLabelResi;
 use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 use App\Models\User;
+use App\Services\QrCodeService;
 use Database\Seeders\RolePermissionSeeder;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Ukuran resi otomatis per jenis mushaf (keputusan pemilik 28/10/2026).
  *
- * Sampul A6 hanya 14 × 10 cm, jadi resi A6 dicetak 9 × 13 cm; A5 dan Iqro tetap 10 × 15 cm.
+ * Resi dicetak di kertas A5/A6 (printer biasa): mushaf A6 di kertas A6, A5 dan Iqro di kertas A5.
  * Cetak massal campuran dipisah per ukuran karena printer thermal hanya memuat satu ukuran rol.
  */
 beforeEach(function () {
@@ -35,7 +36,7 @@ function resiBerjenis(string $kodeJenis): Pengiriman
     return Pengiriman::factory()->create(['jenis_quran_id' => test()->jenis[$kodeJenis]->id]);
 }
 
-it('memilih label 9 × 13 cm hanya untuk mushaf A6', function (?string $kodeJenis, UkuranLabelResi $ukuran) {
+it('memilih kertas A6 hanya untuk mushaf A6', function (?string $kodeJenis, UkuranLabelResi $ukuran) {
     $jenis = $kodeJenis === null ? null : new JenisQuran(['kode_jenis' => $kodeJenis]);
 
     expect(UkuranLabelResi::untukJenis($jenis))->toBe($ukuran);
@@ -57,9 +58,9 @@ it('mencetak resi satuan dengan ukuran sesuai jenis mushaf', function (string $k
         ->assertSee($ukuranHalaman, false)
         ->assertSee($resi->no_resi);
 })->with([
-    'A5' => ['A5', 'size: 100mm 150mm', 'admin.thermal-print.label-100x150'],
-    'A6' => ['A6', 'size: 90mm 130mm', 'admin.thermal-print.label-90x130'],
-    'Iqro' => ['IQRA', 'size: 100mm 150mm', 'admin.thermal-print.label-100x150'],
+    'A5' => ['A5', 'size: 148mm 210mm', 'admin.thermal-print.label-a5'],
+    'A6' => ['A6', 'size: 105mm 148mm', 'admin.thermal-print.label-a6'],
+    'Iqro' => ['IQRA', 'size: 148mm 210mm', 'admin.thermal-print.label-a5'],
 ]);
 
 it('langsung mencetak massal bila semua resi berukuran sama', function () {
@@ -68,10 +69,14 @@ it('langsung mencetak massal bila semua resi berukuran sama', function () {
     $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => collect($resi)->pluck('id')->all()])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-90x130')
+        ->assertViewIs('admin.thermal-print.bulk-a6')
         ->assertViewHas('totalLabels', 2)
-        ->assertSee('size: 90mm 130mm', false)
-        ->assertSee('height: 260mm', false);
+        ->assertSee('size: 105mm 148mm', false)
+        ->assertDontSee('<div class="lembar">', false);
+
+    expect(substr_count($this->actingAs($this->admin)
+        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => collect($resi)->pluck('id')->all()])
+        ->getContent(), '<div class="thermal-label"'))->toBe(2);
 });
 
 it('meminta pilih ukuran bila cetak massal mencampur A5, Iqro, dan A6', function () {
@@ -84,10 +89,10 @@ it('meminta pilih ukuran bila cetak massal mencampur A5, Iqro, dan A6', function
         ->assertSuccessful()
         ->assertViewIs('admin.thermal-print.bulk-pilih-ukuran')
         ->assertViewHas('totalDipilih', 3)
-        ->assertSeeInOrder(['Label 10 × 15 cm', 'Label 9 × 13 cm'])
-        ->assertSee('Cetak 2 label 10 × 15 cm')
-        ->assertSee('Cetak 1 label 9 × 13 cm')
-        ->assertSee('name="ukuran" value="90x130"', false);
+        ->assertSeeInOrder(['Kertas A5 (148 × 210 mm)', 'Kertas A6 (105 × 148 mm)'])
+        ->assertSee('Cetak 2 label A5 (12,8 × 19 cm)')
+        ->assertSee('Cetak 1 label A6 (8,5 × 12,8 cm)')
+        ->assertSee('name="ukuran" value="a6"', false);
 
     $kelompok = $response->viewData('kelompokUkuran');
     expect($kelompok->pluck('ukuran')->all())->toBe([UkuranLabelResi::Standar, UkuranLabelResi::Kecil])
@@ -100,17 +105,17 @@ it('mencetak hanya resi berukuran yang dipilih dari pilihan campuran', function 
     $a6 = resiBerjenis('A6');
 
     $this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => '90x130'])
+        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => 'a6'])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-90x130')
+        ->assertViewIs('admin.thermal-print.bulk-a6')
         ->assertViewHas('totalLabels', 1)
         ->assertSee($a6->no_resi)
         ->assertDontSee($a5->no_resi);
 
     $this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => '100x150'])
+        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => 'a5'])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-100x150')
+        ->assertViewIs('admin.thermal-print.bulk-a5')
         ->assertSee($a5->no_resi)
         ->assertDontSee($a6->no_resi);
 });
@@ -123,7 +128,7 @@ it('menolak ukuran yang tidak dikenal atau tidak ada di pilihan', function () {
         ->assertSessionHasErrors(['ukuran' => 'Ukuran label tidak dikenal.']);
 
     $this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id], 'ukuran' => '90x130'])
+        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id], 'ukuran' => 'a6'])
         ->assertNotFound();
 
     $this->actingAs($this->admin)
@@ -131,76 +136,122 @@ it('menolak ukuran yang tidak dikenal atau tidak ada di pilihan', function () {
         ->assertSessionHasErrors(['pengiriman_ids' => 'Pilih minimal satu pengiriman untuk dicetak.']);
 });
 
-it('menampilkan preview label 9 × 13 cm', function () {
+it('menampilkan preview label kertas A6', function () {
     $this->actingAs($this->admin)
-        ->get(route('admin.thermal-print.preview', ['ukuran' => '90x130']))
+        ->get(route('admin.thermal-print.preview', ['ukuran' => 'a6']))
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.label-90x130')
+        ->assertViewIs('admin.thermal-print.label-a6')
         ->assertSee('Al-Quran A6');
 
     $this->actingAs($this->admin)
         ->get(route('admin.thermal-print.preview'))
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.label-100x150');
+        ->assertViewIs('admin.thermal-print.label-a5');
 });
 
-it('label 9 × 13 cm memuat jenis di kotak resi, doa bertingkat, tanpa mengulang resi dan tanggal', function () {
-    $doa = mb_substr(str_repeat('Semoga Allah merahmati almarhum dan menerima amal jariyahnya. ', 10), 0, 250);
-    $resi = (object) [
-        'no_resi' => 'EQ-2026-00988',
-        'donatur' => (object) ['nama_donatur' => 'Ahmad', 'kode_donatur' => 'DON001'],
-        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => $doa],
-        'jenisQuran' => (object) ['nama_jenis' => 'Al-Quran A6'],
-        'qr_code_path' => null,
-    ];
-    $data = ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
+it('resi A5 dan A6 (tombol Generate & Print) tetap memakai label resi, bukan lembar muwakif', function () {
+    foreach (['A5' => ['128mm', '190mm'], 'A6' => ['85mm', '128mm']] as $kode => [$lebar, $tinggi]) {
+        $resi = resiBerjenis($kode);
 
-    $satuan = view('admin.thermal-print.label-90x130', [...$data, 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-90x130', [...$data, 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
-
-    foreach ([$satuan, $massal] as $html) {
-        expect($html)->toContain('size: 90mm 130mm')
-            ->and($html)->toContain('<div class="jenis-badge">Al-Quran A6</div>')
-            ->and($html)->toContain('class="value-col doa-col doa-panjang"')
-            ->and($html)->toContain(e($doa))
-            ->and($html)->not->toContain('<td class="section-header">Jenis Wakaf</td>')
-            ->and($html)->not->toContain('<td class="label-col">Tanggal:</td>')
-            ->and($html)->not->toContain('<td class="label-col">Resi:</td>');
+        $this->actingAs($this->admin)
+            ->get(route('admin.thermal-print.single', $resi))
+            ->assertSuccessful()
+            ->assertSee('<div class="thermal-label"', false)
+            ->assertSee("width: {$lebar};", false)
+            ->assertSee("height: {$tinggi};", false)
+            ->assertDontSee('Mohon didoakan hajat dan cita-cita muwakif', false)
+            ->assertDontSee('logo-alfatihah.png', false);
     }
-
-    expect($satuan)->toMatch('/\.thermal-label \{\s*width: 86mm;\s*height: 126mm;/')
-        ->and($massal)->toMatch('/\.thermal-label \{\s*width: 90mm;\s*height: 130mm;/');
 });
 
-it('label 10 × 15 cm: header 14 mm, doa +1px, ruang sisa ke kotak Jenis Wakaf', function () {
-    $resi = (object) [
-        'no_resi' => 'EQ-2026-00989',
-        'donatur' => (object) ['nama_donatur' => 'Ahmad', 'kode_donatur' => 'DON001'],
-        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => 'Semoga berkah'],
-        'jenisQuran' => (object) ['nama_jenis' => 'Iqro'],
-        'qr_code_path' => null,
+function resiLembarWakaf(string $jenis = 'Al-Quran Ukuran A5'): object
+{
+    return (object) [
+        'no_resi' => 'EQ-2026-21534',
+        'tanggal_wakaf' => '2026-06-05',
+        'donatur' => (object) ['nama_donatur' => 'Tito Bramantyo', 'kode_donatur' => 'CTQ 3290', 'no_hp' => '081234567890'],
+        'wakafItem' => (object) ['wakif_name' => 'Tito Bramantyo', 'wakif_phone' => '085612345678', 'doa_request' => "Semoga kak Tito bisa menjadi imam keluarga yang soleh.\nAamiin"],
+        'jenisQuran' => (object) ['nama_jenis' => $jenis],
     ];
-    $data = ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
+}
 
-    $satuan = view('admin.thermal-print.label-100x150', [...$data, 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-100x150', [...$data, 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+function lembarMuwakif(object $resi, string $kertas): string
+{
+    return view('admin.thermal-print.partials.lembar-wakaf-halaman', [
+        'daftar' => collect([$resi]),
+        'kertas' => $kertas,
+        'judulHalaman' => 'Lembar Muwakif',
+    ])->render();
+}
 
-    foreach ([$satuan, $massal] as $html) {
-        expect($html)->toContain('<div class="jenis-wakaf-nama">Iqro</div>')
-            ->and($html)->toMatch('/\.jenis-wakaf \{\s*flex: 1;/')
-            ->and($html)->toMatch('/\.logo-container \{\s*width: 100%;\s*height: 14mm;/')
-            ->and($html)->not->toContain('<td class="label-col">Jenis:</td>')
-            ->and($html)->toContain('const SKALA_MAKS = 1.35;')
-            ->and($html)->toContain('const CADANGAN_HEADER_MM = 6;')
-            ->and(strpos($html, 'SKALA_MAKS'))->toBeLessThan(strpos($html, 'window.print();'));
+it('mencetak lembar muwakif: identitas, doa umum, doa muwakif, QR, dan kode donatur', function () {
+    $html = lembarMuwakif(resiLembarWakaf(), 'A5');
 
-        foreach (['12pt', '10pt', '9pt', '8pt'] as $ukuran) {
-            expect($html)->toContain("font-size: calc({$ukuran} * var(--skala, 1));");
-        }
+    expect($html)->toContain('images/logo-alfatihah.png')
+        ->and($html)->toContain("Penyaluran Wakaf Qur'an Untuk<br>Santri Masjid &amp; Penghafal Qur'an")
+        ->and($html)->toContain('<span class="label">Nama Wakif</span><span class="titik">:</span><span class="nilai">Tito Bramantyo</span>')
+        ->and($html)->toContain('<span class="nilai">05 Juni 2026</span>')
+        ->and($html)->toContain("Mohon didoakan orang - orang yang telah mewakafkan Al-qur'an")
+        ->and($html)->toContain('Mohon didoakan hajat dan cita-cita muwakif:')
+        ->and($html)->toContain("<div class=\"doa-isi\">Semoga kak Tito bisa menjadi imam keluarga yang soleh.\nAamiin</div>")
+        ->and($html)->toContain('<div class="no-resi">EQ-2026-21534</div>')
+        ->and($html)->toContain('<div class="kode">DON CTQ 3290</div>')
+        ->and($html)->toContain('<div class="jenis">Al-Quran Ukuran A5</div>')
+        ->and($html)->toContain(app(QrCodeService::class)->svgUntuk('EQ-2026-21534'))
+        // Lembar ini tinggal di dalam mushaf: nomor HP dan alamat pengirim tidak dicetak.
+        ->and($html)->not->toContain('0812345')
+        ->and($html)->not->toContain('0856123')
+        ->and($html)->not->toContain('Pengirim');
+});
 
-        foreach (['7pt', '6.5pt', '6pt'] as $ukuranDoa) {
-            expect($html)->toContain("font-size: calc({$ukuranDoa} * var(--skala, 1) + 1px);")
-                ->and($html)->not->toContain("font-size: calc({$ukuranDoa} * var(--skala, 1));");
-        }
-    }
+it('lembar muwakif A6 sama persis dengan A5, hanya diperkecil', function () {
+    $resi = resiLembarWakaf('Al-Quran Ukuran A6');
+    $isi = static fn (string $html): string => substr($html, strpos($html, '<div class="lembar">'));
+    $a5 = lembarMuwakif($resi, 'A5');
+    $a6 = lembarMuwakif($resi, 'A6');
+
+    expect($isi($a6))->toBe($isi($a5))
+        ->and($a5)->toContain('size: 148mm 210mm;')->and($a5)->toContain('--k: 1;')
+        ->and($a6)->toContain('size: 105mm 148mm;')->and($a6)->toContain('--k: 0.7095;');
+});
+
+it('tombol Cetak Lembar Muwakif mencetak lembar per ukuran, tanpa perlu berkas QR', function () {
+    $a6 = [resiBerjenis('A6'), resiBerjenis('A6')];
+    Pengiriman::whereIn('id', collect($a6)->pluck('id'))->update(['qr_code_path' => null]);
+
+    $html = $this->actingAs($this->admin)
+        ->post(route('admin.thermal-print.lembar-wakaf'), ['pengiriman_ids' => collect($a6)->pluck('id')->all()])
+        ->assertSuccessful()
+        ->assertViewIs('admin.thermal-print.partials.lembar-wakaf-halaman')
+        ->assertSee('size: 105mm 148mm', false)
+        ->assertSee('Mohon didoakan hajat dan cita-cita muwakif:', false)
+        ->assertDontSee('<div class="thermal-label"', false)
+        ->getContent();
+
+    expect(substr_count($html, '<div class="lembar">'))->toBe(2)
+        ->and(substr_count($html, '<svg'))->toBeGreaterThanOrEqual(2);
+});
+
+it('tombol Cetak Lembar Muwakif meminta pilih ukuran bila A5 dan A6 tercampur', function () {
+    $a5 = resiBerjenis('A5');
+    $a6 = resiBerjenis('A6');
+
+    $this->actingAs($this->admin)
+        ->post(route('admin.thermal-print.lembar-wakaf'), ['pengiriman_ids' => [$a5->id, $a6->id]])
+        ->assertSuccessful()
+        ->assertViewIs('admin.thermal-print.bulk-pilih-ukuran')
+        ->assertSee('Cetak Lembar Muwakif')
+        ->assertSee('action="'.route('admin.thermal-print.lembar-wakaf').'"', false);
+
+    $this->actingAs($this->admin)
+        ->post(route('admin.thermal-print.lembar-wakaf'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => 'a6'])
+        ->assertSuccessful()
+        ->assertSee($a6->no_resi)
+        ->assertDontSee($a5->no_resi);
+
+    // Halaman pilih ukuran milik resi biasa tetap mengarah ke cetak resi.
+    $this->actingAs($this->admin)
+        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id]])
+        ->assertSee('action="'.route('admin.thermal-print.bulk').'"', false)
+        ->assertSee('Cetak Label Massal');
 });

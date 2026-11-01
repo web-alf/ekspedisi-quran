@@ -18,7 +18,7 @@ use Spatie\Permission\PermissionRegistrar;
  * Doa lebih panjang dulu mendorong bagian "Jenis Wakaf" keluar kotak label. Kini:
  * - doa BARU atau yang DIUBAH maksimal 250 karakter di semua jalur input;
  * - di label, font doa mengecil bertingkat: ≤100 karakter 7pt, ≤180 karakter 6,5pt, selebihnya 6pt
- *   (ukuran dasar; label 10 × 15 cm menambah 1px dan membesarkannya rata lewat --skala bila ruang tersisa);
+ *   (ukuran dasar; label kertas A5 menambah 1px dan membesarkannya rata lewat --skala bila ruang tersisa);
  * - doa lama yang lebih panjang tetap tersimpan dan diterima selama tidak diubah (form edit
  *   mengirim ulang doa yang ada), tetapi dicetak terpotong dengan "…".
  */
@@ -140,29 +140,66 @@ it('menerima doa_untuk_semua lama yang tidak diubah saat mengedit donatur', func
         ->assertSessionHasErrors('doa_untuk_semua');
 });
 
-it('mencetak doa lama terpotong di label resi satuan dan massal', function () {
-    $lama = doaSepanjang(400);
-    $resi = (object) [
+function resiDoaPanjang(string $doa): object
+{
+    return (object) [
         'no_resi' => 'EQ-2026-00001',
+        'tanggal_wakaf' => '2026-06-05',
         'donatur' => (object) ['nama_donatur' => 'Ahmad', 'kode_donatur' => 'DON001'],
-        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => $lama],
+        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => $doa],
         'jenisQuran' => (object) ['nama_jenis' => 'Al-Quran A5'],
         'qr_code_path' => null,
     ];
-    $data = ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
+}
 
-    $satuan = view('admin.thermal-print.label-100x150', [...$data, 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-100x150', [...$data, 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+function dataCetakResi(): array
+{
+    return ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
+}
+
+it('mencetak doa lama terpotong di label resi satuan dan massal', function () {
+    $lama = doaSepanjang(400);
+    $resi = resiDoaPanjang($lama);
+
+    $satuan = view('admin.thermal-print.label-a5', [...dataCetakResi(), 'pengiriman' => $resi])->render();
+    $massal = view('admin.thermal-print.bulk-a5', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
     $tercetak = e(WakafItem::doaUntukLabel($lama));
+
+    expect($tercetak)->toEndWith('…');
 
     foreach ([$satuan, $massal] as $html) {
         expect($html)->toContain($tercetak)
-            ->and($html)->not->toContain(e($lama))
-            ->and($html)->toContain('class="value-col doa-col doa-panjang"');
+            ->and($html)->not->toContain(e($lama));
     }
+});
 
-    // Label satuan tidak boleh lagi meluber keluar kotaknya.
-    expect($satuan)->toMatch('/\.thermal-label \{[^}]*overflow: hidden;/');
+it('mencetak kelas ukuran font doa yang sama di label satuan dan massal', function (int $panjang, string $kelas) {
+    $resi = resiDoaPanjang(doaSepanjang($panjang));
+
+    $satuan = view('admin.thermal-print.label-a5', [...dataCetakResi(), 'pengiriman' => $resi])->render();
+    $massal = view('admin.thermal-print.bulk-a5', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+
+    expect($satuan)->toContain("doa-col {$kelas}")
+        ->and($massal)->toContain("doa-col {$kelas}");
+})->with([
+    'pendek' => [40, 'doa-normal'],
+    'sedang' => [150, 'doa-sedang'],
+    'panjang' => [400, 'doa-panjang'],
+]);
+
+it('mencetak doa lama utuh di lembar muwakif, tanpa dipotong', function () {
+    $lama = doaSepanjang(400);
+    $html = view('admin.thermal-print.partials.lembar-wakaf-halaman', [
+        'daftar' => collect([resiDoaPanjang($lama)]),
+        'kertas' => 'A5',
+        'judulHalaman' => 'Lembar Muwakif',
+    ])->render();
+
+    expect($html)->toContain('<div class="doa-isi">'.e($lama).'</div>')
+        ->and($html)->not->toContain('…')
+        // Doa panjang dikecilkan hurufnya di peramban, bukan dipotong.
+        ->and($html)->toContain("document.querySelectorAll('.doa-muwakif').forEach(muatkan)")
+        ->and($html)->toMatch('/\.doa-muwakif \{[^}]*overflow: hidden;/');
 });
 
 it('mengecilkan font doa di label secara bertingkat menurut panjangnya', function (int $panjang, string $kelas) {
@@ -175,28 +212,4 @@ it('mengecilkan font doa di label secara bertingkat menurut panjangnya', functio
     '181 karakter' => [181, 'doa-panjang'],
     '250 karakter' => [250, 'doa-panjang'],
     'doa lama 400 karakter (dipotong)' => [400, 'doa-panjang'],
-]);
-
-it('mencetak kelas ukuran font doa yang sama di label satuan dan massal', function (int $panjang, string $kelas) {
-    $resi = (object) [
-        'no_resi' => 'EQ-2026-00002',
-        'donatur' => (object) ['nama_donatur' => 'Ahmad', 'kode_donatur' => 'DON002'],
-        'wakafItem' => (object) ['wakif_name' => 'Rayhan', 'doa_request' => doaSepanjang($panjang)],
-        'jenisQuran' => (object) ['nama_jenis' => 'Al-Quran A5'],
-        'qr_code_path' => null,
-    ];
-    $data = ['printDate' => '28/10/2026', 'printTime' => '10:00', 'qrUrl' => null, 'appLogo' => null, 'contactAddress' => 'Semarang'];
-
-    $satuan = view('admin.thermal-print.label-100x150', [...$data, 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-100x150', [...$data, 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
-
-    foreach ([$satuan, $massal] as $html) {
-        expect($html)->toContain("class=\"value-col doa-col {$kelas}\"")
-            ->and($html)->toMatch('/\.doa-col\.doa-sedang \{\s*font-size: calc\(6\.5pt \* var\(--skala, 1\) \+ 1px\);/')
-            ->and($html)->toMatch('/\.doa-col\.doa-panjang \{\s*font-size: calc\(6pt \* var\(--skala, 1\) \+ 1px\);/');
-    }
-})->with([
-    [90, 'doa-normal'],
-    [150, 'doa-sedang'],
-    [250, 'doa-panjang'],
 ]);

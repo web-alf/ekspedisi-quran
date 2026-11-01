@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Thermal Labels 90×130mm - {{ $totalLabels }} Labels</title>
+    <title>Cetak Massal Label Resi A6 - {{ $totalLabels }} Labels</title>
     <style>
-        /* Label thermal 90×130 mm untuk mushaf bersampul kecil (A6); dipilih otomatis lewat
-           App\Enums\UkuranLabelResi. Cetak massal campuran dipisah per ukuran rol. */
+        /* Satu label per lembar kertas A6 (105 × 148 mm) printer biasa, sisa 10 mm tiap
+           sisi lewat margin halaman: kotak label 85 × 128 mm. Tata letak SAMA dengan
+           bulk-a5, hanya diperkecil ±2/3 — keputusan pemilik 30/10/2026. */
         @page {
-            size: 90mm 130mm;
-            margin: 0;
+            size: 105mm 148mm; /* A6 */
+            margin: 10mm;
         }
         
         * {
@@ -19,7 +20,7 @@
         }
         
         html {
-            height: {{ $totalLabels * 130 }}mm;
+            height: {{ $totalLabels * 128 }}mm;
             overflow: hidden;
         }
         
@@ -32,18 +33,18 @@
             font-weight: bold;
             margin: 0;
             padding: 0;
-            height: {{ $totalLabels * 130 }}mm;
+            height: {{ $totalLabels * 128 }}mm;
             overflow: hidden;
         }
         
         .label-container {
-            height: {{ $totalLabels * 130 }}mm;
+            height: {{ $totalLabels * 128 }}mm;
             overflow: hidden;
         }
         
         .thermal-label {
-            width: 90mm;
-            height: 130mm;
+            width: 85mm;
+            height: 128mm;
             border: 1px solid #000;
             padding: 2mm;
             background: white;
@@ -71,9 +72,12 @@
             border-bottom: 2px solid #000;
         }
         
+        /* Header dipendekkan 20 → 14 mm (28/10/2026); logo tetap ±43 mm lebar. Ruang 6 mm
+           yang dihemat diberikan ke kotak Jenis Wakaf, bukan ke ukuran huruf
+           (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 14mm;
+            height: 13mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -89,13 +93,12 @@
         /* Resi + QR Section */
         .resi-qr-section {
             background: #f0f0f0;
-            padding: 1.5mm;
+            padding: 2mm;
             margin-bottom: 1mm;
             border: 1px solid #000;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 2mm;
         }
         
         .resi-info {
@@ -103,13 +106,13 @@
         }
         
         .resi-label {
-            font-size: 7pt;
+            font-size: calc(9pt * var(--skala, 1));
             color: #666;
             font-weight: bold;
         }
         
         .resi-number {
-            font-size: 11pt;
+            font-size: calc(12pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
             letter-spacing: 0.3px;
@@ -117,18 +120,8 @@
         }
         
         .resi-date {
-            font-size: 7pt;
+            font-size: calc(8pt * var(--skala, 1));
             color: #666;
-        }
-
-        /* Jenis mushaf tampil di kotak resi (pengganti seksi "Jenis Wakaf" pada label 10 × 15 cm). */
-        .jenis-badge {
-            display: inline-block;
-            margin-top: 1mm;
-            border: 1.5px solid #000;
-            padding: 0.3mm 1.5mm;
-            font-size: 9pt;
-            background: white;
         }
         
         .resi-qr-container {
@@ -157,20 +150,46 @@
             border: 1px solid #000;
             border-collapse: collapse;
             /* Jarak antarseksi cukup dari gap .label-content (dirapatkan 28/10/2026 supaya
-               nama/alamat panjang + doa panjang tetap muat di 130 mm). */
+               nama/alamat panjang + doa panjang tetap muat di 150 mm). */
             margin-bottom: 0;
         }
         
         .section-header {
             background: #f0f0f0;
-            font-size: 8pt;
+            font-size: calc(9pt * var(--skala, 1));
             font-weight: bold;
             color: #000;
-            padding: 0.7mm;
+            padding: 1mm;
             text-align: center;
             border-bottom: 1px solid #000;
         }
         
+        /* Jenis Wakaf jadi seksi terakhir yang mengisi sisa tinggi label sampai garis bawah.
+           Ruang sisa lainnya dipakai bersama lewat --skala (partials/skala-isi-label), jadi
+           nama jenis tetap di bawah nomor resi dalam urutan besar huruf (28/10/2026). */
+        .jenis-wakaf {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #000;
+        }
+
+        .jenis-wakaf .section-header {
+            display: block;
+        }
+
+        .jenis-wakaf-nama {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.3mm 1.5mm;
+            font-size: calc(10pt * var(--skala, 1));
+            line-height: 1.1;
+            text-align: center;
+            word-break: break-word;
+        }
+
         .section-content {
             padding: 0.5mm;
         }
@@ -179,22 +198,22 @@
         .info-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 7.5pt;
+            font-size: calc(8pt * var(--skala, 1));
         }
         
         .info-table td {
-            padding: 0.4mm 1mm;
+            padding: 0.5mm 1.2mm;
             vertical-align: top;
             border: none;
-            line-height: 1.25;
+            line-height: 1.3;
         }
         
         .info-table .label-col {
-            width: 16mm;
+            width: 17mm;
             font-weight: bold;
             color: #333;
             text-align: left;
-            padding-left: 0.8mm;
+            padding-left: 1mm;
         }
         
         .info-table .value-col {
@@ -205,18 +224,19 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
+           Label A5/A6 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
-            font-size: 7pt;
+            font-size: calc(7pt * var(--skala, 1) + 1px);
             line-height: 1.25;
         }
 
         .info-table .doa-col.doa-sedang {
-            font-size: 6.5pt;
+            font-size: calc(6.5pt * var(--skala, 1) + 1px);
         }
 
         .info-table .doa-col.doa-panjang {
-            font-size: 6pt;
+            font-size: calc(6pt * var(--skala, 1) + 1px);
             line-height: 1.2;
         }
         
@@ -237,8 +257,8 @@
         /* Print optimizations */
         @media print {
             html {
-                height: {{ $totalLabels * 130 }}mm !important;
-                max-height: {{ $totalLabels * 130 }}mm !important;
+                height: {{ $totalLabels * 128 }}mm !important;
+                max-height: {{ $totalLabels * 128 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -247,14 +267,14 @@
                 print-color-adjust: exact;
                 margin: 0 !important;
                 padding: 0 !important;
-                height: {{ $totalLabels * 130 }}mm !important;
-                max-height: {{ $totalLabels * 130 }}mm !important;
+                height: {{ $totalLabels * 128 }}mm !important;
+                max-height: {{ $totalLabels * 128 }}mm !important;
                 overflow: hidden !important;
             }
             
             .label-container {
-                height: {{ $totalLabels * 130 }}mm !important;
-                max-height: {{ $totalLabels * 130 }}mm !important;
+                height: {{ $totalLabels * 128 }}mm !important;
+                max-height: {{ $totalLabels * 128 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -328,13 +348,13 @@
     <div class="print-summary">
         <strong>Print Summary</strong><br>
         Total Labels: {{ $totalLabels }}<br>
-        Ukuran: 90×130mm<br>
+        Ukuran: 100×150mm<br>
         Tanggal: {{ $printDate }} {{ $printTime }}
     </div>
     <button onclick="window.print()" class="btn btn-primary">Print Semua</button>
     <a href="{{ url()->previous() }}" class="btn btn-secondary">← Kembali</a>
 </div>
-<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label">
+<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label" data-skala-min="0.8" data-skala-maks="1.3">
     <!-- Header dengan Logo -->
     <div class="label-header">
         @php
@@ -368,7 +388,6 @@
             <div class="resi-label">No:</div>
             <div class="resi-number">{{ $pengiriman->no_resi ?? 'EQ-2025-001234' }}</div>
             <div class="resi-date">{{ $printDate }}, {{ $printTime }} WIB</div>
-            <div class="jenis-badge">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran A6' }}</div>
         </div>
         <div class="resi-qr-container">
             @if($pengiriman->qr_code_path && file_exists(public_path('storage/' . str_replace('public/', '', $pengiriman->qr_code_path))))
@@ -392,6 +411,14 @@
                         <tr>
                             <td class="label-col">Nama:</td>
                             <td class="value-col">Ekspedisi Quran</td>
+                        </tr>
+                        <tr>
+                            <td class="label-col">Resi:</td>
+                            <td class="value-col">{{ $pengiriman->no_resi ?? 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label-col">Tanggal:</td>
+                            <td class="value-col">{{ $printDate }}</td>
                         </tr>
                         <tr>
                             <td class="label-col">Alamat:</td>
@@ -418,7 +445,7 @@
                             <td class="label-col">Wakif:</td>
                             <td class="value-col">{{ $pengiriman->wakafItem->wakif_name ?? $pengiriman->donatur->nama_donatur ?? 'N/A' }}</td>
                         </tr>
-                        @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
+                        @if(\App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request ?? null))
                         <tr>
                             <td class="label-col">Doa:</td>
                             <td class="value-col doa-col {{ \App\Models\WakafItem::kelasUkuranDoaLabel($pengiriman->wakafItem->doa_request) }}">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
@@ -428,8 +455,15 @@
                 </td>
             </tr>
         </table>
+        
+        <!-- Jenis Wakaf -->
+        <div class="jenis-wakaf">
+            <div class="section-header">Jenis Wakaf</div>
+            <div class="jenis-wakaf-nama">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran Ukuran A6' }}</div>
+        </div>
     </div>
 </div>@endforeach</div>
+@include('admin.thermal-print.partials.skala-isi-label')
 <script>
 // Auto print when images are fully loaded
 window.addEventListener('load', function() {
@@ -489,16 +523,16 @@ window.addEventListener('beforeprint', function() {
     }
     
     // Set exact height to prevent extra pages
-    document.body.style.height = (totalLabels * 130) + 'mm';
-    document.body.style.maxHeight = (totalLabels * 130) + 'mm';
-    document.documentElement.style.height = (totalLabels * 130) + 'mm';
-    document.documentElement.style.maxHeight = (totalLabels * 130) + 'mm';
+    document.body.style.height = (totalLabels * 150) + 'mm';
+    document.body.style.maxHeight = (totalLabels * 150) + 'mm';
+    document.documentElement.style.height = (totalLabels * 150) + 'mm';
+    document.documentElement.style.maxHeight = (totalLabels * 150) + 'mm';
     
     // Remove any content after labels
     const container = document.querySelector('.label-container');
     if (container) {
-        container.style.height = (totalLabels * 130) + 'mm';
-        container.style.maxHeight = (totalLabels * 130) + 'mm';
+        container.style.height = (totalLabels * 150) + 'mm';
+        container.style.maxHeight = (totalLabels * 150) + 'mm';
         container.style.overflow = 'hidden';
     }
 });

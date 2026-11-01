@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Thermal Labels 100×150mm - {{ $totalLabels }} Labels</title>
+    <title>Cetak Massal Label Resi A5 - {{ $totalLabels }} Labels</title>
     <style>
+        /* Satu label per lembar kertas A5 (148 × 210 mm) printer biasa, sisa 10 mm tiap
+           sisi lewat margin halaman (keputusan pemilik 29/10/2026): kotak label 128 × 190 mm. */
         @page {
-            size: 100mm 150mm;
-            margin: 0;
+            size: 148mm 210mm; /* A5 */
+            margin: 10mm;
         }
         
         * {
@@ -17,7 +19,7 @@
         }
         
         html {
-            height: {{ $totalLabels * 150 }}mm;
+            height: {{ $totalLabels * 190 }}mm;
             overflow: hidden;
         }
         
@@ -30,18 +32,18 @@
             font-weight: bold;
             margin: 0;
             padding: 0;
-            height: {{ $totalLabels * 150 }}mm;
+            height: {{ $totalLabels * 190 }}mm;
             overflow: hidden;
         }
         
         .label-container {
-            height: {{ $totalLabels * 150 }}mm;
+            height: {{ $totalLabels * 190 }}mm;
             overflow: hidden;
         }
         
         .thermal-label {
-            width: 100mm;
-            height: 150mm;
+            width: 128mm;
+            height: 190mm;
             border: 1px solid #000;
             padding: 2mm;
             background: white;
@@ -74,7 +76,7 @@
            (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 14mm;
+            height: 18mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -122,8 +124,8 @@
         }
         
         .resi-qr-container {
-            width: 20mm;
-            height: 20mm;
+            width: 28mm;
+            height: 28mm;
             border: 1px solid #000;
             padding: 0.5mm;
             background: white;
@@ -206,7 +208,7 @@
         }
         
         .info-table .label-col {
-            width: 20mm;
+            width: 24mm;
             font-weight: bold;
             color: #333;
             text-align: left;
@@ -221,7 +223,7 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
-           Label 10 × 15 cm menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
+           Label A5 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
             font-size: calc(7pt * var(--skala, 1) + 1px);
@@ -254,8 +256,8 @@
         /* Print optimizations */
         @media print {
             html {
-                height: {{ $totalLabels * 150 }}mm !important;
-                max-height: {{ $totalLabels * 150 }}mm !important;
+                height: {{ $totalLabels * 190 }}mm !important;
+                max-height: {{ $totalLabels * 190 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -264,14 +266,14 @@
                 print-color-adjust: exact;
                 margin: 0 !important;
                 padding: 0 !important;
-                height: {{ $totalLabels * 150 }}mm !important;
-                max-height: {{ $totalLabels * 150 }}mm !important;
+                height: {{ $totalLabels * 190 }}mm !important;
+                max-height: {{ $totalLabels * 190 }}mm !important;
                 overflow: hidden !important;
             }
             
             .label-container {
-                height: {{ $totalLabels * 150 }}mm !important;
-                max-height: {{ $totalLabels * 150 }}mm !important;
+                height: {{ $totalLabels * 190 }}mm !important;
+                max-height: {{ $totalLabels * 190 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -351,7 +353,7 @@
     <button onclick="window.print()" class="btn btn-primary">Print Semua</button>
     <a href="{{ url()->previous() }}" class="btn btn-secondary">← Kembali</a>
 </div>
-<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label">
+<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label" data-skala-maks="1.9">
     <!-- Header dengan Logo -->
     <div class="label-header">
         @php
@@ -442,7 +444,7 @@
                             <td class="label-col">Wakif:</td>
                             <td class="value-col">{{ $pengiriman->wakafItem->wakif_name ?? $pengiriman->donatur->nama_donatur ?? 'N/A' }}</td>
                         </tr>
-                        @if(isset($pengiriman->wakafItem->doa_request) && $pengiriman->wakafItem->doa_request)
+                        @if(\App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request ?? null))
                         <tr>
                             <td class="label-col">Doa:</td>
                             <td class="value-col doa-col {{ \App\Models\WakafItem::kelasUkuranDoaLabel($pengiriman->wakafItem->doa_request) }}">{{ \App\Models\WakafItem::doaUntukLabel($pengiriman->wakafItem->doa_request) }}</td>
