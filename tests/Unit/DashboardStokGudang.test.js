@@ -76,11 +76,11 @@ describe('Seksi Stok dashboard gudang', () => {
         expect(seksi).not.toContain('<table');
     });
 
-    it('komponen kartu memakai kelas kotak angka yang sudah ada', () => {
-        expect(kartu).toContain('rounded-xl p-3');
+    it('komponen kartu memakai ukuran kotak angka besar Dashboard Gudang (01/11/2026)', () => {
+        expect(kartu).toContain('rounded-xl p-4 sm:p-5 min-h-[7.5rem] sm:min-h-[8.5rem]');
         expect(kartu).toMatch(/biasa: 'border-gray-200'/);
-        expect(kartu).toContain('text-[10px] font-semibold uppercase tracking-wide text-gray-500');
-        expect(kartu).toContain('text-2xl font-bold text-gray-900');
+        expect(kartu).toContain('text-xs font-semibold uppercase tracking-wide text-gray-500');
+        expect(kartu).toContain('text-3xl sm:text-4xl font-bold text-gray-900');
     });
 
     it('kartu hanya menampilkan keterangan bila diisi', () => {

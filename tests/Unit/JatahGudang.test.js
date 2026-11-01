@@ -26,8 +26,8 @@ describe('Kartu Jatah Gudang', () => {
     });
 
     it('dipakai di seksi Packing Hari Ini untuk SPV dan Manager', () => {
-        expect(dashboard).toContain('<JatahGudang jatah={ringkasanGudang.packing.jatah} />');
-        expect(dashboard).toMatch(/\{#each gudangManager as g \(g\.id\)\}\s*\{#if g\.jatah\}\s*<JatahGudang jatah=\{g\.jatah\} nama=\{g\.nama\} \/>/);
+        expect(dashboard).toContain('<JatahGudang besar jatah={ringkasanGudang.packing.jatah} />');
+        expect(dashboard).toMatch(/\{#each gudangManager as g \(g\.id\)\}\s*\{#if g\.jatah\}\s*<JatahGudang besar jatah=\{g\.jatah\} nama=\{g\.nama\} \/>/);
     });
 
     it('dipakai di Monitor & Penugasan dan ikut diperbarui polling /data', () => {

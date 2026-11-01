@@ -6,6 +6,9 @@
    * besar + satuan — supaya seksi "Stok" tidak menjadi gaya ketiga di halaman yang sama.
    * Bedanya cuma satu: label boleh dua baris, jadi tingginya dikunci agar semua ANGKA
    * tetap sejajar antar kartu.
+   *
+   * 01/11/2026: ukurannya mengikuti StatTile `besar` (kartu Dashboard Gudang diperbesar).
+   * Komponen ini hanya dipakai di Dashboard Gudang, jadi tidak perlu prop ukuran.
    */
   import HeroIcon from '../UI/HeroIcon.svelte';
 
@@ -27,18 +30,18 @@
   };
 </script>
 
-<div class="border {NADA[nada] ?? NADA.biasa} rounded-xl p-3 min-w-0 flex flex-col">
-  <div class="flex items-start gap-1.5 mb-1 min-h-[26px]">
+<div class="border {NADA[nada] ?? NADA.biasa} rounded-xl p-4 sm:p-5 min-h-[7.5rem] sm:min-h-[8.5rem] min-w-0 flex flex-col">
+  <div class="flex items-start gap-1.5 mb-1.5 min-h-[32px]">
     {#if ikon}
       <HeroIcon name={ikon} class="w-4 h-4 flex-none {nada === 'siap' ? 'text-green-600' : 'text-gray-500'}" />
     {/if}
-    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 pt-px">{label}</p>
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-px">{label}</p>
   </div>
-  <p class="text-2xl font-bold text-gray-900 leading-none">
+  <p class="text-3xl sm:text-4xl font-bold text-gray-900 leading-none">
     {nilai}
-    {#if satuan}<span class="text-xs font-medium text-gray-400">{satuan}</span>{/if}
+    {#if satuan}<span class="text-sm font-medium text-gray-400">{satuan}</span>{/if}
   </p>
   {#if keterangan}
-    <p class="text-xs text-gray-500 mt-1.5">{keterangan}</p>
+    <p class="text-sm text-gray-500 mt-2">{keterangan}</p>
   {/if}
 </div>

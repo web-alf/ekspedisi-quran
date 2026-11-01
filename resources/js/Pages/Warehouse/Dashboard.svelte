@@ -407,31 +407,24 @@
           </div>
 
           {#if ringkasanGudang.packing.jatah}
-            <div class="mb-3">
-              <JatahGudang jatah={ringkasanGudang.packing.jatah} />
+            <div class="mb-4">
+              <JatahGudang besar jatah={ringkasanGudang.packing.jatah} />
             </div>
           {/if}
 
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatTile label="Target hari ini" nilai={ringkasanGudang.packing.target} satuan="mushaf" />
-            <StatTile label="Sudah dikemas" nilai={ringkasanGudang.packing.selesai} satuan="mushaf">
-              <PilTitik class="mt-2">{persenPacking}%</PilTitik>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile besar label="Target hari ini" nilai={ringkasanGudang.packing.target} satuan="mushaf" />
+            <StatTile besar label="Sudah dikemas" nilai={ringkasanGudang.packing.selesai} satuan="mushaf">
+              <PilTitik besar class="mt-2">{persenPacking}%</PilTitik>
             </StatTile>
-            <StatTile label="Kerdus tersegel" nilai={ringkasanGudang.packing.kerdus_tersegel} satuan="kerdus" />
+            <StatTile besar label="Kerdus tersegel" nilai={ringkasanGudang.packing.kerdus_tersegel} satuan="kerdus" />
             <StatTile
+              besar
               label="Staf belum mulai"
               nilai={ringkasanGudang.packing.staf_belum_mulai}
               satuan="staf"
               peringatan={ringkasanGudang.packing.staf_belum_mulai > 0}
             />
-          </div>
-
-          <div class="mb-1 flex justify-between items-baseline gap-2 text-xs text-gray-500">
-            <span>Progress kemas gudang</span>
-            <span><b class="text-gray-900">{ringkasanGudang.packing.selesai}</b> / {ringkasanGudang.packing.target} mushaf · {ringkasanGudang.packing.jumlah_staf ?? ringkasanGudang.packing.per_staf.length} staf bertugas</span>
-          </div>
-          <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-[#eb3434] transition-all duration-500" style="width: {Math.min(100, persenPacking)}%"></div>
           </div>
         </RingkasanSection>
 
@@ -444,7 +437,7 @@
           {#if (ringkasanGudang.target_periode ?? []).length > 0}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {#each ringkasanGudang.target_periode as target (target.id)}
-                <KartuTargetPeriode {target} />
+                <KartuTargetPeriode {target} besar />
               {/each}
             </div>
           {:else}
@@ -458,7 +451,7 @@
           keterangan="Tahap resi & mushaf belum ada muwakif"
         >
           <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Tahap resi</p>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KartuAlur
               label="Proses Pesan"
               nilai={numberId(ringkasanGudang.stok.pemesanan.resi)}
@@ -476,7 +469,7 @@
           </div>
 
           <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Mushaf belum ada muwakif</p>
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {#each ringkasanGudang.stok.muwakif as baris (baris.label)}
               <KartuAlur label={baris.label} nilai={numberId(baris.eks)} satuan="eks" />
             {/each}
@@ -508,9 +501,9 @@
           judul="Beban Gudang"
           keterangan="Resi yang tercatat sedang dikerjakan {ringkasanGudang.gudang.nama}"
         >
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {#each TAHAP_BEBAN as [kunci, label] (kunci)}
-              <StatTile {label} nilai={ringkasanGudang.beban[kunci] ?? 0} satuan="resi" />
+              <StatTile besar {label} nilai={ringkasanGudang.beban[kunci] ?? 0} satuan="resi" />
             {/each}
           </div>
           <p class="text-xs text-gray-400 mt-3">Angka "Dalam kerdus" adalah bagian dari "Selesai packing" — bukan tambahan.</p>
@@ -521,9 +514,9 @@
           judul="Stok Mushaf"
           keterangan="Stok tanpa muwakif — A5, A6, dan IQRA dipisah varian terjemahannya · {ringkasanGudang.gudang.nama}"
         >
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {#each ringkasanGudang.stok_kartu as baris (baris.kode_jenis + (baris.varian || 'x'))}
-              <KartuStok {baris} />
+              <KartuStok {baris} besar />
             {/each}
           </div>
           <p class="text-xs text-gray-400 mt-3">Resi lama tanpa lokasi tidak dihitung di sini.</p>
@@ -549,7 +542,7 @@
             judul="{g.nama}"
             keterangan="Dari pemesanan sampai siap dikirim"
           >
-            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               <KartuAlur
                 label="Sedang Dipesan"
                 ikon="clipboard-document"
@@ -613,30 +606,27 @@
             <p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">tercapai hari ini</p>
           </div>
 
-          <div class="grid grid-cols-1 {gudangManager.length > 1 ? 'md:grid-cols-2' : ''} gap-3 mb-3">
+          <div class="grid grid-cols-1 {gudangManager.length > 1 ? 'md:grid-cols-2' : ''} gap-4 mb-4">
             {#each gudangManager as g (g.id)}
               {#if g.jatah}
-                <JatahGudang jatah={g.jatah} nama={g.nama} />
+                <JatahGudang besar jatah={g.jatah} nama={g.nama} />
               {/if}
             {/each}
           </div>
 
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatTile label="Target hari ini" nilai={packingManager.target} satuan="mushaf" />
-            <StatTile label="Sudah dikemas" nilai={packingManager.selesai} satuan="mushaf">
-              <PilTitik class="mt-2">{packingManager.persen}%</PilTitik>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatTile besar label="Target hari ini" nilai={packingManager.target} satuan="mushaf" />
+            <StatTile besar label="Sudah dikemas" nilai={packingManager.selesai} satuan="mushaf">
+              <PilTitik besar class="mt-2">{packingManager.persen}%</PilTitik>
             </StatTile>
-            <StatTile label="Kerdus tersegel" nilai={packingManager.kerdus} satuan="kerdus" />
+            <StatTile besar label="Kerdus tersegel" nilai={packingManager.kerdus} satuan="kerdus" />
             <StatTile
+              besar
               label="Staf belum mulai"
               nilai={packingManager.belumMulai}
               satuan="staf"
               peringatan={packingManager.belumMulai > 0}
             />
-          </div>
-
-          <div class="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-            <div class="h-full rounded-full bg-[#eb3434] transition-all duration-500" style="width: {Math.min(100, packingManager.persen)}%"></div>
           </div>
 
           {#if semuaGudang}
@@ -669,7 +659,7 @@
           {#if targetPeriodeManager.length > 0}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {#each targetPeriodeManager as target (target.id)}
-                <KartuTargetPeriode {target} tampilGudang={semuaGudang} />
+                <KartuTargetPeriode {target} besar tampilGudang={semuaGudang} />
               {/each}
             </div>
           {:else}
@@ -682,28 +672,28 @@
           judul="Stok Belum Ada Wakif — per Jenis"
           keterangan="Eksemplar siap di gudang yang belum masuk resi · {namaCakupan}"
         >
-          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
             {#each stokJenisManager as jenis (jenis.label)}
-              <div class="border border-gray-200 rounded-xl p-3 min-w-0">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">{jenis.label}</p>
-                <p class="text-2xl font-bold text-gray-900 leading-none">
-                  {numberId(jenis.total)} <span class="text-xs font-medium text-gray-400">eks</span>
+              <div class="border border-gray-200 rounded-xl p-4 sm:p-5 min-h-[7.5rem] sm:min-h-[8.5rem] min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">{jenis.label}</p>
+                <p class="text-3xl sm:text-4xl font-bold text-gray-900 leading-none">
+                  {numberId(jenis.total)} <span class="text-sm font-medium text-gray-400">eks</span>
                 </p>
                 {#if semuaGudang}
                   <ul class="mt-3 space-y-1.5 border-t border-gray-100 pt-2">
                     {#each jenis.gudang as baris (baris.id)}
-                      <li class="flex items-center justify-between gap-2 text-xs">
+                      <li class="flex items-center justify-between gap-2 text-sm">
                         <span class="text-gray-500 truncate">{baris.nama.replace('Gudang ', '')}</span>
                         {#if baris.status === 'normal'}
                           <span class="font-semibold text-gray-900">{numberId(baris.eks)}</span>
                         {:else}
-                          <PilTitik warna="amber">{baris.status === 'habis' ? 'Habis' : 'Rendah · ' + numberId(baris.eks)}</PilTitik>
+                          <PilTitik warna="amber" besar>{baris.status === 'habis' ? 'Habis' : 'Rendah · ' + numberId(baris.eks)}</PilTitik>
                         {/if}
                       </li>
                     {/each}
                   </ul>
                 {:else if jenis.gudang[0] && jenis.gudang[0].status !== 'normal'}
-                  <PilTitik warna="amber" class="mt-2">{jenis.gudang[0].status === 'habis' ? 'Habis' : 'Rendah'}</PilTitik>
+                  <PilTitik warna="amber" besar class="mt-2">{jenis.gudang[0].status === 'habis' ? 'Habis' : 'Rendah'}</PilTitik>
                 {/if}
               </div>
             {/each}

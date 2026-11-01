@@ -2,8 +2,11 @@
   /**
    * Pil bergaris tepi dengan titik warna — satu-satunya gaya pil di
    * ringkasan gudang (persen, staf belum mulai, terdepan hari ini).
+   *
+   * `besar` = ukuran kartu Dashboard Gudang (01/11/2026); halaman lain tetap ukuran biasa.
    */
   export let warna = 'indigo';
+  export let besar = false;
 
   const WARNA = {
     indigo: { teks: 'text-indigo-600', titik: 'bg-indigo-500' },
@@ -15,7 +18,7 @@
   $: w = WARNA[warna] ?? WARNA.indigo;
 </script>
 
-<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border border-gray-200 bg-white max-w-full {w.teks} {$$props.class ?? ''}">
-  <span class="w-1.5 h-1.5 rounded-full flex-none {w.titik}"></span>
+<span class="inline-flex items-center gap-1.5 rounded-full font-semibold border border-gray-200 bg-white max-w-full {besar ? 'px-2.5 py-0.5 text-sm' : 'px-2 py-0.5 text-xs'} {w.teks} {$$props.class ?? ''}">
+  <span class="{besar ? 'w-2 h-2' : 'w-1.5 h-1.5'} rounded-full flex-none {w.titik}"></span>
   <span class="truncate"><slot /></span>
 </span>
