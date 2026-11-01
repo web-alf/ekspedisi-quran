@@ -76,14 +76,11 @@ class RingkasanGudangService
      *     stok: array<string, mixed>,
      *     transfer_menunggu: array<int, array{kode: string, asal: string|null, tujuan: string|null, jumlah_resi: int, jumlah_eks: int, dibuat_pada: string|null}>,
      *     transfer_stok_menunggu: array<int, array<string, mixed>>,
-     * }|null null bila bukan PJ.
+     * }|null null bila bukan PJ atau super-admin.
      */
     public function untukManager(User $user): ?array
     {
-        $bukanSpv = $user->hasRole(RoleEnum::MANAGER_REPACKING->value)
-            && ! $user->hasRole(RoleEnum::SPV_GUDANG->value);
-
-        if (! $bukanSpv) {
+        if (! $this->pantauSemuaGudang($user)) {
             return null;
         }
 
@@ -192,7 +189,7 @@ class RingkasanGudangService
     /**
      * Daftar freelancer yang DITUGASKAN pada satu tanggal, untuk halaman Performa Kerja
      * (23/10/2026). Cakupannya sama dengan dashboard: SPV hanya gudangnya sendiri,
-     * Manager Gudang (PJ) semua gudang aktif, peran lain null. Yang ditugaskan tapi
+     * Manager Gudang (PJ) dan super-admin semua gudang aktif, peran lain null. Yang ditugaskan tapi
      * tidak mulai tetap dimuat (status `tidak_mulai`) supaya SPV tahu siapa yang absen.
      *
      * @return array{tanggal: string, hari_ini: string, gudang: array<int, array{id: int, kode: string, nama: string}>, ringkasan: array<string, int>, staf: array<int, array<string, mixed>>}|null
@@ -260,11 +257,28 @@ class RingkasanGudangService
                 : null;
         }
 
-        if ($user->hasRole(RoleEnum::MANAGER_REPACKING->value)) {
+        if ($this->pantauSemuaGudang($user)) {
             return Gudang::where('is_active', true)->orderBy('id')->get(['id', 'kode', 'nama']);
         }
 
         return null;
+    }
+
+    /**
+     * Manager Gudang (PJ murni) dan super-admin memantau semua gudang aktif.
+     *
+     * SPV dikecualikan walau ikut memegang manager-repacking — cakupannya gudang sendiri.
+     * Super-admin ikut sejak 01/11/2026: sebelumnya Dashboard Gudang dan Performa Kerja
+     * tidak menampilkan ringkasan apa pun untuknya karena ia bukan SPV maupun PJ.
+     */
+    private function pantauSemuaGudang(User $user): bool
+    {
+        if ($user->hasRole(RoleEnum::SUPER_ADMIN->value)) {
+            return true;
+        }
+
+        return $user->hasRole(RoleEnum::MANAGER_REPACKING->value)
+            && ! $user->hasRole(RoleEnum::SPV_GUDANG->value);
     }
 
     /**
