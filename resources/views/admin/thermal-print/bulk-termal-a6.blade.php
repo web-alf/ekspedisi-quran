@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cetak Massal Label Resi A6 - {{ $totalLabels }} Labels</title>
+    <title>Cetak Massal Label Resi Termal A6 - {{ $totalLabels }} Labels</title>
     <style>
-        /* Satu label per lembar kertas A6 (105 × 148 mm) printer biasa, sisa 10 mm tiap
-           sisi lewat margin halaman: kotak label 85 × 128 mm. Tata letak SAMA dengan
-           bulk-a5, hanya diperkecil ±2/3 — keputusan pemilik 30/10/2026. */
+        /* Satu label per lembar kertas termal A6 (105 × 148 mm) untuk SEMUA jenis mushaf
+           (revisi pemilik 02/11/2026), margin halaman 2 mm: kotak label 101 × 144 mm. */
         @page {
             size: 105mm 148mm; /* A6 */
-            margin: 10mm;
+            margin: 2mm;
         }
         
         * {
@@ -20,7 +19,7 @@
         }
         
         html {
-            height: {{ $totalLabels * 128 }}mm;
+            height: {{ $totalLabels * 144 }}mm;
             overflow: hidden;
         }
         
@@ -33,18 +32,18 @@
             font-weight: bold;
             margin: 0;
             padding: 0;
-            height: {{ $totalLabels * 128 }}mm;
+            height: {{ $totalLabels * 144 }}mm;
             overflow: hidden;
         }
         
         .label-container {
-            height: {{ $totalLabels * 128 }}mm;
+            height: {{ $totalLabels * 144 }}mm;
             overflow: hidden;
         }
         
         .thermal-label {
-            width: 85mm;
-            height: 128mm;
+            width: 101mm;
+            height: 144mm;
             border: 1px solid #000;
             padding: 2mm;
             background: white;
@@ -77,7 +76,7 @@
            (lihat CADANGAN_HEADER_MM di partials/skala-isi-label). */
         .logo-container {
             width: 100%;
-            height: 13mm;
+            height: 14mm;
             margin: 0;
             display: flex;
             align-items: center;
@@ -125,8 +124,8 @@
         }
         
         .resi-qr-container {
-            width: 20mm;
-            height: 20mm;
+            width: 22mm;
+            height: 22mm;
             border: 1px solid #000;
             padding: 0.5mm;
             background: white;
@@ -209,7 +208,7 @@
         }
         
         .info-table .label-col {
-            width: 17mm;
+            width: 20mm;
             font-weight: bold;
             color: #333;
             text-align: left;
@@ -224,7 +223,7 @@
 
         /* Doa: maks. 250 karakter (WakafItem::DOA_MAKS_KARAKTER); font mengecil bertingkat
            menurut panjangnya (WakafItem::kelasUkuranDoaLabel) agar tetap muat di label.
-           Label A5/A6 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
+           Label termal A6 menambah 1px di tiap tingkat agar doa lebih terbaca (28/10/2026).
            Doa lama yang lebih panjang dipotong dengan "…" di server (28/10/2026). */
         .info-table .doa-col {
             font-size: calc(7pt * var(--skala, 1) + 1px);
@@ -257,8 +256,8 @@
         /* Print optimizations */
         @media print {
             html {
-                height: {{ $totalLabels * 128 }}mm !important;
-                max-height: {{ $totalLabels * 128 }}mm !important;
+                height: {{ $totalLabels * 144 }}mm !important;
+                max-height: {{ $totalLabels * 144 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -267,14 +266,14 @@
                 print-color-adjust: exact;
                 margin: 0 !important;
                 padding: 0 !important;
-                height: {{ $totalLabels * 128 }}mm !important;
-                max-height: {{ $totalLabels * 128 }}mm !important;
+                height: {{ $totalLabels * 144 }}mm !important;
+                max-height: {{ $totalLabels * 144 }}mm !important;
                 overflow: hidden !important;
             }
             
             .label-container {
-                height: {{ $totalLabels * 128 }}mm !important;
-                max-height: {{ $totalLabels * 128 }}mm !important;
+                height: {{ $totalLabels * 144 }}mm !important;
+                max-height: {{ $totalLabels * 144 }}mm !important;
                 overflow: hidden !important;
             }
             
@@ -348,13 +347,13 @@
     <div class="print-summary">
         <strong>Print Summary</strong><br>
         Total Labels: {{ $totalLabels }}<br>
-        Ukuran: 100×150mm<br>
+        Kertas: termal A6 (105 × 148 mm)<br>
         Tanggal: {{ $printDate }} {{ $printTime }}
     </div>
     <button onclick="window.print()" class="btn btn-primary">Print Semua</button>
     <a href="{{ url()->previous() }}" class="btn btn-secondary">← Kembali</a>
 </div>
-<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label" data-skala-min="0.8" data-skala-maks="1.3">
+<div class="label-container">@foreach($pengirimanList as $pengiriman)<div class="thermal-label" data-skala-maks="1.45">
     <!-- Header dengan Logo -->
     <div class="label-header">
         @php
@@ -459,7 +458,7 @@
         <!-- Jenis Wakaf -->
         <div class="jenis-wakaf">
             <div class="section-header">Jenis Wakaf</div>
-            <div class="jenis-wakaf-nama">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran Ukuran A6' }}</div>
+            <div class="jenis-wakaf-nama">{{ $pengiriman->jenisQuran->nama_jenis ?? 'Al-Quran' }}</div>
         </div>
     </div>
 </div>@endforeach</div>

@@ -6,8 +6,9 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Pilih Ukuran Label - Cetak Massal</title>
     <style>
-        /* Resi terpilih campuran ukuran kertas (A5/Iqro di kertas A5, A6 di kertas A6). Printer
-           hanya memuat satu ukuran kertas sekali cetak, jadi setiap ukuran dicetak terpisah. */
+        /* Lembar Muwakif terpilih campuran ukuran kertas (A5/Iqro di kertas A5, A6 di kertas A6).
+           Printer hanya memuat satu ukuran kertas sekali cetak, jadi setiap ukuran dicetak
+           terpisah. Resi tidak lewat halaman ini: semuanya kertas termal A6 (02/11/2026). */
         * {
             margin: 0;
             padding: 0;

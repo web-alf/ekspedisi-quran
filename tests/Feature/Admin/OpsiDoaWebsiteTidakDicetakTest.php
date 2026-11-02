@@ -40,7 +40,7 @@ it('doa untuk lembar wakaf sama dengan database: tidak dipotong, \n teks dibaca 
         ->and(WakafItem::doaUntukLembar(null))->toBeNull();
 });
 
-it('tidak mencetak pilihan doa website di label resi A5/A6 maupun lembar muwakif', function () {
+it('tidak mencetak pilihan doa website di label resi termal A6 maupun lembar muwakif A5/A6', function () {
     $resi = static fn (string $doa) => (object) [
         'no_resi' => 'EQ-2026-01000',
         'tanggal_wakaf' => '2026-06-05',
@@ -56,10 +56,10 @@ it('tidak mencetak pilihan doa website di label resi A5/A6 maupun lembar muwakif
         [$resi(templatDoaWebsite().' Semoga lekas sembuh'), 'Semoga lekas sembuh'],
     ] as [$item, $doaPribadi]) {
         foreach (['a5', 'a6'] as $ukuran) {
-            // Label resi (tombol Generate & Print)
+            // Label resi (tombol Generate & Print), kertas termal A6 untuk semua jenis
             foreach ([
-                view("admin.thermal-print.label-{$ukuran}", [...$data, 'pengiriman' => $item])->render(),
-                view("admin.thermal-print.bulk-{$ukuran}", [...$data, 'pengirimanList' => collect([$item]), 'totalLabels' => 1])->render(),
+                view('admin.thermal-print.label-termal-a6', [...$data, 'pengiriman' => $item])->render(),
+                view('admin.thermal-print.bulk-termal-a6', [...$data, 'pengirimanList' => collect([$item]), 'totalLabels' => 1])->render(),
             ] as $html) {
                 expect($html)->not->toContain('MUWAKIF YANG')
                     ->and($html)->not->toContain('limpahkan rahmat-Mu kepada muwakif');

@@ -1,5 +1,6 @@
 {{--
-    Halaman cetak lembar wakaf. Dipakai label-a5 / label-a6 (satuan) dan bulk-a5 / bulk-a6 (massal).
+    Halaman cetak lembar wakaf (ThermalPrintController::printLembarWakaf). Kertas A5/A6 printer
+    biasa mengikuti jenis mushaf (UkuranLabelResi); resi sendiri dicetak di kertas termal A6.
     Variabel: $daftar (koleksi pengiriman), $kertas ('A5' | 'A6'), $judulHalaman.
 --}}
 @php

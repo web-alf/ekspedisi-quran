@@ -161,14 +161,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Jenis mushaf yang memakai label resi kertas A6
+    | Jenis mushaf yang memakai kertas A6 untuk Lembar Muwakif
     |--------------------------------------------------------------------------
     |
     | Ukuran sampul diukur pemilik 28/10/2026: A5 21,4 × 14,8 cm, A6 14 × 10 cm.
-    | Resi dicetak printer biasa di kertas yang sudah dipotong A5 / A6, sisa 10 mm
-    | tiap sisi (29/10/2026): jenis di sini memakai kertas A6 (label 8,5 × 12,8 cm),
-    | jenis lain kertas A5 (label 12,8 × 19 cm) — App\Enums\UkuranLabelResi.
-    | Cetak massal campuran dipisah per ukuran kertas.
+    | Lembar Muwakif dicetak printer biasa di kertas A5 / A6: jenis di sini memakai
+    | kertas A6, jenis lain kertas A5 — App\Enums\UkuranLabelResi. Cetak campuran
+    | dipisah per ukuran kertas. Resi TIDAK memakai daftar ini: sejak 02/11/2026
+    | semua resi dicetak di kertas termal A6 (105 × 148 mm).
     |
     */
 

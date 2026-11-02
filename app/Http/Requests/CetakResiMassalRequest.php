@@ -17,7 +17,8 @@ class CetakResiMassalRequest extends FormRequest
     }
 
     /**
-     * `ukuran` diisi dari halaman pilih ukuran saat resi yang dipilih campuran (A5 + A6).
+     * `ukuran` diisi dari halaman pilih ukuran Lembar Muwakif saat pilihan campuran (A5 + A6).
+     * Cetak resi mengabaikannya: semua resi dicetak di kertas termal A6.
      *
      * @return array<string, mixed>
      */

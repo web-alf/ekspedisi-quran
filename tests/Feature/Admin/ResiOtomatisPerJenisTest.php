@@ -10,10 +10,12 @@ use Database\Seeders\RolePermissionSeeder;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Ukuran resi otomatis per jenis mushaf (keputusan pemilik 28/10/2026).
+ * Resi di kertas termal A6 untuk semua jenis mushaf (revisi pemilik 02/11/2026).
  *
- * Resi dicetak di kertas A5/A6 (printer biasa): mushaf A6 di kertas A6, A5 dan Iqro di kertas A5.
- * Cetak massal campuran dipisah per ukuran karena printer thermal hanya memuat satu ukuran rol.
+ * Sebelumnya resi dicetak printer biasa di kertas A5 (mushaf A5/Iqro) atau A6 (mushaf A6) dan
+ * cetak massal campuran dipisah per ukuran. Sekarang satu ukuran: kertas termal A6 105 × 148 mm,
+ * margin 2 mm, kotak label 101 × 144 mm. Pilihan kertas A5/A6 per jenis (UkuranLabelResi) tinggal
+ * dipakai Lembar Muwakif.
  */
 beforeEach(function () {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -36,7 +38,7 @@ function resiBerjenis(string $kodeJenis): Pengiriman
     return Pengiriman::factory()->create(['jenis_quran_id' => test()->jenis[$kodeJenis]->id]);
 }
 
-it('memilih kertas A6 hanya untuk mushaf A6', function (?string $kodeJenis, UkuranLabelResi $ukuran) {
+it('memilih kertas A6 Lembar Muwakif hanya untuk mushaf A6', function (?string $kodeJenis, UkuranLabelResi $ukuran) {
     $jenis = $kodeJenis === null ? null : new JenisQuran(['kode_jenis' => $kodeJenis]);
 
     expect(UkuranLabelResi::untukJenis($jenis))->toBe($ukuran);
@@ -48,79 +50,72 @@ it('memilih kertas A6 hanya untuk mushaf A6', function (?string $kodeJenis, Ukur
     'tanpa jenis' => [null, UkuranLabelResi::Standar],
 ]);
 
-it('mencetak resi satuan dengan ukuran sesuai jenis mushaf', function (string $kodeJenis, string $ukuranHalaman, string $template) {
+it('mencetak resi satuan semua jenis mushaf di kertas termal A6', function (string $kodeJenis) {
     $resi = resiBerjenis($kodeJenis);
 
     $this->actingAs($this->admin)
         ->get(route('admin.thermal-print.single', $resi))
         ->assertSuccessful()
-        ->assertViewIs($template)
-        ->assertSee($ukuranHalaman, false)
-        ->assertSee($resi->no_resi);
+        ->assertViewIs('admin.thermal-print.label-termal-a6')
+        ->assertSee('size: 105mm 148mm', false)
+        ->assertSee('margin: 2mm;', false)
+        ->assertSee('Kertas termal <b>A6 (105 × 148 mm)</b>', false)
+        ->assertSee($resi->no_resi)
+        ->assertSee($this->jenis[$kodeJenis]->nama_jenis)
+        ->assertDontSee('size: 148mm 210mm', false);
 })->with([
-    'A5' => ['A5', 'size: 148mm 210mm', 'admin.thermal-print.label-a5'],
-    'A6' => ['A6', 'size: 105mm 148mm', 'admin.thermal-print.label-a6'],
-    'Iqro' => ['IQRA', 'size: 148mm 210mm', 'admin.thermal-print.label-a5'],
+    'A5' => ['A5'],
+    'A6' => ['A6'],
+    'Iqro' => ['IQRA'],
 ]);
 
-it('langsung mencetak massal bila semua resi berukuran sama', function () {
+it('mencetak massal resi berukuran sama di kertas termal A6', function () {
     $resi = [resiBerjenis('A6'), resiBerjenis('A6')];
 
-    $this->actingAs($this->admin)
+    $html = $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => collect($resi)->pluck('id')->all()])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-a6')
+        ->assertViewIs('admin.thermal-print.bulk-termal-a6')
         ->assertViewHas('totalLabels', 2)
         ->assertSee('size: 105mm 148mm', false)
-        ->assertDontSee('<div class="lembar">', false);
+        ->assertSee('height: 288mm;', false)
+        ->assertDontSee('<div class="lembar">', false)
+        ->getContent();
 
-    expect(substr_count($this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => collect($resi)->pluck('id')->all()])
-        ->getContent(), '<div class="thermal-label"'))->toBe(2);
+    expect(substr_count($html, '<div class="thermal-label"'))->toBe(2);
 });
 
-it('meminta pilih ukuran bila cetak massal mencampur A5, Iqro, dan A6', function () {
+it('mencetak massal campuran A5, Iqro, dan A6 sekaligus tanpa halaman pilih ukuran', function () {
     $a5 = resiBerjenis('A5');
     $iqro = resiBerjenis('IQRA');
     $a6 = resiBerjenis('A6');
 
-    $response = $this->actingAs($this->admin)
+    $html = $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id, $iqro->id]])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-pilih-ukuran')
-        ->assertViewHas('totalDipilih', 3)
-        ->assertSeeInOrder(['Kertas A5 (148 × 210 mm)', 'Kertas A6 (105 × 148 mm)'])
-        ->assertSee('Cetak 2 label A5 (12,8 × 19 cm)')
-        ->assertSee('Cetak 1 label A6 (8,5 × 12,8 cm)')
-        ->assertSee('name="ukuran" value="a6"', false);
+        ->assertViewIs('admin.thermal-print.bulk-termal-a6')
+        ->assertViewHas('totalLabels', 3)
+        ->assertSee([$a5->no_resi, $iqro->no_resi, $a6->no_resi])
+        ->assertDontSee('Pilih Ukuran Label', false)
+        ->getContent();
 
-    $kelompok = $response->viewData('kelompokUkuran');
-    expect($kelompok->pluck('ukuran')->all())->toBe([UkuranLabelResi::Standar, UkuranLabelResi::Kecil])
-        ->and($kelompok[0]['pengirimanList']->pluck('id')->sort()->values()->all())->toBe(collect([$a5->id, $iqro->id])->sort()->values()->all())
-        ->and($kelompok[1]['pengirimanList']->pluck('id')->all())->toBe([$a6->id]);
+    expect(substr_count($html, '<div class="thermal-label"'))->toBe(3);
 });
 
-it('mencetak hanya resi berukuran yang dipilih dari pilihan campuran', function () {
+it('cetak resi mengabaikan ukuran kiriman halaman pilih ukuran lama', function () {
     $a5 = resiBerjenis('A5');
     $a6 = resiBerjenis('A6');
 
+    // Tab lama yang masih membuka halaman pilih ukuran resi tetap mencetak semua pilihannya.
     $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => 'a6'])
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-a6')
-        ->assertViewHas('totalLabels', 1)
-        ->assertSee($a6->no_resi)
-        ->assertDontSee($a5->no_resi);
-
-    $this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id], 'ukuran' => 'a5'])
-        ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.bulk-a5')
-        ->assertSee($a5->no_resi)
-        ->assertDontSee($a6->no_resi);
+        ->assertViewIs('admin.thermal-print.bulk-termal-a6')
+        ->assertViewHas('totalLabels', 2)
+        ->assertSee([$a5->no_resi, $a6->no_resi]);
 });
 
-it('menolak ukuran yang tidak dikenal atau tidak ada di pilihan', function () {
+it('menolak ukuran yang tidak dikenal atau pilihan kosong', function () {
     $a5 = resiBerjenis('A5');
 
     $this->actingAs($this->admin)
@@ -128,37 +123,34 @@ it('menolak ukuran yang tidak dikenal atau tidak ada di pilihan', function () {
         ->assertSessionHasErrors(['ukuran' => 'Ukuran label tidak dikenal.']);
 
     $this->actingAs($this->admin)
-        ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id], 'ukuran' => 'a6'])
-        ->assertNotFound();
-
-    $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), [])
         ->assertSessionHasErrors(['pengiriman_ids' => 'Pilih minimal satu pengiriman untuk dicetak.']);
 });
 
-it('menampilkan preview label kertas A6', function () {
+it('menampilkan preview label di kertas termal A6 untuk contoh mushaf A5 dan A6', function () {
     $this->actingAs($this->admin)
         ->get(route('admin.thermal-print.preview', ['ukuran' => 'a6']))
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.label-a6')
+        ->assertViewIs('admin.thermal-print.label-termal-a6')
         ->assertSee('Al-Quran A6');
 
     $this->actingAs($this->admin)
         ->get(route('admin.thermal-print.preview'))
         ->assertSuccessful()
-        ->assertViewIs('admin.thermal-print.label-a5');
+        ->assertViewIs('admin.thermal-print.label-termal-a6')
+        ->assertSee('Al-Quran Ukuran A5');
 });
 
-it('resi A5 dan A6 (tombol Generate & Print) tetap memakai label resi, bukan lembar muwakif', function () {
-    foreach (['A5' => ['128mm', '190mm'], 'A6' => ['85mm', '128mm']] as $kode => [$lebar, $tinggi]) {
+it('resi A5 dan A6 (tombol Generate & Print) memakai kotak label termal yang sama, bukan lembar muwakif', function () {
+    foreach (['A5', 'A6'] as $kode) {
         $resi = resiBerjenis($kode);
 
         $this->actingAs($this->admin)
             ->get(route('admin.thermal-print.single', $resi))
             ->assertSuccessful()
-            ->assertSee('<div class="thermal-label"', false)
-            ->assertSee("width: {$lebar};", false)
-            ->assertSee("height: {$tinggi};", false)
+            ->assertSee('<div class="thermal-label" data-skala-maks="1.45">', false)
+            ->assertSee('width: 101mm;', false)
+            ->assertSee('height: 144mm;', false)
             ->assertDontSee('Mohon didoakan hajat dan cita-cita muwakif', false)
             ->assertDontSee('logo-alfatihah.png', false);
     }
@@ -249,9 +241,9 @@ it('tombol Cetak Lembar Muwakif meminta pilih ukuran bila A5 dan A6 tercampur', 
         ->assertSee($a6->no_resi)
         ->assertDontSee($a5->no_resi);
 
-    // Halaman pilih ukuran milik resi biasa tetap mengarah ke cetak resi.
+    // Resi biasa dengan pilihan campuran yang sama langsung dicetak, tanpa halaman pilih ukuran.
     $this->actingAs($this->admin)
         ->post(route('admin.thermal-print.bulk'), ['pengiriman_ids' => [$a5->id, $a6->id]])
-        ->assertSee('action="'.route('admin.thermal-print.bulk').'"', false)
-        ->assertSee('Cetak Label Massal');
+        ->assertViewIs('admin.thermal-print.bulk-termal-a6')
+        ->assertViewHas('totalLabels', 2);
 });

@@ -235,8 +235,8 @@
                     <div class="stats-label">Dipilih</div>
                 </div>
                 <div class="stats-item">
-                    <div class="stats-number">Otomatis</div>
-                    <div class="stats-label">Ukuran Label per Jenis</div>
+                    <div class="stats-number">Termal A6</div>
+                    <div class="stats-label">Kertas Label (105 × 148 mm)</div>
                 </div>
             </div>
             
@@ -269,7 +269,6 @@
                                 <th>Donatur</th>
                                 <th>Wakif</th>
                                 <th>Jenis Quran</th>
-                                <th>Ukuran Label</th>
                                 <th>Status</th>
                                 <th>QR Code</th>
                                 <th>Tanggal</th>
@@ -289,7 +288,6 @@
                                     <td>{{ $pengiriman->donatur->nama_donatur }}</td>
                                     <td>{{ $pengiriman->wakafItem->wakif_name }}</td>
                                     <td>{{ $pengiriman->jenisQuran->nama_jenis }}</td>
-                                    <td>{{ \App\Enums\UkuranLabelResi::untukPengiriman($pengiriman)->label() }}</td>
                                     <td>
                                         <span class="status-badge status-{{ strtolower(str_replace(' ', '-', $pengiriman->status->nama)) }}">
                                             {{ $pengiriman->status->nama }}

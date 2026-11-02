@@ -6,13 +6,14 @@ use App\Models\JenisQuran;
 use App\Models\Pengiriman;
 
 /**
- * Ukuran label resi, dipilih otomatis dari jenis mushaf.
+ * Ukuran kertas Lembar Muwakif, dipilih otomatis dari jenis mushaf.
  *
- * Resi dicetak printer biasa di kertas yang sudah dipotong A5 (148 × 210 mm) atau
- * A6 (105 × 148 mm), satu label per lembar, sisa 10 mm tiap sisi (keputusan pemilik
- * 29/10/2026; sebelumnya label thermal 10 × 15 cm dan 9 × 13 cm yang terlalu kecil).
+ * Lembar Muwakif dicetak printer biasa di kertas A5 (148 × 210 mm) atau A6 (105 × 148 mm).
  * Jenis di `pengiriman.jenis_label_resi_kecil` (A6, sampul 14 × 10 cm) memakai kertas A6;
  * jenis lain (A5, Iqro) memakai kertas A5.
+ *
+ * Dulu enum ini juga memilih kertas RESI (29/10/2026). Sejak revisi pemilik 02/11/2026 semua
+ * resi dicetak di kertas termal A6 tanpa melihat jenis (ThermalPrintController::TEMPLATE_RESI).
  */
 enum UkuranLabelResi: string
 {
@@ -53,15 +54,5 @@ enum UkuranLabelResi: string
             self::Standar => 'A5 (148 × 210 mm)',
             self::Kecil => 'A6 (105 × 148 mm)',
         };
-    }
-
-    public function templateSatuan(): string
-    {
-        return 'admin.thermal-print.label-'.$this->value;
-    }
-
-    public function templateMassal(): string
-    {
-        return 'admin.thermal-print.bulk-'.$this->value;
     }
 }

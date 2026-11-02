@@ -161,8 +161,8 @@ it('mencetak doa lama terpotong di label resi satuan dan massal', function () {
     $lama = doaSepanjang(400);
     $resi = resiDoaPanjang($lama);
 
-    $satuan = view('admin.thermal-print.label-a5', [...dataCetakResi(), 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-a5', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+    $satuan = view('admin.thermal-print.label-termal-a6', [...dataCetakResi(), 'pengiriman' => $resi])->render();
+    $massal = view('admin.thermal-print.bulk-termal-a6', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
     $tercetak = e(WakafItem::doaUntukLabel($lama));
 
     expect($tercetak)->toEndWith('…');
@@ -176,8 +176,8 @@ it('mencetak doa lama terpotong di label resi satuan dan massal', function () {
 it('mencetak kelas ukuran font doa yang sama di label satuan dan massal', function (int $panjang, string $kelas) {
     $resi = resiDoaPanjang(doaSepanjang($panjang));
 
-    $satuan = view('admin.thermal-print.label-a5', [...dataCetakResi(), 'pengiriman' => $resi])->render();
-    $massal = view('admin.thermal-print.bulk-a5', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
+    $satuan = view('admin.thermal-print.label-termal-a6', [...dataCetakResi(), 'pengiriman' => $resi])->render();
+    $massal = view('admin.thermal-print.bulk-termal-a6', [...dataCetakResi(), 'pengirimanList' => collect([$resi]), 'totalLabels' => 1])->render();
 
     expect($satuan)->toContain("doa-col {$kelas}")
         ->and($massal)->toContain("doa-col {$kelas}");

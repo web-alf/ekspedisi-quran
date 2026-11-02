@@ -1,4 +1,4 @@
-{{-- Label 10 × 15 cm: semua teks isi label diperbesar dengan SATU skala yang sama sampai
+{{-- Label resi termal A6: semua teks isi label diperbesar dengan SATU skala yang sama sampai
      label penuh, supaya ruang sisa terpakai tanpa merusak urutan besar-kecil huruf
      (nomor resi > nama jenis > judul seksi > isi > doa). Tanpa JavaScript skala tetap 1.
      Skala dihitung seolah header masih 20 mm: 6 mm yang dihemat header 14 mm disisihkan
@@ -24,9 +24,9 @@
         const seksiTerakhir = label.querySelector('.label-content').lastElementChild;
         seksiTerakhir.style.flex = 'none';
 
-        // Batas skala per ukuran kertas lewat atribut .thermal-label: A5 (128 × 190 mm) boleh
-        // membesar sampai data-skala-maks; A6 (85 × 128 mm) memakai tata letak yang sama
-        // dengan A5 sehingga mulai dari data-skala-min < 1. Tanpa atribut: 1 … SKALA_MAKS.
+        // Batas skala lewat atribut .thermal-label: label termal A6 (101 × 144 mm) boleh
+        // membesar sampai data-skala-maks; data-skala-min < 1 untuk label yang lebih sempit.
+        // Tanpa atribut: 1 … SKALA_MAKS.
         const skalaMin = parseFloat(label.dataset.skalaMin) || 1;
         const skalaMaks = parseFloat(label.dataset.skalaMaks) || SKALA_MAKS;
         label.style.setProperty('--skala', String(skalaMin));
