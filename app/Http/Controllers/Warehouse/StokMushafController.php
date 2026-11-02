@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
 use App\Http\Controllers\Controller;
+use App\Models\DailyPackingTask;
 use App\Models\Gudang;
 use App\Models\JenisQuran;
 use App\Models\StokMushaf;
@@ -25,7 +26,8 @@ use Inertia\Inertia;
  *   transfer, dan menerima transfer;
  * - menerima transfer juga boleh oleh SPV yang gudangnya adalah TUJUAN (itu
  *   yang menandai barang fisik sudah tiba); SPV asal tidak boleh;
- * - role warehouse (freelancer): hanya melihat.
+ * - role warehouse (freelancer): hanya melihat, dan bila tugas packing hari ini berjenis
+ *   (mis. A6) hanya stok jenis itu (02/11/2026).
  */
 class StokMushafController extends Controller
 {
@@ -48,6 +50,8 @@ class StokMushafController extends Controller
         // gudangnya sendiri, akun tanpa gudang tidak melihat apa pun (User::cakupanGudangStok).
         $cakupan = $user->cakupanGudangStok();
         $tercakupGudang = $cakupan !== null;
+        $jenisTugas = $this->jenisTugasFreelancer($user);
+        $jenisTugasId = $jenisTugas?->id;
 
         // Kartu "Isi Stok" memakai SUMBER & KOMPONEN yang sama dengan dashboard
         // (RingkasanGudangService::stokKartu + KartuStok) supaya bentuk kartunya identik
@@ -59,7 +63,7 @@ class StokMushafController extends Controller
             ->map(fn (Gudang $g) => [
                 'gudang_id' => $g->id,
                 'gudang' => $g->nama,
-                'baris' => $this->ringkasanGudang->stokKartu($g->id),
+                'baris' => $this->ringkasanGudang->stokKartu($g->id, $jenisTugasId),
             ])
             ->filter(fn (array $g) => $g['baris'] !== [])
             ->values()
@@ -67,10 +71,13 @@ class StokMushafController extends Controller
 
         return Inertia::render('Warehouse/StokMushaf', [
             'gudangList' => Gudang::orderBy('id')->get(['id', 'kode', 'nama']),
-            'jenisList' => JenisQuran::daftarUntukFormStok(),
+            'jenisList' => collect(JenisQuran::daftarUntukFormStok())
+                ->when($jenisTugasId !== null, fn ($daftar) => $daftar->where('id', $jenisTugasId))
+                ->values()->all(),
             'stokKartu' => $gudangKartu,
             'stokList' => StokMushaf::with(['gudang', 'jenisQuran'])
                 ->when($tercakupGudang, fn ($q) => $q->where('gudang_id', $cakupan))
+                ->when($jenisTugasId !== null, fn ($q) => $q->where('jenis_quran_id', $jenisTugasId))
                 ->orderBy('gudang_id')->get()
                 ->map(fn (StokMushaf $stok) => [
                     'id' => $stok->id,
@@ -91,6 +98,7 @@ class StokMushafController extends Controller
             // perpindahan berada di satu tempat. Halaman ini menyisakan tautan ke sana.
             'pergerakanList' => StokMushafPergerakan::with(['gudang', 'jenisQuran', 'pelaku'])
                 ->when($tercakupGudang, fn ($q) => $q->where('gudang_id', $cakupan))
+                ->when($jenisTugasId !== null, fn ($q) => $q->where('jenis_quran_id', $jenisTugasId))
                 ->orderBy('id', 'desc')->limit(30)->get()
                 ->map(fn (StokMushafPergerakan $baris) => [
                     'id' => $baris->id,
@@ -108,7 +116,29 @@ class StokMushafController extends Controller
             // SPV Gudang dan freelancer tercakup ke gudangnya saja; hanya super-admin
             // dan PJ murni (gudang@) yang melihat kedua gudang.
             'tercakupGudang' => $tercakupGudang,
+            // "A6" bila freelancer hanya melihat stok jenis tugasnya hari ini; null = semua jenis.
+            'jenisTugas' => $jenisTugas?->labelSingkat(),
         ]);
+    }
+
+    /**
+     * Jenis tugas packing hari ini milik freelancer murni (02/11/2026): freelancer bertugas A6
+     * hanya melihat stok A6, seperti di Proses Packing. Hanya jenis yang dibatasi, bukan varian
+     * terjemahan (sama dengan aturan scan). Null = tidak dibatasi: bukan freelancer murni,
+     * belum ada tugas hari ini, atau tugas lama tanpa jenis.
+     */
+    private function jenisTugasFreelancer(User $user): ?JenisQuran
+    {
+        if (! $user->isFreelancerMurni()) {
+            return null;
+        }
+
+        return DailyPackingTask::where('user_id', $user->id)
+            ->whereDate('tanggal_tugas', today())
+            ->whereNotNull('jenis_quran_id')
+            ->with('jenisQuran:id,kode_jenis,nama_jenis')
+            ->first()
+            ?->jenisQuran;
     }
 
     public function entri(Request $request)

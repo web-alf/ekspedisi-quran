@@ -783,9 +783,10 @@ class PackingAssignmentService
     }
 
     /**
-     * Get available pengiriman count for free-pick
+     * Get available pengiriman count for free-pick. `$jenisQuranId` = jenis tugas (02/11/2026):
+     * resi jenis lain tetap ditolak saat scan, jadi tidak ikut dihitung.
      */
-    public function getAvailablePengirimanCount(?User $user = null)
+    public function getAvailablePengirimanCount(?User $user = null, ?int $jenisQuranId = null)
     {
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
 
@@ -794,6 +795,7 @@ class PackingAssignmentService
         // pemindaian itulah cara memberinya label.
         return CakupanGudang::terapkan(Pengiriman::where('status_id', $packingStatusId), $user)
             ->whereNotNull('qr_code_path')
+            ->when($jenisQuranId !== null, fn ($q) => $q->where('jenis_quran_id', $jenisQuranId))
             ->whereDoesntHave('dailyPackingTaskItem', function ($q) {
                 $q->whereHas('dailyPackingTask', function ($q2) {
                     $q2->whereDate('tanggal_tugas', today());
@@ -803,14 +805,15 @@ class PackingAssignmentService
     }
 
     /**
-     * Get available pengiriman for free-pick (paginated)
+     * Get available pengiriman for free-pick (paginated), dibatasi jenis tugas bila diisi.
      */
-    public function getAvailablePengiriman($limit = 50, ?User $user = null)
+    public function getAvailablePengiriman($limit = 50, ?User $user = null, ?int $jenisQuranId = null)
     {
         $packingStatusId = StatusPengirimanCache::getIdBySlug('packing');
 
         return CakupanGudang::terapkan(Pengiriman::where('status_id', $packingStatusId), $user)
             ->whereNotNull('qr_code_path')
+            ->when($jenisQuranId !== null, fn ($q) => $q->where('jenis_quran_id', $jenisQuranId))
             ->whereDoesntHave('dailyPackingTaskItem', function ($q) {
                 $q->whereHas('dailyPackingTask', function ($q2) {
                     $q2->whereDate('tanggal_tugas', today());

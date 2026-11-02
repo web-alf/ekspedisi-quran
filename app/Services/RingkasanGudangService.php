@@ -593,14 +593,16 @@ class RingkasanGudangService
 
     /**
      * Saldo stok dalam bentuk KARTU per jenis × varian (A5/A6 punya varian terjemahan;
-     * IQRA/IQRO tidak). Dipakai dashboard SPV dan manager gudang.
+     * IQRA/IQRO tidak). Dipakai dashboard SPV dan manager gudang. `$jenisQuranId` membatasi
+     * ke satu jenis (halaman Stok Mushaf untuk freelancer bertugas jenis tertentu).
      *
      * @return array<int, array<string, mixed>>
      */
-    public function stokKartu(int $gudangId): array
+    public function stokKartu(int $gudangId, ?int $jenisQuranId = null): array
     {
         return StokMushaf::query()
             ->where('gudang_id', $gudangId)
+            ->when($jenisQuranId !== null, fn ($q) => $q->where('jenis_quran_id', $jenisQuranId))
             ->with('jenisQuran:id,kode_jenis,nama_jenis,default_capacity')
             ->orderBy('jenis_quran_id')
             ->orderBy('terjemahan')

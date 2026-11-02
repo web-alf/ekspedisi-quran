@@ -20,6 +20,8 @@
   export let bolehKelola = false;
   export let gudangSaya = null;
   export let tercakupGudang = false;
+  /** "A6" bila freelancer hanya melihat stok jenis tugas packing hari ini (02/11/2026). */
+  export let jenisTugas = null;
 
   let pesan = '';
   let galat = '';
@@ -176,7 +178,9 @@
     <RingkasanSection
       icon="archive-box"
       judul="Isi Stok"
-      keterangan={tercakupGudang ? 'Saldo gudang Anda per jenis dan varian' : 'Saldo tiap gudang per jenis dan varian'}
+      keterangan={jenisTugas
+        ? `Saldo ${jenisTugas} gudang Anda, sesuai jenis tugas packing hari ini`
+        : tercakupGudang ? 'Saldo gudang Anda per jenis dan varian' : 'Saldo tiap gudang per jenis dan varian'}
     >
       <div slot="kanan" class="text-right flex-none">
         <p class="text-2xl sm:text-3xl font-bold text-green-600 leading-none">{totalEks.toLocaleString('id-ID')}</p>
