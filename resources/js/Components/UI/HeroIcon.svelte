@@ -15,6 +15,7 @@
   import IconArrowLeft from 'lucide-svelte/icons/arrow-left';
   import IconArrowPath from 'lucide-svelte/icons/refresh-cw';
   import IconArrowRight from 'lucide-svelte/icons/arrow-right';
+  import IconArrowsRightLeft from 'lucide-svelte/icons/arrow-left-right';
   import IconArrowRightOnRectangle from 'lucide-svelte/icons/log-out';
   import IconArrowTopRightOnSquare from 'lucide-svelte/icons/external-link';
   import IconArrowTrendingUp from 'lucide-svelte/icons/trending-up';
@@ -25,6 +26,7 @@
   import IconBellOff from 'lucide-svelte/icons/bell-off';
   import IconBolt from 'lucide-svelte/icons/zap';
   import IconBookOpen from 'lucide-svelte/icons/book-open';
+  import IconBookCopy from 'lucide-svelte/icons/book-copy';
   import IconBuildingOffice2 from 'lucide-svelte/icons/building-2';
   import IconCalendar from 'lucide-svelte/icons/calendar';
   import IconCalendarDays from 'lucide-svelte/icons/calendar-days';
@@ -56,6 +58,7 @@
   import IconFolder from 'lucide-svelte/icons/folder';
   import IconGlobeAlt from 'lucide-svelte/icons/globe';
   import IconHeart from 'lucide-svelte/icons/heart';
+  import IconHandHeart from 'lucide-svelte/icons/hand-heart';
   import IconHome from 'lucide-svelte/icons/house';
   import IconInboxStack from 'lucide-svelte/icons/inbox';
   import IconInformationCircle from 'lucide-svelte/icons/info';
@@ -71,6 +74,7 @@
   import IconMinus from 'lucide-svelte/icons/minus';
   import IconPaintBrush from 'lucide-svelte/icons/brush';
   import IconPaperAirplane from 'lucide-svelte/icons/send';
+  import IconPackageSearch from 'lucide-svelte/icons/package-search';
   import IconPause from 'lucide-svelte/icons/pause';
   import IconPencil from 'lucide-svelte/icons/pencil';
   import IconPencilSquare from 'lucide-svelte/icons/square-pen';
@@ -84,6 +88,8 @@
   import IconQrCode from 'lucide-svelte/icons/qr-code';
   import IconQuestionMarkCircle from 'lucide-svelte/icons/circle-help';
   import IconQuote from 'lucide-svelte/icons/quote';
+  import IconScale from 'lucide-svelte/icons/scale';
+  import IconScanLine from 'lucide-svelte/icons/scan-line';
   import IconShare from 'lucide-svelte/icons/share-2';
   import IconShieldCheck from 'lucide-svelte/icons/shield-check';
   import IconSparkles from 'lucide-svelte/icons/sparkles';
@@ -95,9 +101,11 @@
   import IconTruck from 'lucide-svelte/icons/truck';
   import IconTwitter from 'lucide-svelte/icons/twitter';
   import IconUser from 'lucide-svelte/icons/user';
+  import IconUserCog from 'lucide-svelte/icons/user-cog';
   import IconUserGroup from 'lucide-svelte/icons/users';
   import IconUsers from 'lucide-svelte/icons/users';
   import IconVideoCamera from 'lucide-svelte/icons/video';
+  import IconWarehouse from 'lucide-svelte/icons/warehouse';
   import IconXCircle from 'lucide-svelte/icons/circle-x';
   import IconXMark from 'lucide-svelte/icons/x';
   import IconYoutube from 'lucide-svelte/icons/youtube';
@@ -111,6 +119,7 @@
     'arrow-right': IconArrowRight,
     'arrow-right-on-rectangle': IconArrowRightOnRectangle,
     'arrow-top-right-on-square': IconArrowTopRightOnSquare,
+    'arrows-right-left': IconArrowsRightLeft,
     'arrow-trending-up': IconArrowTrendingUp,
     'arrow-up-tray': IconArrowUpTray,
     'bars-3': IconBars3,
@@ -120,6 +129,7 @@
     'bell-slash': IconBellOff,
     'bolt': IconBolt,
     'book-open': IconBookOpen,
+    'book-copy': IconBookCopy,
     'building-office-2': IconBuildingOffice2,
     'calendar': IconCalendar,
     'calendar-days': IconCalendarDays,
@@ -153,6 +163,7 @@
     'facebook': IconFacebook,
     'folder': IconFolder,
     'globe-alt': IconGlobeAlt,
+    'hand-heart': IconHandHeart,
     'heart': IconHeart,
     'home': IconHome,
     'inbox-stack': IconInboxStack,
@@ -167,6 +178,7 @@
     'map-pin': IconMapPin,
     'message-circle': IconMessageCircle,
     'minus': IconMinus,
+    'package-search': IconPackageSearch,
     'paint-brush': IconPaintBrush,
     'paper-airplane': IconPaperAirplane,
     'pause': IconPause,
@@ -180,6 +192,8 @@
     'qr-code': IconQrCode,
     'question-mark-circle': IconQuestionMarkCircle,
     'quote': IconQuote,
+    'scale': IconScale,
+    'scan-line': IconScanLine,
     'share': IconShare,
     'shield-check': IconShieldCheck,
     'sparkles': IconSparkles,
@@ -191,9 +205,11 @@
     'truck': IconTruck,
     'twitter': IconTwitter,
     'user': IconUser,
+    'user-cog': IconUserCog,
     'user-group': IconUserGroup,
     'users': IconUsers,
     'video-camera': IconVideoCamera,
+    'warehouse': IconWarehouse,
     'x-circle': IconXCircle,
     'x-mark': IconXMark,
     'youtube': IconYoutube

@@ -119,7 +119,7 @@ describe('Sidebar admin', () => {
 
             // 'document-text' adalah cadangan getMenuIcon sekaligus HeroIcon.
             // Menu yang memang memakainya akan terdaftar di pengecualian ini.
-            const memangIkonDokumen = ['Manajemen Sertifikat', 'Legal & Kebijakan', 'FAQ'];
+            const memangIkonDokumen = ['Manajemen Sertifikat'];
 
             if (kelas.includes('lucide-file-text') && !memangIkonDokumen.includes(teks)) {
                 pakaiCadangan.push(teks);

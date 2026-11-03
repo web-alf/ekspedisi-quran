@@ -591,10 +591,12 @@
   }
 
   function getMenuIcon(label) {
+    // Setiap halaman punya ikon sendiri (03/11/2026). Dua label yang membuka halaman
+    // yang sama (menu gudang vs dropdown admin) sengaja memakai ikon yang sama.
     const iconMapping = {
       // Main menu items
       'Dashboard': 'chart-bar',
-      'Kelola Donatur': 'users',
+      'Kelola Donatur': 'hand-heart',
       // Menu ini REGISTRY RESI: seluruh record pengiriman (EQ-*) dari status
       // pemesanan sampai diterima - bukan pekerjaan gudang, bukan tahap
       // pengantaran. Ikonnya papan catatan berisi daftar.
@@ -614,7 +616,7 @@
       'Scan Barang': 'qr-code',
       'Permintaan Disetujui': 'badge-check',
       'Manajemen Gudang': 'building-office-2',
-      'Manajemen Pengguna': 'user-group',
+      'Manajemen Pengguna': 'user-cog',
       // Menu ini soal mengirim pesan, jadi ikonnya balon percakapan.
       'Notifikasi WhatsApp': 'chat-bubble-left-right',
       'Konten Landing': 'paint-brush',
@@ -624,16 +626,25 @@
       'Template Sertifikat': 'pencil-square',
       
       // Warehouse submenu
-      'Dasbor Gudang': 'home',
+      'Dasbor Gudang': 'warehouse',
       // Peta ini di-key pakai TEKS LABEL menu, bukan route. Mengganti label
       // tanpa mengganti key di sini membuat ikonnya diam-diam jadi ikon
       // cadangan (HeroIcon dan getMenuIcon sama-sama punya fallback).
       'Proses Packing': 'cube',
-      'Box Scanner': 'qr-code',
-      'Laporan Kinerja': 'document-chart-bar',
+      'Box Scanner': 'scan-line',
+      'Laporan Kinerja': 'arrow-trending-up',
       'Monitor Gudang': 'eye',
       'Analitik Kinerja': 'chart-pie',
-      'Pelacakan Kerdus': 'magnifying-glass',
+      'Pelacakan Kerdus': 'package-search',
+
+      // Menu peran gudang (dan menu stok di admin)
+      'Dashboard Gudang': 'warehouse',
+      'Stok Mushaf': 'book-copy',
+      'Perpindahan Mushaf': 'arrows-right-left',
+      'Penempatan Gudang': 'map-pin',
+      'Daftar Kerdus': 'package-search',
+      'Monitor & Penugasan': 'eye',
+      'Performa Kerja': 'arrow-trending-up',
       
       // User management submenu
       'Kelola Pengguna': 'users',
@@ -644,10 +655,10 @@
       'Halaman Utama': 'home',
       'Umum': 'cog-6-tooth',
       'Kontak': 'phone',
-      'Media Sosial': 'chat-bubble-left-right',
+      'Media Sosial': 'share',
       'SEO': 'globe-alt',
-      'Legal & Kebijakan': 'document-text',
-      'Testimonial': 'chat-bubble-left-right',
+      'Legal & Kebijakan': 'scale',
+      'Testimonial': 'quote',
       'Gallery': 'photo',
       'Video': 'video-camera',
       'FAQ': 'question-mark-circle'
