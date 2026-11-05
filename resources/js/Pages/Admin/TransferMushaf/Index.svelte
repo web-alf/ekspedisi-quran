@@ -170,29 +170,94 @@
       .finally(() => { sibuk = false; });
   }
 
-  function cari() {
-    if (kataKunci.trim().length < 3) {
-      galat = 'Ketik minimal 3 huruf (nomor resi, nama lembaga, atau nama penerima).';
+  // Live search: mencari otomatis 300 ms setelah berhenti mengetik. Hanya jawaban dari
+  // permintaan TERAKHIR yang dipakai, supaya jawaban lambat dari ketikan lama tidak
+  // menimpa hasil ketikan terbaru.
+  let mencari = false;
+  let pewaktuCari = null;
+  let nomorPermintaan = 0;
+
+  $: jadwalkanCari(kataKunci);
+
+  function jadwalkanCari(kata) {
+    clearTimeout(pewaktuCari);
+
+    if (kata.trim().length < 3) {
+      nomorPermintaan++;
+      hasilCari = [];
+      mencari = false;
 
       return;
     }
 
+    mencari = true;
+    pewaktuCari = setTimeout(cari, 300);
+  }
+
+  function cari() {
+    clearTimeout(pewaktuCari);
+
+    const kata = kataKunci.trim();
+
+    if (kata.length < 3) {
+      return;
+    }
+
+    const nomor = ++nomorPermintaan;
     galat = '';
-    fetch(`/admin/transfer-mushaf/cari?q=${encodeURIComponent(kataKunci.trim())}`, {
+    mencari = true;
+
+    fetch(`/admin/transfer-mushaf/cari?q=${encodeURIComponent(kata)}`, {
       headers: { Accept: 'application/json' },
     })
       .then((res) => res.json())
-      .then((data) => { hasilCari = data.data || []; })
-      .catch(() => { galat = 'Gagal mencari resi.'; });
+      .then((data) => {
+        if (nomor === nomorPermintaan) {
+          hasilCari = data.data || [];
+        }
+      })
+      .catch(() => {
+        if (nomor === nomorPermintaan) {
+          galat = 'Gagal mencari resi.';
+        }
+      })
+      .finally(() => {
+        if (nomor === nomorPermintaan) {
+          mencari = false;
+        }
+      });
   }
 
+  $: idTerpilih = new Set(terpilih.map((r) => r.id));
+  $: hasilBoleh = hasilCari.filter((r) => r.boleh);
+  $: semuaHasilTerpilih = hasilBoleh.length > 0 && hasilBoleh.every((r) => idTerpilih.has(r.id));
+  $: sebagianHasilTerpilih = !semuaHasilTerpilih && hasilBoleh.some((r) => idTerpilih.has(r.id));
+
   function pilih(resi) {
-    if (!resi.boleh || terpilih.some((r) => r.id === resi.id)) return;
+    if (!resi.boleh || idTerpilih.has(resi.id)) return;
     terpilih = [...terpilih, resi];
   }
 
   function buang(id) {
     terpilih = terpilih.filter((r) => r.id !== id);
+  }
+
+  function alihkanPilihan(resi) {
+    if (idTerpilih.has(resi.id)) {
+      buang(resi.id);
+    } else {
+      pilih(resi);
+    }
+  }
+
+  /** Centang/lepas semua hasil pencarian yang boleh dipindah; pilihan dari pencarian lain tetap. */
+  function alihkanSemuaHasil() {
+    if (semuaHasilTerpilih) {
+      const idHasil = new Set(hasilBoleh.map((r) => r.id));
+      terpilih = terpilih.filter((r) => !idHasil.has(r.id));
+    } else {
+      terpilih = [...terpilih, ...hasilBoleh.filter((r) => !idTerpilih.has(r.id))];
+    }
   }
 
   function buat() {
@@ -346,15 +411,15 @@
           <div class="mt-4">
             <label class="block text-sm">
               <span class="block text-gray-700 mb-1">Cari mushaf (nomor resi / lembaga / penerima)</span>
-              <div class="flex gap-2">
-                <input type="text" bind:value={kataKunci} on:keydown={(e) => e.key === 'Enter' && cari()}
-                  placeholder="mis. EQ-2026-21529"
-                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg" />
-                <button type="button" on:click={cari}
-                  class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">
-                  <HeroIcon name="magnifying-glass" class="w-4 h-4" />
-                  Cari
-                </button>
+              <div class="relative">
+                <HeroIcon name="magnifying-glass" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input type="search" bind:value={kataKunci} on:keydown={(e) => e.key === 'Enter' && cari()}
+                  placeholder="mis. EQ-2026-21529 — hasil muncul saat mengetik"
+                  autocomplete="off"
+                  class="w-full pl-9 pr-24 py-2 border border-gray-300 rounded-lg" />
+                {#if mencari}
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">Mencari…</span>
+                {/if}
               </div>
             </label>
 
@@ -363,37 +428,55 @@
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-gray-200 text-left text-gray-600 bg-gray-50">
+                      <th class="py-2 pl-3 w-8">
+                        <input type="checkbox" aria-label="Pilih semua hasil yang bisa dipindah"
+                          checked={semuaHasilTerpilih} indeterminate={sebagianHasilTerpilih}
+                          disabled={hasilBoleh.length === 0} on:change={alihkanSemuaHasil}
+                          class="rounded border-gray-300 text-gray-900 focus:ring-gray-500 disabled:opacity-40" />
+                      </th>
                       <th class="py-2 px-3">No. Resi</th>
+                      <th class="py-2 px-3">Lembaga / Penerima</th>
                       <th class="py-2 px-3">Jenis</th>
                       <th class="py-2 px-3 text-right">Eks</th>
                       <th class="py-2 px-3">Status</th>
                       <th class="py-2 px-3">Gudang sekarang</th>
-                      <th class="py-2 px-3 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {#each hasilCari as resi}
-                      <tr class="border-b border-gray-100">
-                        <td class="py-2 px-3 font-medium text-gray-900">{resi.no_resi}</td>
-                        <td class="py-2 px-3 text-gray-700">{resi.jenis || '-'}</td>
-                        <td class="py-2 px-3 text-right text-gray-700">{resi.eks}</td>
-                        <td class="py-2 px-3 text-gray-700">{resi.status || '-'}</td>
-                        <td class="py-2 px-3 text-gray-700">{resi.gudang || 'Belum diketahui'}</td>
-                        <td class="py-2 px-3 text-right">
-                          {#if resi.boleh}
-                            <button type="button" on:click={() => pilih(resi)}
-                              class="text-sm text-gray-700 underline hover:text-gray-900">Tambahkan</button>
-                          {:else}
-                            <span class="text-xs text-gray-500">{resi.alasan}</span>
+                    {#each hasilCari as resi (resi.id)}
+                      <tr class="border-b border-gray-100 {resi.boleh ? 'cursor-pointer hover:bg-gray-50' : 'text-gray-400'} {idTerpilih.has(resi.id) ? 'bg-gray-50' : ''}"
+                        on:click={() => resi.boleh && alihkanPilihan(resi)}>
+                        <td class="py-2 pl-3">
+                          <input type="checkbox" aria-label="Pilih resi {resi.no_resi}"
+                            checked={idTerpilih.has(resi.id)} disabled={!resi.boleh}
+                            on:click|stopPropagation on:change={() => alihkanPilihan(resi)}
+                            class="rounded border-gray-300 text-gray-900 focus:ring-gray-500 disabled:opacity-40" />
+                        </td>
+                        <td class="py-2 px-3 font-medium {resi.boleh ? 'text-gray-900' : ''}">{resi.no_resi}</td>
+                        <td class="py-2 px-3 {resi.boleh ? 'text-gray-700' : ''}">
+                          {resi.lembaga || resi.penerima || '-'}
+                          {#if resi.lembaga && resi.penerima && resi.lembaga !== resi.penerima}
+                            <span class="block text-xs text-gray-500">{resi.penerima}</span>
                           {/if}
                         </td>
+                        <td class="py-2 px-3 {resi.boleh ? 'text-gray-700' : ''}">{resi.jenis || '-'}</td>
+                        <td class="py-2 px-3 text-right {resi.boleh ? 'text-gray-700' : ''}">{resi.eks}</td>
+                        <td class="py-2 px-3 {resi.boleh ? 'text-gray-700' : ''}">
+                          {resi.status || '-'}
+                          {#if !resi.boleh}
+                            <span class="block text-xs text-gray-500">{resi.alasan}</span>
+                          {/if}
+                        </td>
+                        <td class="py-2 px-3 {resi.boleh ? 'text-gray-700' : ''}">{resi.gudang || 'Belum diketahui'}</td>
                       </tr>
                     {/each}
                   </tbody>
                 </table>
               </div>
-            {:else if kataKunci && !galat}
-              <p class="text-sm text-gray-500 mt-3">Belum ada hasil — tekan Cari.</p>
+            {:else if kataKunci.trim().length > 0 && kataKunci.trim().length < 3}
+              <p class="text-sm text-gray-500 mt-3">Ketik minimal 3 huruf.</p>
+            {:else if kataKunci.trim().length >= 3 && !mencari && !galat}
+              <p class="text-sm text-gray-500 mt-3">Tidak ada resi yang cocok.</p>
             {/if}
           </div>
 

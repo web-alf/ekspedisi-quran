@@ -124,6 +124,8 @@ class TransferMushafController extends Controller
                 return [
                     'id' => $p->id,
                     'no_resi' => $p->no_resi,
+                    'lembaga' => $p->nama_lembaga,
+                    'penerima' => $p->nama_penerima,
                     'jenis' => $p->jenisQuran?->nama_jenis,
                     'eks' => (int) $p->jumlah_quran,
                     'status' => $p->status?->nama,

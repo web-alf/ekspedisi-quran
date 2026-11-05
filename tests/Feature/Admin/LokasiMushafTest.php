@@ -403,6 +403,7 @@ it('mencari resi untuk dipindahkan lewat pencarian, bukan seluruh tabel', functi
 
     expect($hasil)->toHaveCount(1)
         ->and($hasil[0]['no_resi'])->toBe('EQ-2026-91001')
+        ->and($hasil[0])->toHaveKeys(['lembaga', 'penerima'])
         ->and($hasil[0]['boleh'])->toBeTrue()
         ->and($hasil[0]['gudang'])->toBe('Gudang Semarang');
 
@@ -413,6 +414,25 @@ it('mencari resi untuk dipindahkan lewat pencarian, bukan seluruh tabel', functi
         ->json('data');
 
     expect($akhir)->toBeEmpty();
+})->group('lokasi-mushaf');
+
+it('menampilkan lembaga dan penerima pada hasil pencarian resi', function () {
+    resiPacking([
+        'gudang_id' => $this->smg->id,
+        'no_resi' => 'EQ-2026-91003',
+        'nama_lembaga' => 'Pesantren Darul Hikmah Ungaran',
+        'nama_penerima' => 'Ustadz Fulan',
+    ]);
+
+    $hasil = $this->actingAs($this->spvSmg)
+        ->getJson('/admin/transfer-mushaf/cari?q=Darul Hikmah')
+        ->assertSuccessful()
+        ->json('data');
+
+    expect($hasil)->toHaveCount(1)
+        ->and($hasil[0]['no_resi'])->toBe('EQ-2026-91003')
+        ->and($hasil[0]['lembaga'])->toBe('Pesantren Darul Hikmah Ungaran')
+        ->and($hasil[0]['penerima'])->toBe('Ustadz Fulan');
 })->group('lokasi-mushaf');
 
 it('menolak mengemas resi yang sedang dalam dokumen perpindahan', function () {
