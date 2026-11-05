@@ -235,8 +235,11 @@ class RolePermissionSeeder extends Seeder
             PermissionEnum::SHIPMENTS_UPDATE_STATUS->value,
             PermissionEnum::SHIPMENTS_TRACK->value,
             PermissionEnum::SHIPMENTS_EXPORT->value,
-            PermissionEnum::MUSHAF_REQUESTS_READ->value,
-            PermissionEnum::MUSHAF_REQUESTS_PROCESS->value,
+            // MUSHAF_REQUESTS_READ & _PROCESS sengaja DICABUT (04/11/2026): lewat URL
+            // langsung izin baca membuka daftar Permintaan Mushaf dan api/donatur-list —
+            // nama semua donatur serta alamat & WhatsApp pengurus lembaga — dan izin
+            // process membuat resi dari permintaan. Tidak ada alur packing yang
+            // membutuhkan keduanya.
             PermissionEnum::CERTIFICATES_GENERATE->value,
             PermissionEnum::CERTIFICATES_READ->value,
             PermissionEnum::CERTIFICATES_DOWNLOAD->value,
