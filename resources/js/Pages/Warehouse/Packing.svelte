@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
-  import { router } from '@inertiajs/svelte';
+  import { router, page } from '@inertiajs/svelte';
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
@@ -35,6 +35,12 @@
   // SIAP DIKEMAS (30/10/2026): jumlah & 5 resi terlama yang bisa dikerjakan, sesuai jenis
   // dan gudang tugas. null = tidak ada tugas aktif.
   export let siapDikemas = null;
+  // Nama SPV gudang akun ini (05/11/2026), untuk kartu "Tidak Ada Tugas". Tautan Monitor &
+  // Penugasan hanya untuk pemegang izinnya — freelancer ditolak (403) di sana.
+  export let spvGudang = [];
+  $: bolehMonitor = ($page.props.auth?.user?.permissions ?? []).includes('supervisor.warehouse.monitor');
+  // Di HP rincian Siap Dikemas dilipat supaya pemindai langsung terlihat di bawah progres.
+  let siapTerbuka = false;
 
   $: siapKurang = siapDikemas ? Math.max(0, siapDikemas.sisa_tugas - siapDikemas.jumlah_eks) : 0;
   $: siapLainnya = siapDikemas ? Math.max(0, siapDikemas.jumlah_resi - siapDikemas.contoh.length) : 0;
@@ -174,6 +180,20 @@
   let successSound;
   let errorSound;
 
+  // Diputar dari awal: suara sukses 3,4 detik, jadi scan berikutnya yang lebih cepat dari
+  // itu dulu tidak berbunyi.
+  function putarSuara(suara) {
+    if (!suara) return;
+    try {
+      suara.currentTime = 0;
+      suara.play().catch(() => {
+        // Autoplay ditolak browser / berkas gagal dimuat — getaran tetap jalan.
+      });
+    } catch (e) {
+      // abaikan galat audio
+    }
+  }
+
   // Mobile-specific state
   let isMobileDevice = false;
   let showFileScanner = false;
@@ -248,15 +268,11 @@
     isChrome = /Chrome/.test(navigator.userAgent);
     isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
     
-    // Initialize sounds (smaller files for mobile)
-    if (MobileDetection.isLowEndDevice()) {
-      // Use lightweight notification sounds for low-end devices
-      successSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmkaCAqNzPPIeSIHKYPM8NVFEQE=');
-      errorSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmkaCAqNzPPIeSIHKYPM8NVFEQE=');
-    } else {
-      successSound = new Audio('/sounds/success.mp3');
-      errorSound = new Audio('/sounds/error.mp3');
-    }
+    // Suara sukses & galat yang berbeda untuk SEMUA perangkat (05/11/2026). Dulu HP RAM ≤ 2 GB
+    // memakai dua data-URI identik dan suara sukses/ditolak dilewati — pemindai yang tidak
+    // menatap layar tidak bisa membedakan scan berhasil dari gagal.
+    successSound = new Audio('/sounds/success.mp3');
+    errorSound = new Audio('/sounds/error.mp3');
     
     // Request wake lock for mobile devices during scanning
     if (isMobileDevice) {
@@ -555,11 +571,7 @@
         
         // Play success sound and vibration
         try {
-          if (successSound && !MobileDetection.isLowEndDevice()) {
-            successSound.play().catch(() => {
-              // Ignore audio play errors
-            });
-          }
+          putarSuara(successSound);
           
           // Mobile haptic feedback
           if (isMobileDevice) {
@@ -661,11 +673,7 @@
         const errorMessage = data.message || 'Terjadi kesalahan tidak diketahui';
         
         try {
-          if (errorSound && !MobileDetection.isLowEndDevice()) {
-            errorSound.play().catch(() => {
-              // Ignore audio play errors
-            });
-          }
+          putarSuara(errorSound);
           
           // Mobile error vibration
           if (isMobileDevice) {
@@ -697,13 +705,7 @@
       packedItems = stateBackup.packedItems;
       task = stateBackup.task;
       
-      try {
-        errorSound?.play().catch(() => {
-          // Ignore audio play errors
-        });
-      } catch (e) {
-        // Ignore audio errors
-      }
+      putarSuara(errorSound);
       
       // Set error state for user feedback
       scanError = err.message || 'Gagal memproses scan';
@@ -1092,19 +1094,33 @@
             <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Tidak Ada Tugas Packing</h2>
           {/if}
           <p class="text-sm text-gray-600 mb-6 max-w-md">{noTaskMessage}</p>
+          {#if !bolehMonitor && !tugasSelesai}
+            <div class="flex items-center gap-3 w-full sm:max-w-md mb-6 p-3 rounded-lg bg-blue-50 border border-blue-100 text-left">
+              <HeroIcon name="user" class="w-5 h-5 text-blue-600 flex-none" />
+              <p class="text-sm text-blue-900">
+                {#if spvGudang.length > 0}
+                  SPV gudang Anda: <span class="font-semibold">{spvGudang.join(', ')}</span>
+                {:else}
+                  Hubungi SPV gudang Anda untuk mendapatkan tugas.
+                {/if}
+              </p>
+            </div>
+          {/if}
           <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <a 
+            <a
               href="/admin/warehouse"
               class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
               Kembali ke Dashboard
             </a>
-            <a 
-              href="/admin/supervisor/warehouse-monitor"
-              class="px-4 py-2 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors"
-            >
-              Hubungi Supervisor
-            </a>
+            {#if bolehMonitor}
+              <a
+                href="/admin/supervisor/warehouse-monitor"
+                class="px-4 py-2 bg-[#eb3434] text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Buka Monitor & Penugasan
+              </a>
+            {/if}
           </div>
         </div>
       </div>
@@ -1157,6 +1173,24 @@
             {/if}
           </svelte:fragment>
 
+          <!-- HP: rincian dilipat jadi satu baris supaya pemindai di bawahnya langsung terlihat. -->
+          <button
+            type="button"
+            on:click={() => (siapTerbuka = !siapTerbuka)}
+            aria-expanded={siapTerbuka}
+            class="lg:hidden w-full flex items-center justify-between gap-3 min-h-[44px] px-3 rounded-lg bg-gray-50 text-sm text-gray-700 {siapTerbuka ? 'mb-4' : ''}"
+          >
+            <span>
+              <span class="font-semibold text-gray-900">{siapDikemas.jumlah_resi.toLocaleString('id-ID')}</span> resi ·
+              <span class="font-semibold text-gray-900">{siapDikemas.jumlah_eks.toLocaleString('id-ID')}</span> mushaf siap
+            </span>
+            <span class="flex items-center gap-1 text-gray-500">
+              {siapTerbuka ? 'Tutup' : 'Rincian'}
+              <HeroIcon name={siapTerbuka ? 'chevron-up' : 'chevron-down'} class="w-4 h-4" />
+            </span>
+          </button>
+
+          <div class="{siapTerbuka ? '' : 'hidden'} lg:block">
           {#if siapDikemas.jumlah_resi > 0}
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
               <StatTile label="Resi siap" nilai={siapDikemas.jumlah_resi.toLocaleString('id-ID')} satuan="resi" />
@@ -1217,6 +1251,7 @@
                 </a>
               {/each}
             </div>
+          </div>
           </div>
         </RingkasanSection>
       {/if}

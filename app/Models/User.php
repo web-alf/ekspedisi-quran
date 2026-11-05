@@ -289,6 +289,30 @@ class User extends Authenticatable
     }
 
     /**
+     * Nama SPV Gudang aktif di gudang akun ini — orang yang dihubungi freelancer bila
+     * belum diberi tugas atau ada kesalahan (05/11/2026). Kosong bila akun belum
+     * ditempatkan di gudang. Tautan "Hubungi Supervisor" dulu membuka Monitor & Penugasan,
+     * halaman yang ditolak (403) untuk freelancer.
+     *
+     * @return array<int, string>
+     */
+    public function namaSpvGudang(): array
+    {
+        if ($this->gudang_id === null) {
+            return [];
+        }
+
+        return self::query()
+            ->role(RoleEnum::SPV_GUDANG->value)
+            ->where('gudang_id', $this->gudang_id)
+            ->where('is_active', true)
+            ->whereKeyNot($this->id)
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+    }
+
+    /**
      * Gudang yang stok mushafnya boleh dilihat akun ini, atau null = semua gudang.
      *
      * Stok mushaf dimiliki GUDANG, bukan perorangan: "stok milik freelancer" adalah stok

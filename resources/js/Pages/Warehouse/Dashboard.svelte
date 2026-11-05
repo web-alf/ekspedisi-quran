@@ -63,6 +63,8 @@
   // hanya muncul bagi akun SPV yang bergudang.
   export let ringkasanGudang = null;
   export let ringkasanManager = null;
+  // Nama SPV gudang akun ini (05/11/2026); hanya terisi bila belum ada tugas hari ini.
+  export let spvGudang = [];
 
   // Filter gudang dashboard Manager: 'semua' / id gudang (string).
   let stokAktif = SEMUA_GUDANG;
@@ -826,8 +828,14 @@
                   <HeroIcon name="calendar" class="w-5 h-5 text-amber-500 inline" />
                   <span>Hari libur - tidak ada penugasan</span>
                 {:else}
-                  <HeroIcon name="phone" class="w-5 h-5 text-blue-500 inline" />
-                  <span>Hubungi supervisor jika ada kesalahan</span>
+                  <HeroIcon name="phone" class="w-5 h-5 text-blue-500 inline flex-none" />
+                  <span>
+                    {#if spvGudang.length > 0}
+                      Hubungi SPV gudang Anda (<span class="font-semibold">{spvGudang.join(', ')}</span>) jika ada kesalahan
+                    {:else}
+                      Hubungi SPV gudang Anda jika ada kesalahan
+                    {/if}
+                  </span>
                 {/if}
               </div>
             </div>

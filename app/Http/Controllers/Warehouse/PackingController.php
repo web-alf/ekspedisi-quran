@@ -94,6 +94,7 @@ class PackingController extends Controller
                     ? "Tugas packing hari ini sudah selesai: {$todayTask->total_selesai} dari {$todayTask->total_target} mushaf. Terima kasih!"
                     : 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor untuk mendapatkan tugas.',
                 'tugasSelesai' => (bool) $todayTask,
+                'spvGudang' => $user->namaSpvGudang(),
                 ...$riwayat,
             ]);
         }

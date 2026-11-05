@@ -107,6 +107,8 @@ class DashboardController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                 ],
+                // Hanya dibutuhkan kartu "Tidak ada tugas"; bila ada tugas query-nya dilewati.
+                'spvGudang' => $todayTask ? [] : $user->namaSpvGudang(),
                 'currentTime' => now()->format('H:i'),
                 'currentDate' => now()->format('d F Y'),
             ]);
