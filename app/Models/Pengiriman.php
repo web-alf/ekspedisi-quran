@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\GudangAwal;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -75,6 +76,13 @@ class Pengiriman extends Model
             }
 
             $model->tautkanKeBatchDonatur();
+
+            // Resi baru yang dipesan langsung mendapat gudang awal (bergantian per 1.000
+            // resi) — menangkap semua jalur pembuatan: form donatur, impor, wakaf item,
+            // dan persetujuan Permintaan Mushaf. Lihat App\Support\GudangAwal.
+            if ($model->gudang_id === null && $model->statusAdalahPemesanan()) {
+                $model->gudang_id = GudangAwal::untukResiBerikutnya();
+            }
         });
 
         // "Diterima" hanya dari "Tiba di Tujuan" (keputusan pemilik sistem, 16/10/2026):
@@ -348,6 +356,16 @@ class Pengiriman extends Model
      * Sumbernya `config/pengiriman.php` — daftar yang sama yang dipakai UI dan penjaga
      * perpindahan status, jadi menambah/mengurangi tahap gudang tidak perlu dua tempat.
      */
+    /** Apakah status resi ini (belum tersimpan pun) adalah "pemesanan". */
+    public function statusAdalahPemesanan(): bool
+    {
+        if (! $this->status_id) {
+            return false;
+        }
+
+        return DB::table('status_pengiriman')->where('id', $this->status_id)->value('slug') === 'pemesanan';
+    }
+
     public function statusSlugAdaDiTahapGudang(int $statusId): bool
     {
         $slug = DB::table('status_pengiriman')->where('id', $statusId)->value('slug');

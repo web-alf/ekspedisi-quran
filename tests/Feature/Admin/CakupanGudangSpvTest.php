@@ -47,7 +47,7 @@ function cgAkun(string $peran, ?Gudang $gudang = null): User
 
 function cgResi(string $slug, ?Gudang $gudang, string $noResi): Pengiriman
 {
-    return Pengiriman::factory()->create([
+    $resi = Pengiriman::factory()->create([
         'no_resi' => $noResi,
         'status_id' => StatusPengiriman::where('slug', $slug)->value('id'),
         'gudang_id' => $gudang?->id,
@@ -58,6 +58,13 @@ function cgResi(string $slug, ?Gudang $gudang, string $noResi): Pengiriman
         'alamat_tujuan' => 'Jl. Uji '.$noResi,
         'qr_code_path' => 'qr/'.$noResi.'.png',
     ]);
+
+    // Resi lama tanpa gudang: resi pemesanan baru kini otomatis mendapat gudang awal.
+    if ($gudang === null) {
+        Pengiriman::whereKey($resi->id)->update(['gudang_id' => null]);
+    }
+
+    return $resi->refresh();
 }
 
 it('SPV hanya melihat resi gudangnya + yang belum berlabel di Data Resi', function () {

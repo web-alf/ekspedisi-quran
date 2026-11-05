@@ -50,11 +50,18 @@ beforeEach(function () {
 
 function stResi(string $slug, ?Gudang $gudang, int $eks = 1): Pengiriman
 {
-    return Pengiriman::factory()->create([
+    $resi = Pengiriman::factory()->create([
         'status_id' => StatusPengiriman::where('slug', $slug)->value('id'),
         'gudang_id' => $gudang?->id,
         'jumlah_quran' => $eks,
     ]);
+
+    // Resi lama tanpa gudang: resi pemesanan baru kini otomatis mendapat gudang awal.
+    if ($gudang === null) {
+        Pengiriman::whereKey($resi->id)->update(['gudang_id' => null]);
+    }
+
+    return $resi->refresh();
 }
 
 function stStok(Gudang $gudang, JenisQuran $jenis, bool $terjemahan, int $eks): void
