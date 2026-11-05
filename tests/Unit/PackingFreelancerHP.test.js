@@ -17,7 +17,8 @@ const markup = sumber.slice(sumber.indexOf('<AdminLayout>'));
 const dashboard = readFileSync(resolve(__dirname, '../../resources/js/Pages/Warehouse/Dashboard.svelte'), 'utf8');
 
 describe('Kartu Tidak Ada Tugas', () => {
-    const kartu = markup.slice(markup.indexOf('{#if noTaskMessage}'), markup.indexOf('<!-- Normal Packing Interface -->'));
+    // Kartu ini cabang kedua blok tugas sejak pantauan pemantau (06/11/2026).
+    const kartu = markup.slice(markup.indexOf('<!-- No Task State -->'), markup.indexOf('<!-- Normal Packing Interface -->'));
 
     it('menampilkan tautan Monitor & Penugasan hanya bagi pemegang izinnya', () => {
         expect(sumber).toContain("includes('supervisor.warehouse.monitor')");

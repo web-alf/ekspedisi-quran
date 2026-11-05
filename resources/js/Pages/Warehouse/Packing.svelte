@@ -6,6 +6,8 @@
   import RingkasanSection from '../../Components/Warehouse/RingkasanSection.svelte';
   import StatTile from '../../Components/Warehouse/StatTile.svelte';
   import PilTitik from '../../Components/Warehouse/PilTitik.svelte';
+  import FreelancerKerjaHariIni from '../../Components/Warehouse/FreelancerKerjaHariIni.svelte';
+  import { SEMUA_GUDANG, gudangTampil } from '../../utils/ringkasanManagerGudang.js';
   import { fade } from 'svelte/transition';
   import { toast, dialog } from '../../utils/notifications.js';
   import { MobileDetection, PerformanceMonitor } from '../../utils/mobileDetection.js';
@@ -29,7 +31,8 @@
   // freelancer tugasnya sendiri; SPV gudangnya; PJ & super-admin semua (riwayatSemuaStaf).
   // Kolom Status dihapus 30/10/2026 atas permintaan pemilik: status `expired` ("Kedaluwarsa")
   // terbaca seperti tugas rusak, padahal artinya target hari itu tidak tercapai.
-  // Capaian tetap terbaca dari kolom Dikemas (selesai / target).
+  // Capaian tetap terbaca dari kolom Dikemas (selesai / target), ditambah pil capaian
+  // Tuntas / Berjalan / Tidak tuntas (06/11/2026) — bukan status `expired`.
   export let riwayatPacking = [];
   export let riwayatSemuaStaf = false;
   // SIAP DIKEMAS (30/10/2026): jumlah & 5 resi terlama yang bisa dikerjakan, sesuai jenis
@@ -41,6 +44,71 @@
   $: bolehMonitor = ($page.props.auth?.user?.permissions ?? []).includes('supervisor.warehouse.monitor');
   // Di HP rincian Siap Dikemas dilipat supaya pemindai langsung terlihat di bawah progres.
   let siapTerbuka = false;
+
+  // PANTAUAN PACKING (06/11/2026): pemantau (SPV, Manager Gudang, super-admin) yang tidak
+  // memegang tugas hari ini melihat progres packing semua petugas dalam cakupannya, bukan
+  // pesan "hubungi supervisor". null = bukan pemantau, atau sedang memegang tugas.
+  export let pantauan = null;
+  let gudangPantauan = SEMUA_GUDANG;
+
+  $: semuaPantauan = gudangPantauan === SEMUA_GUDANG;
+  $: barisPantauan = gudangTampil(pantauan?.gudang ?? [], gudangPantauan);
+  $: angkaPantauan = jumlahkanPantauan(barisPantauan, semuaPantauan ? (pantauan?.siap_tanpa_gudang ?? 0) : 0);
+  $: stafPantauan = barisPantauan.flatMap((g) => g.per_staf ?? []);
+  $: scanGagalPantauan = (pantauan?.scan_gagal ?? []).filter(
+    (log) => semuaPantauan || String(log.gudang_id) === String(gudangPantauan),
+  );
+  $: riwayatTampil = pantauan && !semuaPantauan
+    ? riwayatPacking.filter((baris) => String(baris.gudang_id) === String(gudangPantauan))
+    : riwayatPacking;
+  $: namaGudangPantauan = semuaPantauan ? '' : (barisPantauan[0]?.nama ?? '');
+
+  const hariIni = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+  /** Angka empat kotak pantauan untuk gudang yang tampil; `siapTanpaGudang` ikut di "Semua gudang". */
+  function jumlahkanPantauan(baris, siapTanpaGudang) {
+    const jumlah = (kunci) => baris.reduce((n, g) => n + (Number(g[kunci]) || 0), 0);
+    const target = jumlah('target');
+    const selesai = jumlah('selesai');
+
+    return {
+      target,
+      selesai,
+      persen: target > 0 ? Math.min(100, Math.round((selesai / target) * 100)) : 0,
+      staf: jumlah('jumlah_staf'),
+      bekerja: baris.flatMap((g) => g.per_staf ?? []).filter((s) => s.status === 'mulai').length,
+      belumMulai: jumlah('staf_belum_mulai'),
+      kerdus: jumlah('kerdus_tersegel'),
+      siap: jumlah('siap_dikemas') + siapTanpaGudang,
+      siapTanpaGudang: pantauan?.siap_tanpa_gudang ?? 0,
+    };
+  }
+
+  // Dimuat ulang tiap 30 detik selama tab terlihat; hanya prop `pantauan` yang diminta.
+  onMount(() => {
+    if (!pantauan) return;
+
+    const pewaktu = setInterval(() => {
+      if (!document.hidden) {
+        router.reload({ only: ['pantauan'] });
+      }
+    }, 30000);
+
+    return () => clearInterval(pewaktu);
+  });
+
+  /** Capaian tugas di riwayat: tuntas, masih berjalan (hari ini), atau target tidak tercapai. */
+  function statusRiwayat(baris) {
+    if (baris.status === 'completed' || (baris.target > 0 && baris.selesai >= baris.target)) {
+      return { label: 'Tuntas', warna: 'green' };
+    }
+
+    if (baris.hari_ini) {
+      return { label: 'Berjalan', warna: 'indigo' };
+    }
+
+    return { label: 'Tidak tuntas', warna: 'amber' };
+  }
 
   $: siapKurang = siapDikemas ? Math.max(0, siapDikemas.sisa_tugas - siapDikemas.jumlah_eks) : 0;
   $: siapLainnya = siapDikemas ? Math.max(0, siapDikemas.jumlah_resi - siapDikemas.contoh.length) : 0;
@@ -1078,7 +1146,123 @@
       </div>
     {/if}
 
-    {#if noTaskMessage}
+    {#if noTaskMessage && pantauan}
+      <!-- PANTAUAN PACKING (06/11/2026): pemantau tanpa tugas hari ini. -->
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Proses Packing</h1>
+          <p class="text-sm text-gray-500 mt-1 flex items-center gap-1.5">
+            <HeroIcon name="arrow-path" class="w-4 h-4 flex-none" />
+            Pantauan hari ini · {hariIni} · diperbarui {pantauan.diperbarui}
+          </p>
+        </div>
+        {#if bolehMonitor}
+          <a
+            href="/admin/supervisor/warehouse-monitor"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#eb3434] text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors flex-none"
+          >
+            <HeroIcon name="users" class="w-4 h-4" />
+            Atur penugasan
+          </a>
+        {/if}
+      </div>
+
+      <div class="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 mb-4">
+        <HeroIcon name={tugasSelesai ? 'check-circle' : 'information-circle'} class="w-5 h-5 flex-none {tugasSelesai ? 'text-green-600' : 'text-gray-400'}" />
+        <p>
+          {#if tugasSelesai}
+            {noTaskMessage}
+          {:else}
+            Anda tidak memegang tugas packing hari ini.
+            {#if bolehMonitor}
+              Mau ikut mengemas?
+              <a href="/admin/supervisor/warehouse-monitor" class="font-medium text-[#eb3434] hover:underline">Tugaskan diri Anda</a>
+            {/if}
+          {/if}
+        </p>
+      </div>
+
+      {#if pantauan.gudang.length > 1}
+        <div class="flex sm:inline-flex gap-1 p-1 bg-gray-100 rounded-lg mb-4" role="tablist" aria-label="Pilih gudang">
+          <button type="button" role="tab" aria-selected={semuaPantauan} on:click={() => (gudangPantauan = SEMUA_GUDANG)}
+            class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap {semuaPantauan ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">Semua gudang</button>
+          {#each pantauan.gudang as g (g.id)}
+            <button type="button" role="tab" aria-selected={gudangPantauan === String(g.id)} on:click={() => (gudangPantauan = String(g.id))}
+              class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap {gudangPantauan === String(g.id) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}">{g.nama.replace('Gudang ', '')}</button>
+          {/each}
+        </div>
+      {:else if pantauan.gudang.length === 0}
+        <div class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+          <HeroIcon name="exclamation-triangle" class="w-5 h-5 flex-none text-amber-600" />
+          <p>Akun Anda belum ditempatkan di gudang, jadi belum ada packing yang bisa dipantau. Minta Manager Gudang menempatkan akun Anda.</p>
+        </div>
+      {/if}
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <StatTile label="Dikemas hari ini" nilai={angkaPantauan.selesai} satuan="/ {angkaPantauan.target} mushaf">
+            <div class="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-full rounded-full bg-[#eb3434]" style="width: {angkaPantauan.persen}%"></div>
+            </div>
+          </StatTile>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <StatTile label="Freelancer bekerja" nilai={angkaPantauan.bekerja} satuan="/ {angkaPantauan.staf} staf">
+            {#if angkaPantauan.belumMulai > 0}
+              <PilTitik warna="amber" class="mt-2">{angkaPantauan.belumMulai} belum mulai</PilTitik>
+            {/if}
+          </StatTile>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <StatTile label="Kerdus tersegel" nilai={angkaPantauan.kerdus} satuan="kerdus">
+            <p class="text-xs text-gray-500 mt-1">hari ini</p>
+          </StatTile>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <StatTile label="Siap dikemas" nilai={angkaPantauan.siap.toLocaleString('id-ID')} satuan="resi">
+            {#if !semuaPantauan && angkaPantauan.siapTanpaGudang > 0}
+              <p class="text-xs text-gray-500 mt-1">+ {angkaPantauan.siapTanpaGudang.toLocaleString('id-ID')} belum bergudang</p>
+            {/if}
+          </StatTile>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
+        <RingkasanSection
+          icon="user-group"
+          judul="Freelancer Hari Ini"
+          keterangan={namaGudangPantauan ? `Petugas yang ditugaskan di ${namaGudangPantauan}` : 'Petugas yang ditugaskan di semua gudang'}
+        >
+          <FreelancerKerjaHariIni staf={stafPantauan} />
+        </RingkasanSection>
+
+        <RingkasanSection icon="exclamation-triangle" judul="Scan Gagal Hari Ini" keterangan="10 terakhir — perlu dicek di lantai gudang">
+          {#if scanGagalPantauan.length > 0}
+            <ul class="divide-y divide-gray-100 border border-gray-200 rounded-xl">
+              {#each scanGagalPantauan as log (log.id)}
+                <li class="p-3 sm:p-4 flex items-start gap-3">
+                  <HeroIcon name="exclamation-triangle" class="w-5 h-5 flex-none text-[#eb3434] mt-0.5" />
+                  <div class="flex-1 min-w-0">
+                    <p class="font-mono text-sm text-gray-900 truncate">{log.no_resi ?? '-'}</p>
+                    <p class="text-sm text-gray-600">{log.pesan ?? '-'}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">{log.oleh ?? '-'}</p>
+                  </div>
+                  <span class="text-xs text-gray-500 whitespace-nowrap">{log.waktu}</span>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <div class="flex flex-col items-center text-center py-6">
+              <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-3">
+                <HeroIcon name="check-circle" class="w-6 h-6 text-green-600" />
+              </div>
+              <p class="font-semibold text-gray-900">Tidak ada scan gagal hari ini</p>
+              <p class="text-sm text-gray-500 mt-1">Kegagalan pindai petugas akan muncul di sini.</p>
+            </div>
+          {/if}
+        </RingkasanSection>
+      </div>
+    {:else if noTaskMessage}
       <!-- No Task State -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sm:p-8 text-center">
         <div class="flex flex-col items-center">
@@ -1725,14 +1909,16 @@
     {/if}
 
     <!-- Riwayat Packing: tampil dengan atau tanpa tugas hari ini (29/10/2026). -->
-    <div class="mt-6">
+    <div class={pantauan ? '' : 'mt-6'}>
       <RingkasanSection
         icon="clock"
         judul="Riwayat Packing"
-        keterangan={riwayatSemuaStaf ? '10 tugas packing terakhir semua petugas' : '10 tugas packing terakhir Anda'}
+        keterangan={riwayatSemuaStaf
+          ? `10 tugas packing terakhir semua petugas${namaGudangPantauan ? ' · ' + namaGudangPantauan : ''}`
+          : '10 tugas packing terakhir Anda'}
       >
         <svelte:fragment slot="kanan">
-          {#if !riwayatSemuaStaf && riwayatPacking.length > 0}
+          {#if riwayatPacking.length > 0}
             <a href="/admin/warehouse/packing/history" class="inline-flex items-center gap-1 text-sm font-medium text-[#eb3434] hover:underline">
               Lihat semua
               <HeroIcon name="arrow-right" class="w-4 h-4" />
@@ -1740,7 +1926,7 @@
           {/if}
         </svelte:fragment>
 
-        {#if riwayatPacking.length > 0}
+        {#if riwayatTampil.length > 0}
           <!-- Desktop: tabel -->
           <div class="hidden md:block overflow-x-auto">
             <table class="w-full text-sm">
@@ -1757,7 +1943,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                {#each riwayatPacking as baris (baris.id)}
+                {#each riwayatTampil as baris (baris.id)}
                   <tr>
                     <td class="py-3 pr-4 whitespace-nowrap text-gray-900">
                       {baris.tanggal}
@@ -1774,6 +1960,7 @@
                         <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div class="h-full rounded-full {baris.status === 'completed' ? 'bg-green-500' : 'bg-[#eb3434]'}" style="width: {persenRiwayat(baris)}%"></div>
                         </div>
+                        <PilTitik warna={statusRiwayat(baris).warna}>{statusRiwayat(baris).label}</PilTitik>
                       </div>
                     </td>
                     <td class="py-3 text-gray-900">{baris.kerdus}</td>
@@ -1785,10 +1972,13 @@
 
           <!-- Mobile: kartu -->
           <div class="md:hidden grid grid-cols-1 gap-3">
-            {#each riwayatPacking as baris (baris.id)}
+            {#each riwayatTampil as baris (baris.id)}
               <div class="border border-gray-200 rounded-xl p-3">
                 <div class="min-w-0 mb-2">
-                  <p class="font-semibold text-gray-900">{baris.tanggal}</p>
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="font-semibold text-gray-900">{baris.tanggal}</p>
+                    <PilTitik warna={statusRiwayat(baris).warna}>{statusRiwayat(baris).label}</PilTitik>
+                  </div>
                   <p class="text-xs text-gray-500">
                     {#if riwayatSemuaStaf}{baris.petugas ?? '-'} · {baris.gudang ?? 'Belum ditentukan'} · {/if}{baris.jenis ?? 'Semua jenis'}
                   </p>

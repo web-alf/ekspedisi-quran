@@ -17,7 +17,8 @@ const markup = sumber.slice(sumber.indexOf('<AdminLayout>'));
 
 describe('Seksi Riwayat Packing', () => {
     it('berada setelah blok tugas sehingga tampil dengan atau tanpa tugas hari ini', () => {
-        const awalBlokTugas = markup.indexOf('{#if noTaskMessage}');
+        // Blok tugas dibuka cabang pantauan pemantau (06/11/2026), lalu kartu tanpa tugas.
+        const awalBlokTugas = markup.indexOf('{#if noTaskMessage && pantauan}');
         const seksi = markup.indexOf('judul="Riwayat Packing"');
 
         expect(awalBlokTugas).toBeGreaterThan(-1);
@@ -39,6 +40,14 @@ describe('Seksi Riwayat Packing', () => {
         expect(seksi).not.toContain('>Status</th>');
         expect(seksi).not.toMatch(/Kedaluwarsa|Kadaluarsa/);
         expect(sumber).not.toContain('STATUS_RIWAYAT');
+    });
+
+    it('tautan Lihat semua juga tampil untuk pemantau dan riwayat mengikuti tab gudang (06/11/2026)', () => {
+        const seksi = markup.slice(markup.indexOf('judul="Riwayat Packing"'));
+
+        expect(seksi).toContain('{#if riwayatPacking.length > 0}');
+        expect(seksi).not.toContain('!riwayatSemuaStaf && riwayatPacking.length > 0');
+        expect(seksi).toContain('{#each riwayatTampil as baris (baris.id)}');
     });
 
     it('partial reload setelah mencatat kerdus ikut memuat pesan tugas selesai', () => {

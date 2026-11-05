@@ -6,11 +6,14 @@ use App\Enums\RoleEnum;
 use App\Models\DailyPackingTask;
 use App\Models\Gudang;
 use App\Models\PackingBox;
+use App\Models\PackingScanLog;
 use App\Models\Pengiriman;
 use App\Models\StokMushaf;
 use App\Models\TransferMushaf;
 use App\Models\TransferStok;
 use App\Models\User;
+use App\Services\Cache\StatusPengirimanCache;
+use App\Support\CakupanGudang;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -262,6 +265,99 @@ class RingkasanGudangService
         }
 
         return null;
+    }
+
+    /**
+     * Pantauan packing HARI INI di halaman Proses Packing, untuk pemantau yang tidak sedang
+     * memegang tugas (06/11/2026). Dulu Manager Gudang yang membuka halaman ini hanya melihat
+     * "Tidak ada tugas packing — hubungi supervisor" plus riwayat.
+     *
+     * Cakupan: SPV hanya gudangnya (SPV belum ditempatkan: tanpa gudang); Manager Gudang dan
+     * super-admin semua gudang aktif.
+     *
+     * @return array{
+     *     gudang: array<int, array{id: int, kode: string, nama: string, target: int, selesai: int, persen: int, jumlah_staf: int, staf_belum_mulai: int, kerdus_tersegel: int, siap_dikemas: int, per_staf: array<int, array<string, mixed>>}>,
+     *     siap_tanpa_gudang: int,
+     *     scan_gagal: array<int, array{id: int, no_resi: string|null, pesan: string|null, oleh: string|null, gudang_id: int|null, waktu: string}>,
+     *     diperbarui: string,
+     * }
+     */
+    public function pantauanPacking(User $user): array
+    {
+        $dibatasi = CakupanGudang::berlaku($user);
+
+        $gudangList = Gudang::query()
+            ->where('is_active', true)
+            ->when($dibatasi, fn ($q) => $q->whereKey($user->gudang_id ?? 0))
+            ->orderBy('id')
+            ->get(['id', 'kode', 'nama']);
+
+        $siap = $this->siapDikemasPerGudang();
+
+        $gudang = $gudangList->map(function (Gudang $g) use ($siap) {
+            $packing = $this->packingHariIni($g->id);
+
+            return [
+                'id' => $g->id,
+                'kode' => $g->kode,
+                'nama' => $g->nama,
+                'target' => $packing['target'],
+                'selesai' => $packing['selesai'],
+                'persen' => $packing['target'] > 0 ? (int) round($packing['selesai'] / $packing['target'] * 100) : 0,
+                'jumlah_staf' => $packing['jumlah_staf'],
+                'staf_belum_mulai' => $packing['staf_belum_mulai'],
+                'kerdus_tersegel' => $packing['kerdus_tersegel'],
+                'siap_dikemas' => $siap[$g->id] ?? 0,
+                'per_staf' => $packing['per_staf'],
+            ];
+        })->values()->all();
+
+        $scanGagal = PackingScanLog::query()
+            ->with(['user:id,name,gudang_id', 'dailyPackingTask:id,gudang_id'])
+            ->whereDate('created_at', today())
+            ->when($dibatasi, fn ($q) => $q->whereHas('user', fn ($petugas) => CakupanGudang::terapkan($petugas, $user)))
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(fn (PackingScanLog $log) => [
+                'id' => $log->id,
+                'no_resi' => $log->no_resi ?: $log->qr_data,
+                'pesan' => $log->message,
+                'oleh' => $log->user?->name,
+                'gudang_id' => $log->dailyPackingTask?->gudang_id ?? $log->user?->gudang_id,
+                'waktu' => $log->created_at->format('H:i'),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'gudang' => $gudang,
+            // Resi siap dikemas yang belum bergudang bisa diambil gudang mana pun (termasuk SPV).
+            'siap_tanpa_gudang' => $siap[0] ?? 0,
+            'scan_gagal' => $scanGagal,
+            'diperbarui' => now()->format('H:i'),
+        ];
+    }
+
+    /**
+     * Resi siap dikemas per gudang — syarat sama dengan PackingAssignmentService::siapDikemas:
+     * status packing, belum di kerdus, belum dipegang tugas mana pun. Kunci 0 = belum bergudang.
+     *
+     * @return array<int, int>
+     */
+    private function siapDikemasPerGudang(): array
+    {
+        return Pengiriman::query()
+            ->where('status_id', StatusPengirimanCache::getIdBySlug('packing'))
+            ->whereDoesntHave('packingItem')
+            ->whereNotExists(fn ($sub) => $sub->selectRaw('1')
+                ->from('daily_packing_task_items')
+                ->whereColumn('daily_packing_task_items.pengiriman_id', 'pengiriman.id'))
+            ->selectRaw('coalesce(gudang_id, 0) as gudang, count(*) as resi')
+            ->groupBy('gudang')
+            ->pluck('resi', 'gudang')
+            ->map(fn ($resi) => (int) $resi)
+            ->all();
     }
 
     /**

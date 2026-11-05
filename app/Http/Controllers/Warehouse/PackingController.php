@@ -16,6 +16,7 @@ use App\Models\SharedBoxAssignment;
 use App\Models\User;
 use App\Services\ConcurrencyMonitorService;
 use App\Services\PackingAssignmentService;
+use App\Services\RingkasanGudangService;
 use App\Support\CakupanGudang;
 use App\Support\PerPage;
 use Illuminate\Database\QueryException;
@@ -95,6 +96,12 @@ class PackingController extends Controller
                     : 'Tidak ada tugas packing untuk hari ini. Silakan hubungi supervisor untuk mendapatkan tugas.',
                 'tugasSelesai' => (bool) $todayTask,
                 'spvGudang' => $user->namaSpvGudang(),
+                // Pemantau (SPV, Manager Gudang, super-admin) tanpa tugas melihat pantauan
+                // packing hari ini, bukan sekadar "tidak ada tugas" (06/11/2026). Closure:
+                // dimuat ulang berkala lewat partial reload.
+                'pantauan' => $this->lihatRiwayatSemuaStaf($user)
+                    ? fn () => app(RingkasanGudangService::class)->pantauanPacking($user)
+                    : null,
                 ...$riwayat,
             ]);
         }
@@ -982,18 +989,30 @@ class PackingController extends Controller
             'ip_address' => request()->ip(),
         ]);
 
-        // OPTIMIZED: History with column selection and relationship counts
-        $history = DailyPackingTask::where('user_id', $user->id)
+        // Pemantau melihat tugas semua petugas dalam cakupannya — cakupan yang sama dengan
+        // seksi Riwayat Packing di halaman Proses Packing (06/11/2026). Dulu tautan "Lihat
+        // semua" disembunyikan dari pemantau karena halaman ini hanya berisi tugas sendiri.
+        $semuaStaf = $this->lihatRiwayatSemuaStaf($user);
+
+        $query = DailyPackingTask::query()
             ->with(['packingBoxes' => function ($query) {
                 $query->select('id', 'daily_packing_task_id', 'kode_kerdus', 'status', 'jumlah_terisi', 'kapasitas', 'sealed_at')
                     ->withCount('packingItems');
             }])
-            ->select('id', 'user_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'started_at', 'completed_at')
+            ->select('id', 'user_id', 'gudang_id', 'tanggal_tugas', 'total_target', 'total_selesai', 'status', 'started_at', 'completed_at')
             ->orderBy('tanggal_tugas', 'desc')
-            ->paginate(PerPage::resolve(request()));
+            ->orderByDesc('id');
+
+        if ($semuaStaf) {
+            $query->with(['user:id,name', 'gudang:id,nama']);
+            CakupanGudang::terapkan($query, $user);
+        } else {
+            $query->where('user_id', $user->id);
+        }
 
         return Inertia::render('Warehouse/PackingHistory', [
-            'history' => $history,
+            'history' => $query->paginate(PerPage::resolve(request())),
+            'semuaStaf' => $semuaStaf,
         ]);
     }
 
@@ -1028,6 +1047,7 @@ class PackingController extends Controller
             'tanggal' => $tugas->tanggal_tugas->locale('id')->translatedFormat('D, d M Y'),
             'hari_ini' => $tugas->tanggal_tugas->isToday(),
             'petugas' => $tugas->user?->name,
+            'gudang_id' => $tugas->gudang_id,
             'gudang' => $tugas->gudang?->nama,
             'jenis' => $tugas->labelJenis(),
             'target' => $tugas->total_target,

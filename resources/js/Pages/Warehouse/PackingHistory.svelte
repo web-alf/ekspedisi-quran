@@ -9,14 +9,16 @@
    *   history — paginator DailyPackingTask milik user ini, tiap baris membawa
    *             relasi `packing_boxes` (kolom terpilih) + `packing_items_count`.
    *
-   * Hanya menampilkan tugas milik sendiri (Gate viewOwnHistory), jadi tidak ada
-   * filter user di sini.
+   * Freelancer melihat tugasnya sendiri. Pemantau (SPV, Manager Gudang, super-admin)
+   * melihat tugas semua petugas dalam cakupannya (`semuaStaf`, 06/11/2026), dan tiap baris
+   * membawa relasi `user` + `gudang`.
    */
   import AdminLayout from '../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../Components/UI/HeroIcon.svelte';
   import Pagination from '../../Components/Pagination.svelte';
 
   export let history = { data: [], current_page: 1, last_page: 1, total: 0 };
+  export let semuaStaf = false;
   export let perPage = 20;
   export let perPageOptions = [10, 20, 50, 100, 200];
 
@@ -76,7 +78,9 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Riwayat Packing</h1>
-            <p class="text-gray-600 mt-1">Tugas packing harian Anda beserta kerdus yang dipakai</p>
+            <p class="text-gray-600 mt-1">
+              {semuaStaf ? 'Tugas packing harian semua petugas beserta kerdus yang dipakai' : 'Tugas packing harian Anda beserta kerdus yang dipakai'}
+            </p>
           </div>
           <div class="flex items-center gap-3">
             <a
@@ -126,6 +130,13 @@
                         {statusLabel[tugas.status] || tugas.status}
                       </span>
                     </div>
+
+                    {#if semuaStaf}
+                      <p class="mt-1 text-sm text-gray-700">
+                        <span class="font-medium text-gray-900">{tugas.user?.name ?? '-'}</span>
+                        · {tugas.gudang?.nama ?? 'Gudang belum ditentukan'}
+                      </p>
+                    {/if}
 
                     <div class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
                       <span>
@@ -201,7 +212,7 @@
             </div>
             <p class="text-gray-600 font-medium">Belum ada riwayat packing</p>
             <p class="text-sm text-gray-500 mt-1">
-              Tugas packing harian Anda akan tercatat di sini setelah dimulai
+              {semuaStaf ? 'Tugas packing harian petugas akan tercatat di sini setelah dimulai' : 'Tugas packing harian Anda akan tercatat di sini setelah dimulai'}
             </p>
           </div>
         {/if}
