@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Support\BerandaPeran;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 
 uses(RefreshDatabase::class);
 
@@ -103,6 +104,37 @@ it('peran non-gudang tetap melihat dashboard umum', function () {
     $user = buatUserBeranda('super-admin');
 
     $this->actingAs($user)->get('/admin/dashboard')->assertOk();
+});
+
+it('login kurir mendarat di beranda kurir', function () {
+    $user = buatUserBeranda('courier');
+    $user->givePermissionTo(Permission::findOrCreate('muatan.read', 'web'));
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect('/admin/kurir');
+});
+
+it('login kurir dengan url.intended dashboard umum tetap mendarat di beranda kurir', function () {
+    $user = buatUserBeranda('courier');
+    $user->givePermissionTo(Permission::findOrCreate('muatan.read', 'web'));
+    $this->session(['url.intended' => '/admin/dashboard']);
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect('/admin/kurir');
+});
+
+it('kurir tanpa izin muatan.read tetap ke /dashboard supaya tidak mendarat di 403', function () {
+    $user = buatUserBeranda('courier');
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect('/dashboard');
+});
+
+it('kurir yang sudah login membuka /login dialihkan ke beranda kurir', function () {
+    $user = buatUserBeranda('courier');
+    $user->givePermissionTo(Permission::findOrCreate('muatan.read', 'web'));
+
+    $this->actingAs($user)->get('/login')->assertRedirect('/admin/kurir');
 });
 
 it('mengenali URL dashboard umum dengan tepat', function (string $url, bool $hasil) {

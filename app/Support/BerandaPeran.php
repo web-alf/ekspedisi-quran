@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -12,7 +13,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * Peran gudang — manager-repacking (PJ), spv-gudang, dan warehouse (freelancer) —
  * bekerja di dashboard gudang (/admin/warehouse); itu satu-satunya dashboard yang
  * ada di menu sidebar mereka (keputusan pemilik sistem, lihat AdminLayout.svelte).
- * Peran lain beranda di dashboard umum (/admin/dashboard).
+ * Kurir beranda di halaman "Hari Ini & Rute" (/admin/kurir): muatan yang sedang
+ * dibawa dan tujuan berikutnya. Peran lain beranda di dashboard umum (/admin/dashboard).
  *
  * Kelas ini satu-satunya sumber kebenaran untuk beranda, dipakai oleh tombol login,
  * middleware guest, dan redirect /dashboard — supaya jalur-jalur itu tidak saling
@@ -24,9 +26,33 @@ class BerandaPeran
     /** URL beranda pengguna setelah login (atau saat membuka halaman guest). */
     public static function url(User $user): string
     {
-        return self::adalahPeranGudang($user)
-            ? route('admin.warehouse.dashboard')
-            : '/admin/dashboard';
+        if (self::adalahPeranGudang($user)) {
+            return route('admin.warehouse.dashboard');
+        }
+
+        if (self::adalahKurir($user)) {
+            return route('admin.kurir.dashboard');
+        }
+
+        return '/admin/dashboard';
+    }
+
+    /** Apakah pengguna punya beranda sendiri, bukan dashboard umum. */
+    public static function punyaBerandaKhusus(User $user): bool
+    {
+        return self::adalahPeranGudang($user) || self::adalahKurir($user);
+    }
+
+    /**
+     * Apakah pengguna kurir yang boleh membuka beranda kurir.
+     *
+     * Izin muatan.read ikut diperiksa: rute /admin/kurir menuntutnya, dan kurir tanpa
+     * izin itu akan mendarat di 403 tepat setelah login.
+     */
+    public static function adalahKurir(User $user): bool
+    {
+        return $user->hasRole(RoleEnum::COURIER->value)
+            && $user->can(PermissionEnum::MUATAN_READ->value);
     }
 
     /**

@@ -1,5 +1,5 @@
 <script>
-  import { router, page } from '@inertiajs/svelte';
+  import { router, page, inertia } from '@inertiajs/svelte';
   import { onMount, tick } from 'svelte';
   import { slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -31,6 +31,18 @@
   $: peranNama = (currentUser.roles || []).map((r) => (typeof r === 'string' ? r : r?.name));
   $: isPeranGudang = peranNama.some((r) => ['warehouse', 'manager-repacking', 'spv-gudang'].includes(r));
   $: primaryRoleDisplay = currentUser.role_display || userRolesDisplay[0] || 'User';
+
+  // Kurir di HP mendapat navigasi bawah (Hari Ini, Rute, Pindai, Riwayat) yang
+  // terjangkau ibu jari. Di laptop (lg ke atas) tetap sidebar seperti peran lain.
+  $: isPeranKurir = peranNama.includes('courier');
+  $: jalurSaatIni = String(typeof $page.url === 'string' ? $page.url : $page.url?.pathname || '').split(/[?#]/)[0];
+  $: navKurir = [
+    { label: 'Hari Ini', href: '/admin/kurir', icon: 'home', aktif: jalurSaatIni === '/admin/kurir' },
+    // Rute ada di halaman yang sama dengan Hari Ini; tautan hash cukup menggulir ke sana.
+    { label: 'Rute', href: '/admin/kurir#rute', icon: 'map', aktif: false, hash: true },
+    { label: 'Pindai', href: '/admin/kurir/pindai', icon: 'qr-code', aktif: jalurSaatIni.startsWith('/admin/kurir/pindai'), utama: true },
+    { label: 'Riwayat', href: '/admin/muatan', icon: 'clock', aktif: jalurSaatIni.startsWith('/admin/muatan') || jalurSaatIni.startsWith('/admin/kurir/muatan') },
+  ];
   
   // Get settings for logo
   $: settings = $page.props.settings || {};
@@ -221,6 +233,11 @@
         // izinnya sendiri, jadi kurir (yang punya keduanya) sudah tercakup.
         requiredPermissions: ['muatan.scan'],
         children: [
+          {
+            label: 'Hari Ini & Rute',
+            route: '/admin/kurir',
+            requiredPermissions: ['muatan.read']
+          },
           {
             label: 'Scan Barang',
             route: '/admin/kurir/pindai',
@@ -613,6 +630,7 @@
       // hal yang sama.
       'Muatan & Distribusi': 'truck',
       'Tugas Kurir': 'id-card',
+      'Hari Ini & Rute': 'map',
       'Scan Barang': 'qr-code',
       'Permintaan Disetujui': 'badge-check',
       'Manajemen Gudang': 'building-office-2',
@@ -878,13 +896,49 @@
     </div>
 
     <!-- Main content area -->
-    <main class="flex-1 bg-gray-50">
+    <main class="flex-1 bg-gray-50 {isPeranKurir ? 'pb-20 lg:pb-0' : ''}">
       <div class="px-6 py-8">
         <slot />
       </div>
     </main>
   </div>
 </div>
+
+{#if isPeranKurir}
+  <nav
+    class="lg:hidden fixed inset-x-0 bottom-0 z-[9980] bg-white border-t border-gray-200 grid grid-cols-4 px-1 pt-1.5"
+    style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom));"
+    aria-label="Menu kurir"
+  >
+    {#each navKurir as item (item.label)}
+      {#if item.hash}
+        <a
+          href={item.href}
+          class="flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold text-gray-500"
+        >
+          <HeroIcon name={item.icon} class="w-6 h-6" />
+          {item.label}
+        </a>
+      {:else}
+        <a
+          href={item.href}
+          use:inertia
+          aria-current={item.aktif ? 'page' : undefined}
+          class="flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold {item.aktif ? 'text-[#eb3434]' : 'text-gray-500'}"
+        >
+          {#if item.utama}
+            <span class="-mt-6 w-12 h-12 rounded-full bg-[#eb3434] text-white flex items-center justify-center border-4 border-white shadow-md">
+              <HeroIcon name={item.icon} class="w-6 h-6" />
+            </span>
+          {:else}
+            <HeroIcon name={item.icon} class="w-6 h-6" />
+          {/if}
+          {item.label}
+        </a>
+      {/if}
+    {/each}
+  </nav>
+{/if}
 
 <!-- Flash Message Handler (Global) -->
 <FlashMessage />

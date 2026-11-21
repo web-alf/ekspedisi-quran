@@ -17,6 +17,7 @@
    * penerima baru). Keduanya tidak memakai muatan tujuan — resinya harus sudah
    * ada di muatan kurir ini.
    */
+  import { page } from '@inertiajs/svelte';
   import AdminLayout from '../../../Layouts/AdminLayout.svelte';
   import HeroIcon from '../../../Components/UI/HeroIcon.svelte';
   import LazyQRScanner from '../../../Components/LazyQRScanner.svelte';
@@ -28,7 +29,11 @@
   export let muatanLain = [];
 
   let muatanTerpilih = muatanHariIni.length > 0 ? muatanHariIni[0].id : '';
-  let mode = 'pcs'; // 'pcs' | 'box' | 'status' | 'tujuan' | 'tengah_jalan'
+  // Mode awal boleh datang dari ?mode= (mis. tombol "Serah terima" di beranda kurir
+  // membuka langsung mode 'tujuan'). Nilai di luar daftar diabaikan.
+  const MODE_SAH = ['pcs', 'box', 'status', 'tujuan', 'tengah_jalan'];
+  const modeDariUrl = new URL($page.url, window.location.origin).searchParams.get('mode');
+  let mode = MODE_SAH.includes(modeDariUrl) ? modeDariUrl : 'pcs'; // 'pcs' | 'box' | 'status' | 'tujuan' | 'tengah_jalan'
   let panelSerahTerima;
   $: modeSerahTerima = mode === 'tujuan' || mode === 'tengah_jalan';
   let memindai = false; // mengunci agar satu QR tidak terkirim berkali-kali

@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DonaturController;
 use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\GalleryController;
+use App\Http\Controllers\Admin\KurirBerandaController;
 use App\Http\Controllers\Admin\KurirPermintaanController;
 // use App\Http\Controllers\Admin\SettingController; // Removed - All settings now under Landing Content
 use App\Http\Controllers\Admin\KurirScanController;
@@ -1224,9 +1225,8 @@ Route::middleware(['auth'])->group(function () {
         // Grup ini berada DI DALAM grup `admin` supaya rutenya menjadi admin/kurir/*
         // dan nama rutenya admin.kurir.* — seragam dengan menu lain di sidebar.
         Route::middleware('permission:muatan.read')->prefix('kurir')->name('kurir.')->group(function () {
-            Route::get('/', function () {
-                return redirect()->route('admin.kurir.muatan');
-            })->name('dashboard');
+            // Beranda kurir: muatan yang sedang dibawa dan tujuan berikutnya
+            Route::get('/', [KurirBerandaController::class, 'index'])->name('dashboard');
 
             // Muatan yang dibawa kurir ini
             Route::get('/muatan', [MuatanController::class, 'index'])

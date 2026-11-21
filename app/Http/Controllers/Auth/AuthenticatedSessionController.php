@@ -94,7 +94,8 @@ class AuthenticatedSessionController extends Controller
      * warehouse/freelancer) diterahkan langsung ke dashboard gudang
      * (/admin/warehouse/dashboard) — rute /dashboard tidak ada untuk mereka dan
      * membuat login SPV tiba-tiba berakhir di 404 padahal kredensialnya benar.
-     * Peran lain tetap ke /dashboard (kontennya render sesuai peran di sana).
+     * Kurir mendarat di beranda kurir (/admin/kurir) dengan aturan url.intended yang
+     * sama. Peran lain tetap ke /dashboard (kontennya render sesuai peran di sana).
      *
      * (25/10/2026) url.intended yang menunjuk dashboard umum kini DIBUANG untuk
      * peran gudang. Biasanya itu artefak bookmark/riwayat browser lama, dan
@@ -104,16 +105,16 @@ class AuthenticatedSessionController extends Controller
      */
     private function redirectBasedOnRole(User $user, Request $request): RedirectResponse
     {
-        if (BerandaPeran::adalahPeranGudang($user)) {
+        if (BerandaPeran::punyaBerandaKhusus($user)) {
             $intended = $request->session()->get('url.intended');
 
             if ($intended !== null && ! BerandaPeran::adalahUrlDashboardUmum($intended)) {
-                return redirect()->intended(route('admin.warehouse.dashboard'));
+                return redirect()->intended(BerandaPeran::url($user));
             }
 
             $request->session()->forget('url.intended');
 
-            return redirect(route('admin.warehouse.dashboard'));
+            return redirect(BerandaPeran::url($user));
         }
 
         return redirect()->intended('/dashboard');
