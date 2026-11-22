@@ -240,9 +240,9 @@ class RolePermissionSeeder extends Seeder
             // nama semua donatur serta alamat & WhatsApp pengurus lembaga — dan izin
             // process membuat resi dari permintaan. Tidak ada alur packing yang
             // membutuhkan keduanya.
-            PermissionEnum::CERTIFICATES_GENERATE->value,
-            PermissionEnum::CERTIFICATES_READ->value,
-            PermissionEnum::CERTIFICATES_DOWNLOAD->value,
+            // CERTIFICATES_* sengaja DICABUT (21/11/2026): sertifikat dibuat CS dan otomatis,
+            // bukan pekerjaan freelancer — lewat URL izinnya membuka daftar nama donatur dan
+            // token tautan publik sertifikat.
             // Warehouse specific permissions
             PermissionEnum::WAREHOUSE_DASHBOARD->value,
             PermissionEnum::WAREHOUSE_PACKING_VIEW->value,

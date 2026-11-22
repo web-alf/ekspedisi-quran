@@ -952,7 +952,10 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // 📦 Box Bulk Update Operations (Phase 2)
-        Route::prefix('box-bulk')->name('box-bulk.')->middleware('permission:shipments.update')->group(function () {
+        // Izin massal, bukan `shipments.update` (21/11/2026): rute ini menulis status apa pun ke
+        // semua resi kerdus tanpa cakupan gudang dan batas tahap, padahal `shipments.update`
+        // dipegang freelancer untuk mengedit alamat resi.
+        Route::prefix('box-bulk')->name('box-bulk.')->middleware('permission:shipments.bulk-update')->group(function () {
             Route::post('/preview', [BoxBulkUpdateController::class, 'preview'])->name('preview');
             Route::post('/update-status', [BoxBulkUpdateController::class, 'bulkUpdateStatus'])->name('update-status');
             Route::post('/update-address', [BoxBulkUpdateController::class, 'bulkUpdateAddress'])->name('update-address');

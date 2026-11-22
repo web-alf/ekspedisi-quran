@@ -125,28 +125,31 @@ class BoxTrackingController extends Controller
 
         // Get filter options
         $jenisQuranList = JenisQuran::orderBy('nama_jenis')->get(['id', 'nama_jenis']);
-        $warehouseUsers = User::permission('warehouse.dashboard')
+        $warehouseUsers = CakupanGudang::terapkan(User::permission('warehouse.dashboard'), $request->user())
             ->where('is_active', true)
             ->get(['id', 'name']);
 
-        // Stats
+        // Statistik mengikuti cakupan gudang yang sama dengan daftar (07/11/2026): dulu
+        // dihitung dari semua kerdus, sehingga kartu angka memuat kerdus gudang lain.
+        $kerdusTercakup = fn () => CakupanGudang::terapkan(PackingBox::query(), $request->user());
+
         $stats = [
-            'total_boxes' => PackingBox::count(),
-            'empty_boxes' => PackingBox::where('status', 'empty')->count(),
-            'filling_boxes' => PackingBox::where('status', 'filling')->count(),
-            'full_boxes' => PackingBox::where('status', 'full')->count(),
-            'sealed_boxes' => PackingBox::where('status', 'sealed')->count(),
-            'total_items_packed' => PackingBox::sum('jumlah_terisi'),
+            'total_boxes' => $kerdusTercakup()->count(),
+            'empty_boxes' => $kerdusTercakup()->where('status', 'empty')->count(),
+            'filling_boxes' => $kerdusTercakup()->where('status', 'filling')->count(),
+            'full_boxes' => $kerdusTercakup()->where('status', 'full')->count(),
+            'sealed_boxes' => $kerdusTercakup()->where('status', 'sealed')->count(),
+            'total_items_packed' => $kerdusTercakup()->sum('jumlah_terisi'),
             // Ringkasan "selesai packing" dalam satuan: halaman ini dipakai gudang
             // untuk menghitung isi gudang, dan mereka menghitung dalam doz.
-            'sealed_pcs' => (int) PackingBox::where('status', PackingBox::STATUS_SEALED)->sum('jumlah_terisi'),
+            'sealed_pcs' => (int) $kerdusTercakup()->where('status', PackingBox::STATUS_SEALED)->sum('jumlah_terisi'),
         ];
 
         // Ringkasan "selesai packing" tidak bisa diringkas jadi satu angka doz:
         // isi 1 doz berbeda per jenis (A5=20, A6=40, IQRO=160), jadi 100 keping
         // A5 dan 100 keping A6 sama-sama "100 pcs" tapi jumlah doz-nya 5 vs 2,5.
         // Karena itu dirinci per jenis — itulah bentuk yang bisa dipakai gudang.
-        $stats['sealed_per_jenis'] = PackingBox::where('status', PackingBox::STATUS_SEALED)
+        $stats['sealed_per_jenis'] = $kerdusTercakup()->where('status', PackingBox::STATUS_SEALED)
             ->selectRaw('jenis_quran_id, kapasitas, COUNT(*) as jumlah_kerdus, SUM(jumlah_terisi) as total_pcs')
             ->groupBy('jenis_quran_id', 'kapasitas')
             ->with('jenisQuran:id,nama_jenis,kode_jenis')
@@ -224,8 +227,11 @@ class BoxTrackingController extends Controller
     /**
      * Show detailed box content
      */
-    public function show(PackingBox $box)
+    public function show(Request $request, PackingBox $box)
     {
+        // Kerdus gudang lain tidak bisa dibuka lewat URL langsung (07/11/2026).
+        abort_unless(CakupanGudang::bolehSentuh($request->user(), $box->gudang_id), 403, CakupanGudang::pesanTolakKerdus());
+
         $box->load([
             'dailyPackingTask.user',
             'jenisQuran',
@@ -283,7 +289,9 @@ class BoxTrackingController extends Controller
             'kode_kerdus' => 'required|string',
         ]);
 
-        $box = PackingBox::where('kode_kerdus', $request->kode_kerdus)->first();
+        $box = CakupanGudang::terapkan(PackingBox::query(), $request->user())
+            ->where('kode_kerdus', $request->kode_kerdus)
+            ->first();
 
         if (! $box) {
             return response()->json([
@@ -311,19 +319,21 @@ class BoxTrackingController extends Controller
         $startDate = Carbon::now()->subDays($period);
 
         // Daily box creation stats
-        $dailyStats = PackingBox::selectRaw('DATE(created_at) as date, COUNT(*) as count')
+        $kerdusTercakup = fn () => CakupanGudang::terapkan(PackingBox::query(), $request->user());
+
+        $dailyStats = $kerdusTercakup()->selectRaw('DATE(created_at) as date, COUNT(*) as count')
             ->where('created_at', '>=', $startDate)
             ->groupBy('date')
             ->orderBy('date')
             ->get();
 
         // Box status distribution
-        $statusStats = PackingBox::selectRaw('status, COUNT(*) as count')
+        $statusStats = $kerdusTercakup()->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get();
 
         // Jenis Quran distribution
-        $jenisStats = PackingBox::with('jenisQuran')
+        $jenisStats = $kerdusTercakup()->with('jenisQuran')
             ->whereNotNull('jenis_quran_id')
             ->get()
             ->groupBy('jenis_quran_id')

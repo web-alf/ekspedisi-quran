@@ -2,6 +2,7 @@
 
 use App\Enums\PermissionEnum;
 use App\Enums\RoleEnum;
+use App\Models\Gudang;
 use App\Models\Pengiriman;
 use App\Models\StatusPengiriman;
 use App\Models\User;
@@ -83,9 +84,13 @@ beforeEach(function () {
     );
 });
 
+/**
+ * Freelancer ditempatkan di Semarang, dan resinya juga: sejak 07/11/2026 freelancer ikut
+ * cakupan gudang, sehingga freelancer tanpa gudang tidak bisa menyentuh resi berlabel.
+ */
 function gudangUser(): User
 {
-    $user = User::factory()->create(['is_active' => true]);
+    $user = User::factory()->create(['is_active' => true, 'gudang_id' => Gudang::byKode('SMG')->id]);
     $user->assignRole(RoleEnum::WAREHOUSE->value);
 
     return $user->fresh();
@@ -96,6 +101,7 @@ function resiStatus(string $slug): Pengiriman
     return Pengiriman::factory()->create([
         'no_resi' => 'EQ-2026-'.str_pad((string) random_int(1, 99999), 5, '0', STR_PAD_LEFT),
         'status_id' => StatusPengiriman::where('slug', $slug)->value('id'),
+        'gudang_id' => Gudang::byKode('SMG')->id,
     ]);
 }
 

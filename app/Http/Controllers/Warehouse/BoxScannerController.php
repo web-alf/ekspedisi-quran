@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Warehouse;
 
+use App\Enums\PermissionEnum;
 use App\Http\Controllers\Controller;
 use App\Jobs\Warehouse\BulkBoxProcessingJob;
 use App\Jobs\Warehouse\BulkStatusUpdateJob;
@@ -14,6 +15,7 @@ use App\Models\StatusHistory;
 use App\Models\StatusPengiriman;
 use App\Services\Cache\StatusPengirimanCache;
 use App\Support\CakupanGudang;
+use App\Support\PengirimanStageVisibility;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -35,7 +37,10 @@ class BoxScannerController extends Controller
         // Additional authorization check
         Gate::authorize('viewScanner', auth()->user());
 
-        $statusList = StatusPengiriman::orderBy('urutan')->get();
+        // Pilihan status mengikuti predikat penegakan yang sama dengan updateStatus().
+        $statusList = StatusPengiriman::orderBy('urutan')->get()
+            ->filter(fn (StatusPengiriman $status) => PengirimanStageVisibility::bolehPilihStatus(auth()->user(), $status))
+            ->values();
         $stats = $this->getBoxScannerStats();
         $activeJobs = JobProgress::getActiveJobsForUser(auth()->id());
         $recentJobs = JobProgress::getRecentJobsForUser(auth()->id(), 5);
@@ -201,6 +206,10 @@ class BoxScannerController extends Controller
                 'extensions:jpg,jpeg,png,pdf',
             ],
         ]);
+
+        if ($tolak = $this->tolakStatusDiluarWewenang((int) $request->new_status_id)) {
+            return $tolak;
+        }
 
         // Check file upload authorization
         if ($request->hasFile('documentation')) {
@@ -433,6 +442,10 @@ class BoxScannerController extends Controller
             ],
         ]);
 
+        if ($tolak = $this->tolakStatusDiluarWewenang((int) $request->new_status_id)) {
+            return $tolak;
+        }
+
         $diluarCakupan = $this->kerdusDiluarCakupan(PackingBox::whereIn('id', $request->box_ids));
         if ($diluarCakupan !== []) {
             return $this->tolakKerdusDiluarCakupan($diluarCakupan);
@@ -627,6 +640,10 @@ class BoxScannerController extends Controller
             'mushaf_request_id' => 'required|integer|exists:mushaf_requests,id',
         ]);
 
+        // Menautkan permintaan ke kerdus sekaligus menandainya diproses — wewenang yang sama
+        // dengan "Proses ke Pengiriman", yang dicabut dari freelancer 04/11/2026.
+        abort_unless(auth()->user()->can(PermissionEnum::MUSHAF_REQUESTS_PROCESS->value), 403);
+
         $box = PackingBox::findOrFail($request->box_id);
 
         // Authorization check for this specific box
@@ -740,10 +757,11 @@ class BoxScannerController extends Controller
             return $item->pengiriman->kota_kabupaten ?? 'Unknown';
         })->map->count();
 
-        // Get all approved mushaf requests (not just from current box items)
-        $mushafRequests = MushafRequest::where('status', 'approved')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // Get all approved mushaf requests (not just from current box items). Berisi WhatsApp
+        // pengurus lembaga dan hanya berguna untuk setMushafRequestAddress(), jadi ikut izinnya.
+        $mushafRequests = auth()->user()->can(PermissionEnum::MUSHAF_REQUESTS_PROCESS->value)
+            ? MushafRequest::where('status', 'approved')->orderBy('created_at', 'desc')->get()
+            : collect();
 
         return [
             'total_items' => $items->count(),
@@ -890,6 +908,27 @@ class BoxScannerController extends Controller
                 .(count($kodeKerdus) > 5 ? ' dan lainnya' : '')
                 .' tercatat di gudang lain. Hanya SPV gudang tersebut yang boleh mengubahnya.',
             'data' => ['kerdus_gudang_lain' => $kodeKerdus],
+        ], 403);
+    }
+
+    /**
+     * Tolak status tujuan di luar wewenang pengguna (21/11/2026).
+     *
+     * Batas yang sama dengan Data Resi (PengirimanStageVisibility::bolehPilihStatus):
+     * freelancer hanya memindah ke tahap gudang. Dulu jalur kerdus tidak memeriksanya,
+     * sehingga seisi kerdus bisa dipindah ke "Diterima" atau "Batal".
+     */
+    private function tolakStatusDiluarWewenang(int $statusId): ?JsonResponse
+    {
+        $status = StatusPengiriman::find($statusId);
+
+        if ($status === null || PengirimanStageVisibility::bolehPilihStatus(auth()->user(), $status)) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => PengirimanStageVisibility::alasanTidakBolehPilih(auth()->user(), $status),
         ], 403);
     }
 }

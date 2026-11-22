@@ -358,11 +358,17 @@ class PengirimanController extends Controller
             403,
             'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
         );
+        abort_unless(CakupanGudang::bolehSentuh(auth()->user(), $pengiriman->gudang_id), 403, CakupanGudang::pesanTolak());
 
         $pengiriman->load(['donatur', 'jenisQuran', 'status', 'creator', 'wakafItem']);
 
-        // OPTIMIZED: Get approved mushaf requests for address selection with column selection
+        // Pilihan alamat dari Permintaan Mushaf memuat nama & WhatsApp pengurus lembaga — hanya
+        // untuk yang boleh membaca permintaan. Freelancer (izinnya dicabut 04/11/2026) tetap
+        // bisa mengedit alamat, tapi mengetiknya sendiri.
+        $bolehLihatPermintaan = auth()->user()->can(PermissionEnum::MUSHAF_REQUESTS_READ->value);
+
         $approvedMushafRequests = MushafRequest::approved()
+            ->unless($bolehLihatPermintaan, fn ($query) => $query->whereRaw('1 = 0'))
             ->where(function ($query) use ($pengiriman) {
                 $query->whereNull('pengiriman_id') // Only those not yet processed
                     ->orWhere('pengiriman_id', $pengiriman->id); // Or the one linked to this pengiriman
@@ -408,6 +414,8 @@ class PengirimanController extends Controller
             'no_hp_penerima' => ['nullable', 'string', 'max:20'],
             'catatan' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        abort_unless(CakupanGudang::bolehSentuh($request->user(), $pengiriman->gudang_id), 403, CakupanGudang::pesanTolak());
 
         try {
             \DB::beginTransaction();
@@ -789,6 +797,7 @@ class PengirimanController extends Controller
             403,
             'Pengiriman ini belum masuk tahap yang dapat Anda kelola.'
         );
+        abort_unless(CakupanGudang::bolehSentuh(auth()->user(), $pengiriman->gudang_id), 403, CakupanGudang::pesanTolak());
 
         $pengiriman->load([
             'donatur', 'wakafItem', 'jenisQuran', 'status', 'creator',
