@@ -51,7 +51,7 @@ describe('Beranda membuka Pindai pada mode yang tepat', () => {
     it('halaman Pindai membaca ?mode= dan hanya menerima mode yang sah', () => {
         expect(scan).toContain("const MODE_SAH = ['pcs', 'box', 'status', 'tujuan', 'tengah_jalan'];");
         expect(scan).toContain("searchParams.get('mode')");
-        expect(scan).toContain("MODE_SAH.includes(modeDariUrl) ? modeDariUrl : 'pcs'");
+        expect(scan).toContain("MODE_SAH.includes(modeDariUrl) ? modeDariUrl : 'box'");
     });
 });
 
@@ -106,6 +106,32 @@ describe('Halaman Pindai kurir tidak sempit di HP', () => {
         const pemindai = baca('Components/LazyQRScanner.svelte');
         expect(pemindai).not.toMatch(/style="width: \{width\}px; height/);
         expect(pemindai.match(/width: \{width\}px; max-width: 100%;/g)).toHaveLength(2);
+    });
+});
+
+describe('Desain Pindai kurir (mengikuti preview 22/11/2026)', () => {
+    it('lima mode dikelompokkan jadi tiga tab dengan sub-pilihan', () => {
+        expect(scan).toContain("{ id: 'muat', label: 'Muat barang', awal: 'box' }");
+        expect(scan).toContain("{ id: 'serah', label: 'Serah terima', awal: 'tujuan' }");
+        expect(scan).toContain("{ id: 'status', label: 'Ubah status', awal: 'status' }");
+        expect(scan).toContain("muat: [{ id: 'box', label: 'Per kerdus' }, { id: 'pcs', label: 'Per mushaf' }]");
+        expect(scan).toContain("serah: [{ id: 'tujuan', label: 'Di tujuan' }, { id: 'tengah_jalan', label: 'Tengah jalan' }]");
+    });
+
+    it('kamera langsung menyala di HP, kolom kode langsung aktif di laptop', () => {
+        expect(scan).toContain('let kameraAktif = !layarLebar();');
+        expect(scan).toContain("window.matchMedia('(min-width: 1024px)').matches");
+        expect(scan).toContain('if (layarLebar()) inputEl?.focus();');
+    });
+
+    it('setiap hasil pindai memberi kilat dan getar', () => {
+        expect(scan).toContain('beriUmpanBalik(data.success);');
+        expect(scan).toContain('beriUmpanBalik(false);');
+        expect(scan).toContain('navigator.vibrate?.(');
+    });
+
+    it('pemilih muatan hanya tampil saat memuat barang', () => {
+        expect(scan).toContain("{#if grup === 'muat'}");
     });
 });
 
