@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
+import { tujuanBelumDikunjungi, pilihDituju, kunciPenyimpananDituju } from '../../resources/js/utils/tujuanKurir.js';
 import { resolve } from 'path';
 
 const bersih = (teks) => teks.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
@@ -51,5 +52,46 @@ describe('Beranda membuka Pindai pada mode yang tepat', () => {
         expect(scan).toContain("const MODE_SAH = ['pcs', 'box', 'status', 'tujuan', 'tengah_jalan'];");
         expect(scan).toContain("searchParams.get('mode')");
         expect(scan).toContain("MODE_SAH.includes(modeDariUrl) ? modeDariUrl : 'pcs'");
+    });
+});
+
+describe('Tujuan yang dituju kurir (urutan bebas)', () => {
+    const tujuan = [
+        { kunci: 'mi|dramaga', status: 'tiba' },
+        { kunci: 'darul|ciomas', status: 'berikutnya' },
+        { kunci: 'tahfidz|ciomas', status: 'menunggu' },
+        { kunci: 'lapas|paledang', status: 'di_jalan' },
+    ];
+
+    it('hanya tujuan berikutnya/menunggu yang masuk kartu geser', () => {
+        expect(tujuanBelumDikunjungi(tujuan).map((t) => t.kunci)).toEqual(['darul|ciomas', 'tahfidz|ciomas']);
+    });
+
+    it('memakai pilihan tersimpan bila tujuannya masih belum dikunjungi', () => {
+        expect(pilihDituju(tujuan, 'tahfidz|ciomas')).toBe('tahfidz|ciomas');
+    });
+
+    it('kembali ke saran server bila pilihan tersimpan sudah tiba, diserahkan di jalan, atau tidak ada', () => {
+        expect(pilihDituju(tujuan, 'mi|dramaga')).toBe('darul|ciomas');
+        expect(pilihDituju(tujuan, 'lapas|paledang')).toBe('darul|ciomas');
+        expect(pilihDituju(tujuan, 'hilang|x')).toBe('darul|ciomas');
+        expect(pilihDituju(tujuan, null)).toBe('darul|ciomas');
+    });
+
+    it('null bila semua tujuan sudah dikunjungi', () => {
+        expect(pilihDituju([{ kunci: 'a', status: 'tiba' }], 'a')).toBeNull();
+        expect(pilihDituju([], null)).toBeNull();
+    });
+
+    it('pilihan diingat per muatan', () => {
+        expect(kunciPenyimpananDituju(148)).toBe('kurir-dituju-148');
+    });
+
+    it('beranda memakai kartu geser dan daftar diserahkan di jalan', () => {
+        expect(beranda).toContain('snap-x snap-mandatory');
+        expect(beranda).toContain('on:scroll={saatGulir}');
+        expect(beranda).toContain('{#each belum as t, n (t.kunci)}');
+        expect(beranda).toContain('{#if diJalan.length > 0}');
+        expect(beranda).toContain("t.status === 'di_jalan'");
     });
 });

@@ -205,7 +205,7 @@ it('kosong bila semua muatan kurir sudah sampai', function () {
 
     $this->actingAs($kurir)
         ->get(route('admin.kurir.dashboard'))
-        ->assertInertia(fn (Assert $page) => $page->where('muatan', null)->has('tujuan', 0));
+        ->assertInertia(fn (Assert $page) => $page->where('muatan', null)->has('tujuan', 0)->has('diJalan', 0));
 });
 
 it('tidak menampilkan muatan milik kurir lain', function () {
@@ -222,4 +222,131 @@ it('menolak pengguna tanpa izin muatan.read', function () {
     $user = User::factory()->create(['is_active' => true]);
 
     $this->actingAs($user)->get(route('admin.kurir.dashboard'))->assertForbidden();
+});
+
+/**
+ * Tiru yang ditulis SerahTerimaKurirService saat mushaf diminta di tengah jalan: resi
+ * dialihkan ke penerima baru, langsung Tiba, dan tujuan asalnya dicatat di serah terima.
+ */
+function berandaSerahkanDiJalan(Muatan $muatan, User $kurir, Pengiriman $p, string $nama, string $alamat, string $pukul = '10.41'): void
+{
+    SerahTerimaKurir::create([
+        'pengiriman_id' => $p->id,
+        'muatan_id' => $muatan->id,
+        'user_id' => $kurir->id,
+        'jenis' => SerahTerimaKurir::JENIS_TENGAH_JALAN,
+        'nama_penerima' => $nama,
+        'no_hp_penerima' => '085722110934',
+        'alamat_penerima' => $alamat,
+        'nama_lembaga_asal' => $p->nama_lembaga,
+        'nama_penerima_asal' => $p->nama_penerima,
+        'alamat_asal' => $p->alamat_tujuan,
+    ])->forceFill(['created_at' => Carbon::parse("2026-11-22 {$pukul}:00")])->save();
+
+    $p->update([
+        'nama_penerima' => $nama,
+        'alamat_tujuan' => $alamat,
+        'nama_lembaga' => null,
+        'status_id' => StatusPengiriman::where('slug', 'tiba')->value('id'),
+    ]);
+}
+
+it('mushaf yang diminta di jalan tidak menjadi tujuan baru dan tidak menaikkan progres', function () {
+    $kurir = berandaKurir();
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $darulFalah = berandaResi($muatan, 3, 'pengiriman', ['nama_lembaga' => 'Pesantren Darul Falah', 'alamat_tujuan' => 'Jl. Raya Ciomas 88']);
+    berandaResi($muatan, 1, 'pengiriman', ['nama_lembaga' => 'Lapas Bogor', 'alamat_tujuan' => 'Jl. Paledang 2']);
+    berandaKerdus('KB-20261122-007-A5-01', $darulFalah);
+
+    berandaSerahkanDiJalan($muatan, $kurir, $darulFalah[0], 'Pak Ahmad', 'Jl. Raya Dramaga Km 7');
+
+    $this->actingAs($kurir)
+        ->get(route('admin.kurir.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tujuan', 2)
+            ->where('muatan.jumlah_tujuan', 2)
+            ->where('muatan.jumlah_tujuan_tiba', 0)
+            ->where('muatan.total_kerdus', 1)
+            ->where('muatan.total_resi', 4)
+            ->where('muatan.total_mushaf', 4)
+            ->where('tujuan.0.nama', 'Pesantren Darul Falah')
+            ->where('tujuan.0.status', 'berikutnya')
+            ->where('tujuan.0.jumlah_resi', 2)
+            ->where('tujuan.0.jumlah_mushaf', 2)
+            ->where('tujuan.0.jumlah_kerdus', 1)
+            ->where('tujuan.0.diserahkan_di_jalan', 1)
+            ->where('tujuan.1.nama', 'Lapas Bogor')
+            ->where('tujuan.1.diserahkan_di_jalan', 0)
+            ->has('diJalan', 1)
+            ->where('diJalan.0.nama', 'Pak Ahmad')
+            ->where('diJalan.0.alamat', 'Jl. Raya Dramaga Km 7')
+            ->where('diJalan.0.jumlah_mushaf', 1)
+            ->where('diJalan.0.dari', 'Pesantren Darul Falah')
+            ->where('diJalan.0.pukul', '10.41')
+        );
+});
+
+it('tujuan yang seluruh mushafnya diminta di jalan tetap tampil dan keluar dari hitungan progres', function () {
+    $kurir = berandaKurir();
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    berandaResi($muatan, 1, 'pengiriman', ['nama_lembaga' => 'Pesantren Darul Falah', 'alamat_tujuan' => 'Jl. Raya Ciomas 88']);
+    $lapas = berandaResi($muatan, 2, 'pengiriman', ['nama_lembaga' => 'Lapas Bogor', 'alamat_tujuan' => 'Jl. Paledang 2', 'jumlah_quran' => 20]);
+
+    berandaSerahkanDiJalan($muatan, $kurir, $lapas[0], 'Pak Ahmad', 'Jl. Raya Dramaga Km 7', '10.41');
+    berandaSerahkanDiJalan($muatan, $kurir, $lapas[1], 'pak ahmad ', 'Jl. Raya Dramaga Km 7', '10.43');
+
+    $this->actingAs($kurir)
+        ->get(route('admin.kurir.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tujuan', 2)
+            ->where('muatan.jumlah_tujuan', 1)
+            ->where('tujuan.1.nama', 'Lapas Bogor')
+            ->where('tujuan.1.alamat', 'Jl. Paledang 2')
+            ->where('tujuan.1.status', 'di_jalan')
+            ->where('tujuan.1.jumlah_resi', 0)
+            ->where('tujuan.1.jumlah_mushaf', 0)
+            ->where('tujuan.1.diserahkan_di_jalan', 40)
+            ->has('diJalan', 1)
+            ->where('diJalan.0.jumlah_mushaf', 40)
+            ->where('diJalan.0.pukul', '10.43')
+        );
+});
+
+it('tujuan tetap tiba bila resi sisanya sudah diserahkan meski sebagian diminta di jalan', function () {
+    $kurir = berandaKurir();
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $resi = berandaResi($muatan, 2, 'pengiriman', ['nama_lembaga' => 'Pesantren Darul Falah', 'alamat_tujuan' => 'Jl. Raya Ciomas 88']);
+    berandaResi($muatan, 1, 'pengiriman', ['nama_lembaga' => 'Lapas Bogor', 'alamat_tujuan' => 'Jl. Paledang 2']);
+
+    berandaSerahkanDiJalan($muatan, $kurir, $resi[0], 'Pak Ahmad', 'Jl. Raya Dramaga Km 7');
+    $resi[1]->update(['status_id' => StatusPengiriman::where('slug', 'tiba')->value('id')]);
+
+    $this->actingAs($kurir)
+        ->get(route('admin.kurir.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('tujuan.0.status', 'tiba')
+            ->where('tujuan.1.status', 'berikutnya')
+            ->where('muatan.jumlah_tujuan', 2)
+            ->where('muatan.jumlah_tujuan_tiba', 1)
+        );
+});
+
+it('kerdus berisi resi untuk dua tujuan dihitung sekali di total muatan', function () {
+    $kurir = berandaKurir();
+    $muatan = Muatan::factory()->untukKurir($kurir)->create();
+
+    $a = berandaResi($muatan, 2, 'pengiriman', ['nama_lembaga' => 'Pesantren Darul Falah', 'alamat_tujuan' => 'Jl. Raya Ciomas 88']);
+    $b = berandaResi($muatan, 2, 'pengiriman', ['nama_lembaga' => 'Lapas Bogor', 'alamat_tujuan' => 'Jl. Paledang 2']);
+    berandaKerdus('KB-20261122-007-A5-01', [...$a, ...$b]);
+
+    $this->actingAs($kurir)
+        ->get(route('admin.kurir.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('muatan.total_kerdus', 1)
+            ->where('tujuan.0.jumlah_kerdus', 1)
+            ->where('tujuan.1.jumlah_kerdus', 1)
+        );
 });
