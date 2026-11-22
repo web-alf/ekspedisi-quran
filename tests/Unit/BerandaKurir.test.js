@@ -95,3 +95,17 @@ describe('Tujuan yang dituju kurir (urutan bebas)', () => {
         expect(beranda).toContain("t.status === 'di_jalan'");
     });
 });
+
+describe('Halaman Pindai kurir tidak sempit di HP', () => {
+    it('tidak menambah padding sendiri di atas padding AdminLayout', () => {
+        expect(scan).not.toContain('class="px-6 py-8"');
+        expect(scan).not.toContain('min-h-screen');
+    });
+
+    it('kotak tunggu/galat kamera tidak melebihi lebar layar', () => {
+        const pemindai = baca('Components/LazyQRScanner.svelte');
+        expect(pemindai).not.toMatch(/style="width: \{width\}px; height/);
+        expect(pemindai.match(/width: \{width\}px; max-width: 100%;/g)).toHaveLength(2);
+    });
+});
+

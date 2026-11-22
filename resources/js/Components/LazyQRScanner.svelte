@@ -270,7 +270,7 @@
   <div id="qr-scanner-container" bind:this={scannerContainer}></div>
 
   {#if loading}
-    <div class="flex items-center justify-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300" style="width: {width}px; height: {height}px">
+    <div class="flex items-center justify-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300" style="width: {width}px; max-width: 100%; height: {height}px">
       <div class="text-center">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
         <p class="text-sm text-gray-600">{loadingText}</p>
@@ -279,7 +279,7 @@
   {/if}
 
   {#if error}
-    <div class="flex items-center justify-center p-8 bg-red-50 rounded-lg border-2 border-red-300" style="width: {width}px; height: {height}px">
+    <div class="flex items-center justify-center p-8 bg-red-50 rounded-lg border-2 border-red-300" style="width: {width}px; max-width: 100%; height: {height}px">
       <div class="text-center">
         <div class="text-red-400 mb-2">
           <HeroIcon name="video-camera" class="w-8 h-8 mx-auto" />
